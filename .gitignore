@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.Python
+
+# Test / tooling caches
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environments and secrets — never commit these
+.env
+.env.*
+!.env.example
+venv/
+.venv/
+env/
+
+# Local fixture overrides (see fixtures.py)
+fixtures.local.json
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Ephemeris data files, if ever added via SE_EPHE_PATH (large binaries)
+*.se1
+*.se2

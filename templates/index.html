@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sidera — a Vedic almanac</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap">
+<link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<header class="topbar">
+  <span class="brand">Sidera</span>
+  <span class="topbar-right">
+    <select id="palettePicker" class="palpick" aria-label="palette">
+      <option value="pastel">Pastel</option><option value="gold">Gold</option>
+      <option value="sindoor">Sindoor</option><option value="twilight">Twilight</option>
+      <option value="rose">Rose</option><option value="verdigris">Verdigris</option>
+    </select>
+    {% if data %}{{ data.birth.place or "Janma kundli" }}{% else %}Sidereal · Lahiri{% endif %}</span>
+</header>
+
+{% if not data %}
+<!-- ============ Birth form ============ -->
+<section class="hero">
+  <div class="ghost" aria-hidden="true">ॐ</div>
+  <div class="kicker">Sidera · a Vedic almanac</div>
+  <h1>Your chart,<br>computed and shown.</h1>
+  <p class="lede">A sidereal Vedic chart calculated from the Swiss Ephemeris —
+  kundli, daśās, transits, yogas and compatibility.</p>
+  <p class="lede claim"><strong>Every reading shows its computation.</strong>
+  Tap any statement and the app opens the placement it came from, the
+  classical rule it applied, and how confident that rule is.</p>
+  <a class="cta" href="#cast">Enter birth details →</a>
+</section>
+
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+<form method="post" class="birthform" id="cast" autocomplete="off">
+  <div class="field">
+    <label for="name">Name <span class="opt">· optional</span></label>
+    <input id="name" name="name" type="text" value="{{ form.get('name', '') }}">
+  </div>
+  <div class="fieldrow">
+    <div class="field grow">
+      <label for="date">Date of birth</label>
+      <input id="date" name="date" type="date" value="{{ form.get('date', '') }}" required>
+    </div>
+    <div class="field grow">
+      <label for="time">Time of birth <span class="opt">· 24-hour or AM/PM</span></label>
+      <input id="time" name="time" type="text" inputmode="numeric"
+             placeholder="e.g. 08:45 or 8:45 AM" value="{{ form.get('time', '') }}" required>
+    </div>
+  </div>
+  <div class="field placewrap">
+    <label for="place">Place of birth</label>
+    <input id="place" name="place" type="text" placeholder="Start typing a city…"
+           value="{{ form.get('place', '') }}" autocomplete="off">
+    <div id="suggest" class="suggest" hidden></div>
+    <div id="placemeta" class="placemeta"></div>
+  </div>
+  <details class="manual" id="manual">
+    <summary>Enter coordinates manually — for unlisted locations</summary>
+    <div class="fieldrow" style="margin-top:14px">
+      <div class="field grow">
+        <label for="lat">Latitude</label>
+        <input id="lat" name="lat" type="number" step="any" min="-90" max="90"
+               placeholder="decimal °, north positive" value="{{ form.get('lat', '') }}">
+      </div>
+      <div class="field grow">
+        <label for="lon">Longitude</label>
+        <input id="lon" name="lon" type="number" step="any" min="-180" max="180"
+               placeholder="decimal °, east positive" value="{{ form.get('lon', '') }}">
+      </div>
+      <div class="field grow">
+        <label for="tz">Timezone</label>
+        <input id="tz" name="tz" type="text" placeholder="IANA name or ±HH:MM offset"
+               value="{{ form.get('tz', '') }}">
+      </div>
+    </div>
+  </details>
+  <details class="manual" id="partner">
+    <summary>Add a second person for Guṇa Milan — optional</summary>
+    <p class="ratehint" style="margin-top:12px">The aṣṭakūṭa tables are
+    asymmetric: the first person takes the bride's side, the second the
+    groom's. Both need a full birth record.</p>
+    <div class="field">
+      <label for="p_name">Their name <span class="opt">· optional</span></label>
+      <input id="p_name" name="p_name" type="text" value="{{ form.get('p_name', '') }}">
+    </div>
+    <div class="fieldrow" style="margin-top:16px">
+      <div class="field grow">
+        <label for="p_date">Date of birth</label>
+        <input id="p_date" name="p_date" type="date" value="{{ form.get('p_date', '') }}">
+      </div>
+      <div class="field grow">
+        <label for="p_time">Time of birth</label>
+        <input id="p_time" name="p_time" type="text" inputmode="numeric"
+               placeholder="e.g. 14:20 or 2:20 PM" value="{{ form.get('p_time', '') }}">
+      </div>
+    </div>
+    <div class="field placewrap" style="margin-top:16px">
+      <label for="p_place">Place of birth</label>
+      <input id="p_place" name="p_place" type="text" placeholder="Start typing a city…"
+             value="{{ form.get('p_place', '') }}" autocomplete="off">
+      <div id="p_suggest" class="suggest" hidden></div>
+      <div id="p_placemeta" class="placemeta"></div>
+    </div>
+    <input id="p_lat" name="p_lat" type="hidden" value="{{ form.get('p_lat', '') }}">
+    <input id="p_lon" name="p_lon" type="hidden" value="{{ form.get('p_lon', '') }}">
+    <input id="p_tz" name="p_tz" type="hidden" value="{{ form.get('p_tz', '') }}">
+  </details>
+  <button type="submit" class="cast">Cast the chart →</button>
+  <p class="footnote">Sidereal · North-Indian · used only to cast your chart</p>
+</form>
+
+{% else %}
+<!-- ============ Dashboard ============ -->
+
+<nav class="secnav" id="secnav">
+  <a href="#glance">Glance</a><a href="#plate">Chart</a><a href="#dashas">Daśās</a><a href="#lifeline">Timeline</a><a href="#weather">Transits</a><a href="#doshas">Doshas</a><a href="#myths">Myths</a><a href="#yogas">Yogas</a>{% if data.match %}<a href="#match">Match</a>{% endif %}<a href="#ask">Ask</a><a href="#patha">Paṭha</a><a href="#grahas">Grahas</a><a href="#learnpath">Learn</a>
+</nav>
+
+<section class="chartof" id="glance">
+  <h1 class="chartof-name">{{ data.headline }}</h1>
+  <div class="chartof-sub">{{ data.subline }}</div>
+</section>
+
+<!-- Glance — design 4b: one statement, three chips, single swap panel -->
+<section class="glance">
+  <div class="ghost glance-ghost" aria-hidden="true">☾</div>
+  <div class="kicker">{{ data.today.strftime("%a %d %B") }} · {{ data.pancanga.paksa }} {{ data.pancanga.tithi.name }}</div>
+  <p class="statement">{{ data.reading.statement_stem }}<span class="accent">{{ data.reading.emphasis }}.</span></p>
+  <details class="fold readfold">
+    <summary class="readlink">Read the full day</summary>
+    <p class="readlong">{{ data.reading.long }}</p>
+    <div class="kicker" style="margin-top:10px">Why this reading</div>
+    <div class="rows">
+      {% for f in data.reading.facts %}<div class="row"><span>{{ f }}</span></div>{% endfor %}
+      <div class="row"><span class="mut">Subject</span><span class="num">{{ data.reading.subject_id }}{% if data.reading.qualifier_id %} · qualified by {{ data.reading.qualifier_id }}{% endif %}</span></div>
+    </div>
+  </details>
+
+  <div class="pstrip">
+    <div class="pcell"><div class="plabel">Tithi</div><div class="pvalue">{{ data.pancanga.tithi.name }}</div></div>
+    <div class="pcell"><div class="plabel">Nakṣatra</div><div class="pvalue accent">{{ data.pancanga.nakshatra.name }}</div></div>
+    <div class="pcell"><div class="plabel">Yoga</div><div class="pvalue">{{ data.pancanga.yoga.name }}</div></div>
+    <div class="pcell"><div class="plabel">Karaṇa</div><div class="pvalue">{{ data.pancanga.karana.name }}</div></div>
+  </div>
+  <div class="pmeta">Sunrise {{ data.pancanga.sunrise.strftime("%H:%M") if data.pancanga.sunrise else "—" }} ·
+    sunset {{ data.pancanga.sunset.strftime("%H:%M") if data.pancanga.sunset else "—" }} UTC ·
+    {{ data.pancanga.weekday_name }}, ruled by {{ data.pancanga.weekday_lord }} ·
+    tithi ends {{ data.pancanga.tithi.ends_label }}</div>
+
+  <div class="glance-chips">
+    <button class="gchip active" data-gpane="chart">Chart</button>
+    <button class="gchip" data-gpane="transits">Transits</button>
+    <button class="gchip" data-gpane="dasha">{% if data.match %}Match{% else %}Daśā{% endif %}</button>
+  </div>
+  <div class="glance-panel">
+    <div class="gpane" id="gpane-chart">
+      <svg viewBox="0 0 300 300" class="minikundli" aria-label="mini chart">
+        <g fill="none" stroke="var(--accent-400)" stroke-width="1.8">
+          <rect x="3" y="3" width="294" height="294"/>
+          <path d="M3 3 L297 297 M297 3 L3 297"/>
+          <path d="M150 3 L297 150 L150 297 L3 150 Z"/>
+        </g>
+        <g class="minigrahas" text-anchor="middle">
+          {% for h in data.kundli_d1 %}{% if h.line1 %}
+          <text x="{{ h.pl_pos[0] }}" y="{{ h.pl_pos[1] }}">{{ h.line1 }}{% if h.line2 %}<tspan x="{{ h.pl_pos[0] }}" dy="15">{{ h.line2 }}</tspan>{% endif %}</text>
+          {% endif %}{% endfor %}
+        </g>
+      </svg>
+      <div class="gcaption">{{ data.lagna_sign }} {{ data.lagna_dms }} · Candra in {{ data.moon_nak.name }} p.{{ data.moon_nak.pada }}
+        <button class="learn" data-lesson="lagna">ⓘ 60s</button></div>
+    </div>
+    <div class="gpane hidden" id="gpane-transits">
+      <div class="growlist">
+        {% for m in data.life.markers[:4] %}
+        <div class="grow {% if loop.first %}accent{% endif %}">
+          <span class="gdate">{{ m.daylabel }}</span>
+          <span>{{ m.planet }} → {{ m.to_sign }} · your {{ m.natal_house | ordinal }} house</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="gpane hidden" id="gpane-dasha">
+      {% set cur = (data.life.bands | selectattr('status', 'equalto', 'current') | list) %}
+      {% if data.match %}
+      <div class="gdasha">
+        <div class="gring"><div><span class="gringnum">{{ data.match.total | fraction }}</span><span class="gringpct">/36</span></div></div>
+        <div>
+          <div class="gdasha-title">{{ data.match.a.name }} ✕ {{ data.match.b.name }}</div>
+          <div class="gdasha-sub">{{ data.match.verdict }}</div>
+        </div>
+      </div>
+      {% else %}
+      <div class="gdasha">
+        <div class="gring"><div><span class="gringnum">{{ (cur[0].elapsed * 100) | round | int if cur else "–" }}</span><span class="gringpct">%</span></div></div>
+        <div>
+          <div class="gdasha-title">{{ data.current_md }} mahādaśā · {{ data.current_ad }} antara</div>
+          <div class="gdasha-sub">until {{ data.current_ad_end }} — {{ data.statement_theme }}.</div>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<!-- Chart plate with D1/D9/D10 switcher -->
+<section class="plate showdeg" id="plate">
+  <div class="switcher" role="tablist">
+    <button class="tab active" role="tab" data-tab="d1">Rāśi · D1</button>
+    <button class="tab" role="tab" data-tab="d9">Navāṃśa · D9</button>
+    <button class="tab" role="tab" data-tab="d10">Daśāṃśa · D10</button>
+  </div>
+  <div style="text-align:right;margin-top:8px"><button class="learn" data-lesson="plate">ⓘ how to read this plate</button> <button class="learn" data-lesson="d9">ⓘ read your D9</button></div>
+  <label class="degtoggle"><input type="checkbox" id="degToggle" checked>
+    Show degrees <span class="opt">· D1</span></label>
+
+  {% for key, houses, sub in [("d1", data.kundli_d1, data.lagna_sign ~ " rising"),
+                              ("d9", data.kundli_d9, "D9 lagna " ~ data.d9_lagna),
+                              ("d10", data.kundli_d10, "D10 lagna " ~ data.d10_lagna)] %}
+  <div class="pane {% if key != 'd1' %}hidden{% endif %}" id="pane-{{ key }}">
+    <svg viewBox="0 0 300 300" class="kundli" aria-label="North-Indian chart {{ key }}">
+      <g fill="none" stroke="var(--accent-400)" stroke-width="1.6">
+        <rect x="3" y="3" width="294" height="294"/>
+        <path d="M3 3 L297 297 M297 3 L3 297"/>
+        <path d="M150 3 L297 150 L150 297 L3 150 Z"/>
+      </g>
+      <g class="signnum" text-anchor="middle">
+        {% for h in houses %}<text x="{{ h.num_pos[0] }}" y="{{ h.num_pos[1] }}">{{ h.sign_num }}</text>{% endfor %}
+      </g>
+      <g class="grahas grahas-compact" text-anchor="middle">
+        {% for h in houses %}{% if h.line1 %}
+        <text x="{{ h.pl_pos[0] }}" y="{{ h.pl_pos[1] }}">{{ h.line1 }}{% if h.line2 %}<tspan x="{{ h.pl_pos[0] }}" dy="14">{{ h.line2 }}</tspan>{% endif %}</text>
+        {% endif %}{% endfor %}
+      </g>
+      {% if key == 'd1' %}
+      <g class="grahas grahas-deg" text-anchor="middle">
+        {% for h in houses %}{% if h.detail_lines %}
+        <text x="{{ h.deg_pos[0] }}" y="{{ h.deg_pos[1] - 6 * (h.detail_lines | length - 1) }}">
+          {%- for line in h.detail_lines -%}
+          <tspan x="{{ h.deg_pos[0] }}" {% if not loop.first %}dy="12.5"{% endif %}>{{ line }}</tspan>
+          {%- endfor -%}
+        </text>
+        {% endif %}{% endfor %}
+      </g>
+      {% endif %}
+    </svg>
+    <div class="platecaption">{{ sub }}{% if key == 'd9' and data.vargottama %} · Vargottama: {{ data.vargottama | join(", ") }}{% endif %}</div>
+  </div>
+  {% endfor %}
+
+  <!-- Phase 8: tap a graha to see its working -->
+  <div class="chips" id="chips">
+    {% for name, px in data.explorer.items() %}
+    <button class="chip-planet" data-planet="{{ name }}">{{ px.abbr }} · {{ name }}</button>
+    {% endfor %}
+  </div>
+  <div class="xcard" id="xcard" hidden>
+    <div class="xcard-head">
+      <span class="xcard-title" id="xcard-title"></span>
+      <button class="xcard-close" id="xcard-close" aria-label="close">×</button>
+    </div>
+    <div class="xcard-body" id="xcard-body"></div>
+  </div>
+</section>
+
+<!-- Current dasha standing note -->
+<div class="note">
+  <div class="notekicker">Viṃśottarī · now</div>
+  <div class="notebody">{{ data.current_md }} mahādaśā · {{ data.current_ad }} antaradaśā —
+  until {{ data.current_ad_end }}.</div>
+</div>
+
+<!-- Dasha ledger -->
+<section class="ledger" id="dashas">
+  <div class="kicker">Viṃśottarī daśā <button class="learn" data-lesson="dasha">ⓘ 60s</button></div>
+  <div class="rows">
+    {% for md in data.mahadashas %}
+    <div class="row {% if md.current %}now{% endif %}">
+      <span>{{ md.lord }} mahādaśā{% if md.balance %} <em class="mut">(balance)</em>{% endif %}</span>
+      <span class="num">{{ md.start }} – {{ md.end }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  <details class="fold" style="margin-top:22px">
+  <summary class="kicker">Antaradaśās · {{ data.current_md }} mahādaśā — expand</summary>
+  <div class="rows">
+    {% for ad in data.antardashas %}
+    <div class="row {% if ad.current %}now{% endif %}">
+      <span>· {{ ad.lord }} antara</span>
+      <span class="num">{{ ad.start }} – {{ ad.end }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  </details>
+</section>
+
+<!-- Phase 9: Life Timeline -->
+<section class="ledger" id="lifeline">
+  <div class="kicker">Life timeline · Viṃśottarī over 120 years <button class="learn" data-lesson="antardasha">ⓘ 60s</button></div>
+  <div class="graphwrap"><svg viewBox="0 0 1000 150" class="lifegraph" preserveAspectRatio="xMidYMid meet">
+    {% for b in data.life.bands %}
+    <rect class="band band-{{ b.status }}" x="{{ b.x }}" y="34" width="{{ b.w }}" height="34"
+          data-lord="{{ b.lord }}" style="opacity: {{ 0.9 if b.status == 'current' else 0.28 + 0.07 * (loop.index % 3) }}"></rect>
+    {% if b.w > 28 %}
+    <text class="bandlabel" x="{{ b.x + b.w / 2 }}" y="55">{{ b.lord[:2] }}</text>
+    {% endif %}
+    {% endfor %}
+    {% for tick in range(0, 121, 20) %}
+    <line class="tick" x1="{{ tick / 120 * 1000 }}" y1="68" x2="{{ tick / 120 * 1000 }}" y2="74"/>
+    <text class="ticklabel" x="{{ tick / 120 * 1000 }}" y="86">{{ tick }}</text>
+    {% endfor %}
+    <line class="here" x1="{{ data.life.here_x }}" y1="16" x2="{{ data.life.here_x }}" y2="74"/>
+    <text class="herelabel" x="{{ data.life.here_x }}" y="10">You are HERE · age {{ data.life.here_age }}</text>
+  </svg></div>
+
+  <div class="kicker" style="margin-top:16px">Upcoming gocara shifts · next 3 years</div>
+  <div class="graphwrap"><svg viewBox="0 0 1000 100" class="lifegraph" preserveAspectRatio="xMidYMid meet">
+    <line class="tick" x1="0" y1="30" x2="1000" y2="30" style="stroke:rgba(236,229,216,.18)"/>
+    {% for k in range(4) %}
+    <line class="tick" x1="{{ k * 333 }}" y1="26" x2="{{ k * 333 }}" y2="34"/>
+    <text class="ticklabel" x="{{ k * 333 }}" y="16">{{ "now" if k == 0 else "+" ~ k ~ "y" }}</text>
+    {% endfor %}
+    {% for m in data.life.markers %}
+    <g class="tmarker">
+      <path d="M {{ m.x }} 23 l 5 7 l -5 7 l -5 -7 Z"/>
+      {% set rowy = [52, 70, 88][m.row] %}
+      {% if m.displaced %}<line class="leader" x1="{{ m.x }}" y1="37" x2="{{ m.label_x }}" y2="{{ rowy - 8 }}"/>{% endif %}
+      <text x="{{ m.label_x }}" y="{{ rowy }}">{{ m.date }} · {{ m.planet[:2] }}→{{ m.to_sign[:3] }} (h{{ m.natal_house }})</text>
+    </g>
+    {% endfor %}
+  </svg></div>
+  <p class="footnote" style="text-align:left">Diamonds mark dated upcoming
+  gocara shifts: each slow mover entering a new sign, with the natal house it
+  begins to occupy.</p>
+
+  <div class="kicker" style="margin-top:18px">Seasons so far — rate the fit</div>
+  <p class="ratehint">Each finished or running mahādaśā carries a classical
+  theme. Rate how strongly it matched your lived years — your ratings stay in
+  this browser only, and teach you how your chart speaks.</p>
+  {% for b in data.life.bands if b.status != 'future' %}
+  <div class="rated" data-lord="{{ b.lord }}">
+    <div class="rated-head">
+      <span>{{ b.lord }} mahādaśā <span class="num">{{ b.years }}</span>
+        {% if b.status == 'current' %}<span class="accent">· running, {{ (b.elapsed * 100) | round | int }}% through</span>{% endif %}
+      </span>
+      <span class="stars" role="radiogroup" aria-label="fit rating">
+        {% for s in range(1, 6) %}<button class="star" data-v="{{ s }}">★</button>{% endfor %}
+      </span>
+    </div>
+    <p class="rated-theme">{{ b.theme }}</p>
+  </div>
+  {% endfor %}
+</section>
+
+<!-- Phase 10: weather framing + slow-mover cards with end dates -->
+<div class="note">
+  <div class="notekicker">Weather, not verdict</div>
+  <div class="notebody">{{ data.weather_framing }}</div>
+</div>
+
+<section class="ledger" id="weather">
+  <div class="kicker">Slow movers · every season dated <button class="learn" data-lesson="gocara">ⓘ 60s</button></div>
+  {% for w in data.weather %}
+  <div class="wcard{% if w.demanding %} demanding{% endif %}">
+    <div class="wcard-head">
+      <span>{{ w.planet }} in {{ w.sign }}{% if w.dignity != "neutral" %} <span class="accent">· {{ w.dignity }}</span>{% endif %} <span class="mut">· your {{ w.natal_house | ordinal }} house · {{ w.from_moon | ordinal }} from Moon</span></span>
+      <span class="num">{{ w.entered }} – <strong>{{ w.until }}</strong></span>
+    </div>
+    {% if w.progress is not none %}
+    <div class="pbar"><div class="pfill" style="width: {{ (w.progress * 100) | round(1) }}%"></div></div>
+    <div class="pbar-label"><span>{{ (w.progress * 100) | round | int }}% through this sign</span><span>ends {{ w.until }}</span></div>
+    {% endif %}
+    {% if w.contact_note %}<p class="yoganote">{{ w.contact_note }}</p>{% endif %}
+    <p class="wcard-note">{{ w.note }} <span class="chip chip-{{ w.confidence | lower }}">{{ w.confidence }}</span></p>
+  </div>
+  {% endfor %}
+</section>
+
+<!-- Phase 10: doshas, always with their cancellation checks -->
+<section class="ledger" id="doshas">
+  <div class="kicker">Doshas · checks always run <button class="learn" data-lesson="dosha">ⓘ 60s</button></div>
+  {% for d in data.doshas %}
+  <details class="yoga">
+    <summary class="yogahead">
+      <span class="yoganame">{{ d.name }}</span>
+      <span class="yogakind">{% if not d.formed %}pattern absent{% elif not d.active %}formed · cancelled{% else %}running · dated{% endif %}</span>
+    </summary>
+    <p class="yogadetail">{{ d.detail }}</p>
+    {% if d.progress is not none %}
+    <div class="pbar"><div class="pfill" style="width: {{ (d.progress * 100) | round(1) }}%"></div></div>
+    <div class="pbar-label"><span>{{ (d.progress * 100) | round | int }}% complete</span><span>ends {{ d.end.strftime("%b %Y") }}</span></div>
+    {% endif %}
+    {% if d.next_window %}<p class="yoganote">Next window opens {{ d.next_window }} — dated in advance, never a surprise.</p>{% endif %}
+    {% for c in d.cancellations %}<p class="yoganote">✓ {{ c }}</p>{% endfor %}
+    {% if d.checks_run %}
+    <details><summary>Checks run</summary>
+      <p class="yogarule">{% for c in d.checks_run %}· {{ c }}<br>{% endfor %}</p>
+    </details>
+    {% endif %}
+    <details><summary>Rule</summary><p class="yogarule">{{ d.rule }}</p></details>
+  </details>
+  {% endfor %}
+</section>
+
+<!-- Phase 10: myth-busters -->
+<section class="ledger" id="myths">
+  <div class="kicker">Myth vs classical record</div>
+  {% for m in data.mythbusters %}
+  <details class="yoga">
+    <summary class="yogahead">
+      <span class="yoganame">{{ m.placement }}</span>
+      <span class="chip chip-{{ m.confidence | lower }}">{{ m.confidence }}</span>
+    </summary>
+    <p class="yogadetail"><span class="xplabel">Myth</span>{{ m.myth }}</p>
+    <p class="yogadetail"><span class="xplabel">Classical record</span>{{ m.classical_record }}</p>
+    <p class="yoganote">{{ m.citation }}</p>
+  </details>
+  {% endfor %}
+</section>
+
+<!-- Gocara / transits -->
+<section class="ledger">
+  <div class="kicker">Gocara · {{ data.today.strftime("%d %B %Y") }}</div>
+  <details class="fold">
+  <summary class="kicker" style="margin-top:8px">Positions today · all nine grahas — expand</summary>
+  <div class="rows">
+    {% for t in data.transits %}
+    <div class="row">
+      <span>{{ t.name }}</span>
+      <span class="num">{{ t.sign }} {{ t.dms }}{% if t.retro %} ℞{% endif %} · house {{ t.natal_house }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  </details>
+  {% if data.conjunctions %}
+  <div class="kicker" style="margin-top:22px">Contacts today</div>
+  <div class="rows">
+    {% for c in data.conjunctions %}
+    <div class="row"><span class="accent">Transit {{ c.transit_planet }} conjunct natal {{ c.natal_planet }}</span><span class="num">orb {{ c.orb }}°</span></div>
+    {% endfor %}
+    {% for c in data.aspect_contacts %}
+    <div class="row"><span>Transit {{ c.transit_planet }} aspects natal {{ c.natal_planet }}</span><span class="num">{{ c.offset | ordinal }}</span></div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+
+<!-- Yogas -->
+<section class="ledger" id="yogas">
+  <div class="kicker">Yogas <button class="learn" data-lesson="yoga">ⓘ 60s</button></div>
+  {% for y, xp in data.yogas %}
+  <div class="yoga">
+    <div class="yogahead">
+      <span class="yoganame">{{ y.name }}</span>
+      <span class="yogakind">{{ y.kind }}</span>
+    </div>
+    <p class="yogadetail">{{ xp.fact }}</p>
+    {% for n in y.notes %}<p class="yoganote">{{ n }}</p>{% endfor %}
+    {% if y.cancelled %}<p class="yoganote">Held in check: {{ y.cancellation | join("; ") }}</p>{% endif %}
+    <button class="whybtn" data-planets="{{ y.planets | join(',') }}"
+            data-houses="{{ y.houses | join(',') }}">Why? — show on the chart</button>
+    <details>
+      <summary>How · why</summary>
+      <p class="yogarule"><span class="xplabel">Mechanism</span>{{ xp.mechanism }}</p>
+      <p class="yogarule"><span class="xplabel">Meaning</span>{{ xp.meaning }}
+        <span class="chip chip-{{ xp.confidence | lower }}">{{ xp.confidence }}</span></p>
+    </details>
+  </div>
+  {% endfor %}
+</section>
+
+{% if data.match %}
+<!-- Guṇa Milan — design 2d: score ring, verdict, aṣṭakūṭa ledger -->
+<section class="ledger" id="match">
+  <div class="kicker">Guṇa Milan · aṣṭakūṭa</div>
+  <div class="gmhead">
+    <div class="ghost gmghost" aria-hidden="true">36</div>
+    <div class="gmnames">{{ data.match.a.name }} <span class="accent">✕</span> {{ data.match.b.name }}</div>
+    <div class="gmsub">{{ data.match.a.nakshatra_name }} p.{{ data.match.a.pada }} · {{ data.match.a.moon_sign }}
+      — {{ data.match.b.nakshatra_name }} p.{{ data.match.b.pada }} · {{ data.match.b.moon_sign }}</div>
+    <div class="gmring"><div><span class="gmscore">{{ data.match.total | fraction }}</span><span class="gmmax">/36</span></div></div>
+    <div class="gmverdict">{{ data.match.verdict }}</div>
+  </div>
+  <div class="gmledger">
+    {% for r in data.match.rows %}
+    <details class="gmrow {% if r.score == 0 %}void{% endif %}">
+      <summary>
+        <span class="gmkuta">{{ r.kuta }}</span>
+        <span class="num">{{ r.score | fraction }} / {{ r.max | fraction }}</span>
+      </summary>
+      <p class="yogadetail">{{ r.detail }}</p>
+      {% if r.note %}<p class="yoganote">{{ r.note }}</p>{% endif %}
+      <p class="yogarule"><span class="xplabel">Rule</span>{{ r.rule }}
+        <span class="chip chip-{{ r.confidence | lower }}">{{ r.confidence }}</span></p>
+    </details>
+    {% endfor %}
+  </div>
+  <p class="gmfoot">{{ data.match.mangal_note }}</p>
+</section>
+{% endif %}
+
+<!-- Ask Your Chart — question-to-evidence engine -->
+<section class="ledger" id="ask">
+  <div class="kicker">Ask your chart · evidence, not oracle</div>
+  <p class="ratehint">Each question runs its stored classical lenses over your
+  computed chart. Agreement is scored; disagreement is shown side by side,
+  never resolved away.</p>
+  {% for v in data.ask %}
+  <details class="yoga askcard">
+    <summary class="yogahead">
+      <span class="yoganame">{{ v.question }}</span>
+      <span class="askmeta"><span class="convpill {% if v.convergence >= 0.75 %}strong{% elif v.convergence >= 0.5 %}partial{% else %}split{% endif %}">{{ (v.convergence * 100) | round | int }}% · {{ v.agreement }}</span>
+      <span class="chip chip-{{ v.confidence | lower }}">{{ v.confidence }}</span></span>
+    </summary>
+    <p class="yogadetail">{{ v.answer }}</p>
+    <div class="pbar convbar"><div class="pfill" style="width: {{ (v.convergence * 100) | round(1) }}%"></div></div>
+    {% if v.disagreement %}<p class="yoganote">{{ v.disagreement }}</p>{% endif %}
+    {% for f in v.findings %}
+    <div class="lensblock">
+      <div class="lenshead"><span class="lensname">{{ f.lens }}</span>
+        <span class="mut">{{ f.technique }} · weight {{ f.weight }} ·</span>
+        <span class="chip chip-{{ f.confidence | lower }}">{{ f.confidence }}</span></div>
+      {% for p in f.placements %}
+      <div class="row"><span class="mut">{{ p.label }}</span><span class="num">{{ p.value }}</span></div>
+      {% endfor %}
+      <p class="yogadetail">{{ f.statement }}</p>
+      <details><summary>Rule</summary><p class="yogarule">{{ f.rule }}</p></details>
+    </div>
+    {% endfor %}
+  </details>
+  {% endfor %}
+</section>
+
+<!-- Paṭha — the chart, explained in three layers -->
+<section class="ledger" id="patha">
+  <div class="kicker">Paṭha · your chart, explained</div>
+  {% for item in data.patha %}
+  <details class="xp">
+    <summary>
+      <span class="xptitle">{{ item.title }}</span>
+      <span class="xpsub">{{ item.subtitle }}</span>
+    </summary>
+    <p class="xpbody"><span class="xplabel">Fact</span>{{ item.explanation.fact }}</p>
+    <p class="xpbody"><span class="xplabel">Mechanism</span>{{ item.explanation.mechanism }}</p>
+    <p class="xpbody"><span class="xplabel">Meaning</span>{{ item.explanation.meaning }}
+      <span class="chip chip-{{ item.explanation.confidence | lower }}">{{ item.explanation.confidence }}</span></p>
+  </details>
+  {% endfor %}
+</section>
+
+<!-- Nakshatra / graha table -->
+<section class="ledger" id="grahas">
+  <div class="kicker">Grahas · nakṣatras · dignity <button class="learn" data-lesson="nakshatra">ⓘ 60s</button> <button class="learn" data-lesson="dignity">ⓘ dignity</button></div>
+  <div class="scrollwrap"><table class="gtable">
+    <thead><tr><th>Graha</th><th>Rāśi</th><th>Bhāva</th><th>Nakṣatra</th><th>Lord</th><th>Dignity</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Lagna</td><td class="num">{{ data.lagna_sign }} {{ data.lagna_dms }}</td><td class="num">1</td>
+        <td>{{ data.lagna_nak.name }} p.{{ data.lagna_nak.pada }}</td><td>{{ data.lagna_nak.lord }}</td><td class="mut">—</td>
+      </tr>
+      {% for p in data.planets %}
+      <tr>
+        <td>{{ p.name }}{% if p.retro %} ℞{% endif %}</td>
+        <td class="num">{{ p.sign }} {{ p.dms }}</td>
+        <td class="num">{{ p.house }}</td>
+        <td>{{ p.nakshatra }} p.{{ p.pada }}</td>
+        <td>{{ p.lord }}</td>
+        <td class="{% if p.dignity in ('exalted', 'own sign', 'moolatrikona') %}accent{% elif p.dignity == 'debilitated' %}mut{% endif %}">{{ p.dignity }}{% if p.vargottama %} · vargottama{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  <p class="footnote" style="text-align:left">Ayanāṃśa (Lahiri) {{ "%.2f" | format(data.ayanamsa) }}° ·
+  {{ data.birth.year }}-{{ "%02d" | format(data.birth.month) }}-{{ "%02d" | format(data.birth.day) }}
+  {{ "%02d" | format(data.birth.hour) }}:{{ "%02d" | format(data.birth.minute) }} ({{ data.birth.tz }}) ·
+  {{ data.birth.latitude }}°, {{ data.birth.longitude }}°</p>
+  <a class="again" href="/">← Cast another chart</a>
+</section>
+
+<!-- Phase 11: 20-card literacy path -->
+<section class="ledger" id="learnpath">
+  <div class="kicker">Learn the sky · 20 cards, 60 seconds each</div>
+  <p class="ratehint">A reading path from "what is a lagna" to reading your
+  own D9. Cards you open are remembered in this browser —
+  <span id="learnprogress">0</span>/20 read.</p>
+  {% for l in data.lessons %}
+  <details class="xp lessoncard" data-lesson="{{ l.key }}">
+    <summary>
+      <span class="xptitle"><span class="lessonnum">{{ "%02d" | format(l.number) }}</span> {{ l.title }}</span>
+      <span class="xpsub lesson-read-mark"></span>
+    </summary>
+    <p class="xpbody">{{ l.body }}</p>
+  </details>
+  {% endfor %}
+</section>
+
+<!-- Phase 11: contextual micro-lesson modal -->
+<div class="lmodal" id="lmodal" hidden>
+  <div class="lmodal-card">
+    <div class="xcard-head">
+      <span class="xcard-title" id="lmodal-title"></span>
+      <button class="xcard-close" id="lmodal-close" aria-label="close">×</button>
+    </div>
+    <p class="xpbody" id="lmodal-body"></p>
+    <p class="footnote" style="text-align:left">Card <span id="lmodal-num"></span> of 20 ·
+    <a href="#learnpath" id="lmodal-path" style="color:inherit">see the full path</a></p>
+  </div>
+</div>
+
+{% endif %}
+
+<footer class="colophon">
+Sidereal · Lahiri ayanāṃśa · Whole Sign · North-Indian<br>
+<span class="credit">Built by <a href="https://www.linkedin.com/in/kartikagarwal73/">Kartik Agarwal</a>
+ · <a href="https://example.com/sidera-feedback">Feedback</a></span><br>
+<span class="credit">City data © <a href="https://www.geonames.org/">GeoNames</a> (CC BY 4.0), regions © dr5hn/CSC (ODbL) — bundled offline</span></footer>
+
+<script>
+// Palette: six token sets, switched by a data attribute on the root — never
+// by conditional colour in markup (build framework, SIX · TOKENS).
+const PAL_KEY = "sidera:palette";
+const picker = document.getElementById("palettePicker");
+function applyPalette(name) {
+  document.documentElement.setAttribute("data-palette", name);
+  try { localStorage.setItem(PAL_KEY, name); } catch (e) {}
+  if (picker) picker.value = name;
+}
+applyPalette((() => { try { return localStorage.getItem(PAL_KEY) || "pastel"; }
+                      catch (e) { return "pastel"; } })());
+picker?.addEventListener("change", () => applyPalette(picker.value));
+
+document.querySelectorAll(".tab").forEach(btn => btn.addEventListener("click", () => {
+  document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b === btn));
+  document.querySelectorAll(".pane").forEach(p =>
+    p.classList.toggle("hidden", p.id !== "pane-" + btn.dataset.tab));
+}));
+
+// sticky section nav: highlight the section in view
+const navlinks = [...document.querySelectorAll("#secnav a")];
+if (navlinks.length) {
+  const targets = navlinks.map(a => document.querySelector(a.getAttribute("href"))).filter(Boolean);
+  const spy = new IntersectionObserver(entries => {
+    entries.forEach(en => {
+      if (en.isIntersecting) {
+        navlinks.forEach(a => a.classList.toggle("active",
+          a.getAttribute("href") === "#" + en.target.id));
+      }
+    });
+  }, { rootMargin: "-25% 0px -65% 0px" });
+  targets.forEach(t => spy.observe(t));
+}
+
+const degToggle = document.getElementById("degToggle");
+if (degToggle) degToggle.addEventListener("change", () =>
+  document.getElementById("plate").classList.toggle("showdeg", degToggle.checked));
+
+// glance chips (design 4b/5a): exclusive selection, instant panel swap
+document.querySelectorAll(".gchip").forEach(chip =>
+  chip.addEventListener("click", () => {
+    document.querySelectorAll(".gchip").forEach(c =>
+      c.classList.toggle("active", c === chip));
+    document.querySelectorAll(".gpane").forEach(p =>
+      p.classList.toggle("hidden", p.id !== "gpane-" + chip.dataset.gpane));
+  }));
+
+// ---- Phase 8: show-your-working chart explorer ----
+{% if data %}
+const EXPLORER = {{ data.explorer | tojson }};
+// North-Indian plate geometry (viewBox 300×300): region outline + centroid
+// per house, for highlight overlays and the counting animation.
+const HOUSE_SHAPES = {
+  1:  [[150,3],[223.5,76.5],[150,150],[76.5,76.5]],
+  2:  [[3,3],[150,3],[76.5,76.5]],
+  3:  [[3,3],[76.5,76.5],[3,150]],
+  4:  [[3,150],[76.5,76.5],[150,150],[76.5,223.5]],
+  5:  [[3,150],[3,297],[76.5,223.5]],
+  6:  [[3,297],[150,297],[76.5,223.5]],
+  7:  [[150,297],[76.5,223.5],[150,150],[223.5,223.5]],
+  8:  [[150,297],[297,297],[223.5,223.5]],
+  9:  [[297,297],[297,150],[223.5,223.5]],
+  10: [[297,150],[223.5,223.5],[150,150],[223.5,76.5]],
+  11: [[297,150],[297,3],[223.5,76.5]],
+  12: [[297,3],[150,3],[223.5,76.5]],
+};
+const HOUSE_CENTER = {
+  1: [150,77], 2: [76,28], 3: [28,76], 4: [76,150], 5: [28,223],
+  6: [76,272], 7: [150,223], 8: [223,272], 9: [272,223], 10: [223,150],
+  11: [272,76], 12: [223,28],
+};
+const SVGNS = "http://www.w3.org/2000/svg";
+const ord = n => n + (n === 2 ? "nd" : n === 3 ? "rd" : "th");
+const d1svg = document.querySelector("#pane-d1 svg");
+const hlGroup = document.createElementNS(SVGNS, "g");
+hlGroup.setAttribute("id", "hlgroup");
+if (d1svg) d1svg.appendChild(hlGroup);
+let animTimers = [];
+
+function clearHighlights() {
+  animTimers.forEach(clearTimeout); animTimers = [];
+  hlGroup.innerHTML = "";
+  document.querySelectorAll(".chip-planet.on").forEach(c => c.classList.remove("on"));
+}
+function poly(house, cls) {
+  const p = document.createElementNS(SVGNS, "polygon");
+  p.setAttribute("points", HOUSE_SHAPES[house].map(pt => pt.join(",")).join(" "));
+  p.setAttribute("class", cls);
+  hlGroup.appendChild(p);
+  return p;
+}
+function badge(house, text, cls) {
+  const t = document.createElementNS(SVGNS, "text");
+  const [x, y] = HOUSE_CENTER[house];
+  t.setAttribute("x", x); t.setAttribute("y", y + 4);
+  t.setAttribute("text-anchor", "middle");
+  t.setAttribute("class", cls);
+  t.textContent = text;
+  hlGroup.appendChild(t);
+  return t;
+}
+function wire(fromHouse, toHouse, label) {
+  const [x1, y1] = HOUSE_CENTER[fromHouse], [x2, y2] = HOUSE_CENTER[toHouse];
+  const mx = (x1 + x2) / 2 + (y2 - y1) * 0.22, my = (y1 + y2) / 2 - (x2 - x1) * 0.22;
+  const path = document.createElementNS(SVGNS, "path");
+  path.setAttribute("d", `M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}`);
+  path.setAttribute("class", "wireline");
+  hlGroup.appendChild(path);
+  const t = document.createElementNS(SVGNS, "text");
+  t.setAttribute("x", mx); t.setAttribute("y", my);
+  t.setAttribute("text-anchor", "middle"); t.setAttribute("class", "wirelabel");
+  t.textContent = label;
+  hlGroup.appendChild(t);
+}
+function ring(house) {
+  const c = document.createElementNS(SVGNS, "circle");
+  const [x, y] = HOUSE_CENTER[house];
+  c.setAttribute("cx", x); c.setAttribute("cy", y); c.setAttribute("r", 24);
+  c.setAttribute("class", "pulse-ring");
+  hlGroup.appendChild(c);
+}
+
+function selectPlanet(name) {
+  clearHighlights();
+  const px = EXPLORER[name];
+  document.querySelector(`.chip-planet[data-planet="${name}"]`)?.classList.add("on");
+  poly(px.house, "hl-src");
+  // animated house counting: step through intermediate houses to each target
+  const maxOff = Math.max(...px.aspects.map(a => a.offset));
+  for (let k = 2; k <= maxOff; k++) {
+    const h = ((px.house - 1 + k - 1) % 12) + 1;
+    const asp = px.aspects.find(a => a.offset === k);
+    animTimers.push(setTimeout(() => {
+      if (asp) {
+        poly(h, "hl-target");
+        badge(h, ord(k), "countlabel hit");
+      } else {
+        const step = poly(h, "hl-step"), num = badge(h, k, "countlabel");
+        animTimers.push(setTimeout(() => { step.remove(); num.remove(); }, 700));
+      }
+    }, 240 * (k - 1)));
+  }
+  animTimers.push(setTimeout(() => {
+    if (px.nak_lord_house !== px.house)
+      wire(px.house, px.nak_lord_house, "star-lord " + px.nak_lord);
+  }, 240 * maxOff));
+  // info card
+  const hits = px.aspects.flatMap(a => a.hits.map(h => `${h} (${ord(a.offset)})`));
+  document.getElementById("xcard-title").textContent =
+    `${name} — ${px.label}${px.retro ? " R" : ""}`;
+  document.getElementById("xcard-body").innerHTML =
+    `<p><span class="xplabel">Dignity</span>${px.dignity}</p>` +
+    `<p><span class="xplabel">Nakṣatra</span>${px.nakshatra} — ruled by ${px.nak_lord}` +
+    (px.nak_lord_house !== px.house
+      ? ` (house ${px.nak_lord_house}; wiring drawn on the plate)` : " (its own star)") + `</p>` +
+    `<p><span class="xplabel">Drishti</span>casts the ` +
+    px.aspects.map(a => `${ord(a.offset)} → house ${a.house}`).join(", ") +
+    (hits.length ? ` — touching ${hits.join(", ")}` : " — no natal planet there") + `</p>`;
+  document.getElementById("xcard").hidden = false;
+}
+
+document.querySelectorAll(".chip-planet").forEach(chip =>
+  chip.addEventListener("click", () => {
+    document.querySelector('.tab[data-tab="d1"]').click();
+    selectPlanet(chip.dataset.planet);
+  }));
+document.getElementById("xcard-close")?.addEventListener("click", () => {
+  document.getElementById("xcard").hidden = true; clearHighlights();
+});
+
+// ---- Phase 9: self-verification ratings (this browser only) ----
+const RATE_KEY = "sidera:" + {{ (data.birth.year ~ data.birth.month ~ data.birth.day ~ data.birth.hour ~ data.birth.minute ~ data.birth.latitude) | tojson }};
+document.querySelectorAll(".rated").forEach(row => {
+  const lord = row.dataset.lord;
+  const stars = row.querySelectorAll(".star");
+  const paint = v => stars.forEach((s, i) => s.classList.toggle("lit", i < v));
+  paint(parseInt(localStorage.getItem(RATE_KEY + ":md:" + lord) || "0", 10));
+  stars.forEach((s, i) => s.addEventListener("click", () => {
+    localStorage.setItem(RATE_KEY + ":md:" + lord, String(i + 1));
+    paint(i + 1);
+  }));
+});
+
+// ---- Phase 11: micro-lessons ----
+const LESSONS = {
+  {% for l in data.lessons %}"{{ l.key }}": {n: {{ l.number }}, title: {{ l.title | tojson }}, body: {{ l.body | tojson }}},
+  {% endfor %}
+};
+const READ_KEY = "sidera:lessons-read";
+const readSet = () => new Set(JSON.parse(localStorage.getItem(READ_KEY) || "[]"));
+function markRead(key) {
+  const s = readSet(); s.add(key);
+  localStorage.setItem(READ_KEY, JSON.stringify([...s]));
+  paintProgress();
+}
+function paintProgress() {
+  const s = readSet();
+  const el = document.getElementById("learnprogress");
+  if (el) el.textContent = String([...s].filter(k => LESSONS[k]).length);
+  document.querySelectorAll(".lessoncard").forEach(c => {
+    c.querySelector(".lesson-read-mark").textContent =
+      s.has(c.dataset.lesson) ? "✓ read" : "";
+  });
+}
+paintProgress();
+document.querySelectorAll(".lessoncard").forEach(c =>
+  c.addEventListener("toggle", () => { if (c.open) markRead(c.dataset.lesson); }));
+
+function openLesson(key) {
+  const l = LESSONS[key];
+  if (!l) return;
+  document.getElementById("lmodal-title").textContent = l.title;
+  document.getElementById("lmodal-body").textContent = l.body;
+  document.getElementById("lmodal-num").textContent = String(l.n);
+  document.getElementById("lmodal").hidden = false;
+  markRead(key);
+}
+document.querySelectorAll(".learn").forEach(btn =>
+  btn.addEventListener("click", () => openLesson(btn.dataset.lesson)));
+document.getElementById("lmodal-close")?.addEventListener("click",
+  () => { document.getElementById("lmodal").hidden = true; });
+document.getElementById("lmodal-path")?.addEventListener("click",
+  () => { document.getElementById("lmodal").hidden = true; });
+document.getElementById("lmodal")?.addEventListener("click", e => {
+  if (e.target.id === "lmodal") document.getElementById("lmodal").hidden = true;
+});
+
+// "Why?" per yoga: open the rule verbatim + highlight forming planets/houses
+document.querySelectorAll(".whybtn").forEach(btn =>
+  btn.addEventListener("click", () => {
+    btn.parentElement.querySelector("details").open = true;
+    document.querySelector('.tab[data-tab="d1"]').click();
+    clearHighlights();
+    (btn.dataset.houses || "").split(",").filter(Boolean)
+      .forEach(h => poly(parseInt(h, 10), "hl-target"));
+    (btn.dataset.planets || "").split(",").filter(Boolean)
+      .forEach(p => { if (EXPLORER[p]) ring(EXPLORER[p].house); });
+    document.getElementById("plate").scrollIntoView({ behavior: "smooth" });
+  }));
+{% endif %}
+
+// --- birthplace autocomplete (offline dataset served by /api/cities) ---
+function wirePlace(prefix) {
+  const place = document.getElementById(prefix + "place");
+  if (!place) return;
+  const box = document.getElementById(prefix + "suggest");
+  const meta = document.getElementById(prefix + "placemeta");
+  const set = (id, v) => { document.getElementById(prefix + id).value = v; };
+  let timer = null;
+
+  const hide = () => { box.hidden = true; box.innerHTML = ""; };
+
+  place.addEventListener("input", () => {
+    meta.textContent = "";
+    ["lat", "lon", "tz"].forEach(id => set(id, ""));
+    clearTimeout(timer);
+    const q = place.value.trim();
+    if (q.length < 3) { hide(); return; }
+    timer = setTimeout(async () => {
+      const r = await fetch("/api/cities?q=" + encodeURIComponent(q));
+      const { results } = await r.json();
+      if (!results.length) { hide(); return; }
+      box.innerHTML = "";
+      results.forEach(c => {
+        const div = document.createElement("div");
+        div.className = "suggestion";
+        div.textContent = c.label;
+        div.addEventListener("mousedown", () => {
+          place.value = c.label;
+          set("lat", c.lat); set("lon", c.lon); set("tz", c.tz);
+          const ns = c.lat >= 0 ? "N" : "S", ew = c.lon >= 0 ? "E" : "W";
+          meta.textContent = Math.abs(c.lat).toFixed(2) + "°" + ns + " " +
+            Math.abs(c.lon).toFixed(2) + "°" + ew + " · " + c.tz;
+          hide();
+        });
+        box.appendChild(div);
+      });
+      box.hidden = false;
+    }, 220);
+  });
+  place.addEventListener("blur", () => setTimeout(hide, 200));
+  place.addEventListener("keydown", e => { if (e.key === "Escape") hide(); });
+}
+wirePlace("");
+wirePlace("p_");
+</script>
+</body>
+</html>
