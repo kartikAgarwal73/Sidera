@@ -163,6 +163,17 @@ OVERRIDE: dict[str, tuple[str, str]] = {
         ("invariant", "clock arithmetic"),
     "TestPhase6FlaskUI::test_twelve_hour_input_casts_identical_chart":
         ("invariant", "06:57 and 6:57 AM are the same instant"),
+    "TestPhase6FlaskUI::test_birth_time_field_is_a_native_time_input":
+        ("invariant", "product rule: a birth time must be enterable on a "
+                      "phone — regression from a live Render smoke-test"),
+    "TestPhase6FlaskUI::test_no_birth_field_traps_a_mobile_keyboard":
+        ("invariant", "product rule: no field may demand characters its "
+                      "declared keyboard cannot produce"),
+    "TestPhase6FlaskUI::test_coordinate_parsing_shapes_and_refusals":
+        ("invariant", "decimal-degree arithmetic and hemisphere convention"),
+    "TestPhase6FlaskUI::test_native_time_value_casts_the_same_chart":
+        ("invariant", "every accepted spelling of one instant is the same "
+                      "instant, so the chart must be identical"),
     "TestPhase6FlaskUI::test_missing_timezone_is_never_guessed":
         ("invariant", "product rule: a guessed timezone corrupts the chart"),
     "TestPhase6FlaskUI::test_cities_api_offline_lookup":

@@ -50,8 +50,8 @@
       <input id="date" name="date" type="date" value="{{ form.get('date', '') }}" required>
     </div>
     <div class="field grow">
-      <label for="time">Time of birth <span class="opt">· 24-hour or AM/PM</span></label>
-      <input id="time" name="time" type="text" inputmode="numeric"
+      <label for="time">Time of birth <span class="opt">· as exact as you have it</span></label>
+      <input id="time" name="time" type="time" step="60"
              placeholder="e.g. 08:45 or 8:45 AM" value="{{ form.get('time', '') }}" required>
     </div>
   </div>
@@ -67,13 +67,13 @@
     <div class="fieldrow" style="margin-top:14px">
       <div class="field grow">
         <label for="lat">Latitude</label>
-        <input id="lat" name="lat" type="number" step="any" min="-90" max="90"
-               placeholder="decimal °, north positive" value="{{ form.get('lat', '') }}">
+        <input id="lat" name="lat" type="text" inputmode="text"
+               placeholder="e.g. 19.07 or 33.87 S" value="{{ form.get('lat', '') }}">
       </div>
       <div class="field grow">
         <label for="lon">Longitude</label>
-        <input id="lon" name="lon" type="number" step="any" min="-180" max="180"
-               placeholder="decimal °, east positive" value="{{ form.get('lon', '') }}">
+        <input id="lon" name="lon" type="text" inputmode="text"
+               placeholder="e.g. 72.88 or 70.67 W" value="{{ form.get('lon', '') }}">
       </div>
       <div class="field grow">
         <label for="tz">Timezone</label>
@@ -98,7 +98,7 @@
       </div>
       <div class="field grow">
         <label for="p_time">Time of birth</label>
-        <input id="p_time" name="p_time" type="text" inputmode="numeric"
+        <input id="p_time" name="p_time" type="time" step="60"
                placeholder="e.g. 14:20 or 2:20 PM" value="{{ form.get('p_time', '') }}">
       </div>
     </div>

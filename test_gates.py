@@ -785,9 +785,104 @@ class TestPhase6FlaskUI:
         assert parse_time("12:05 am") == (0, 5)
         assert parse_time("12:05 pm") == (12, 5)
         assert parse_time("08.45") == (8, 45)
-        for bad in ("25:00", "14:20 PM", "0:00 AM", "10:75", "noonish", ""):
+        # Separator-free, for a browser that degrades <input type="time"> to
+        # a text box a phone keypad can only put digits into.
+        assert parse_time("1420") == (14, 20)
+        assert parse_time("0845") == (8, 45)
+        assert parse_time("845") == (8, 45)
+        assert parse_time("0005") == (0, 5)
+        for bad in ("25:00", "14:20 PM", "0:00 AM", "10:75", "noonish", "",
+                    "2500", "1075", "84500"):
             with pytest.raises(ValueError):
                 parse_time(bad)
+
+    def test_birth_time_field_is_a_native_time_input(self, client):
+        """Mobile regression: the field was type=text inputmode=numeric.
+
+        That combination hands a phone a digits-only keypad with no colon
+        key, so a birth time could not be entered on mobile at all — found
+        in a live smoke-test on Render. `type="time"` gives the native
+        picker and submits 24-hour "HH:MM", which parse_time already reads.
+        """
+        html = client.get("/").get_data(as_text=True)
+        form = html[html.index('<form method="post"'):html.index("</form>")]
+        for field in ("time", "p_time"):
+            tag = re.search(rf'<input id="{field}"[^>]*>', form, re.S)
+            assert tag, f"{field} input missing"
+            assert 'type="time"' in tag.group(0), (
+                f"{field} must be a native time input: {tag.group(0)}")
+            assert 'step="60"' in tag.group(0), (
+                f"{field} needs minute granularity, not seconds")
+            assert 'inputmode="numeric"' not in tag.group(0), (
+                f"{field} must not force a digits-only keypad")
+
+    def test_no_birth_field_traps_a_mobile_keyboard(self, client):
+        """Sweep: no field may demand characters its keyboard cannot type.
+
+        `inputmode="numeric"` is a digits-only keypad — no colon, no minus,
+        no decimal point on several mobile browsers. Any field whose valid
+        values need one of those must not declare it.
+        """
+        html = client.get("/").get_data(as_text=True)
+        form = html[html.index('<form method="post"'):html.index("</form>")]
+        tags = {m.group(1): m.group(0) for m in
+                re.finditer(r'<input id="(\w+)"[^>]*>', form, re.S)}
+        # Dates and times get native pickers — no free typing to trap.
+        for field in ("date", "p_date"):
+            assert 'type="date"' in tags[field], field
+        for field in ("time", "p_time"):
+            assert 'type="time"' in tags[field], field
+        # Coordinates are signed decimals; a numeric keypad may offer no
+        # minus key, which would make the southern and western hemispheres
+        # unreachable. They take a full keyboard, and the parser also
+        # accepts a hemisphere letter so a bare keypad still suffices.
+        for field in ("lat", "lon"):
+            assert 'inputmode="numeric"' not in tags[field], field
+            assert 'type="number"' not in tags[field], field
+        from app import parse_coord
+        assert parse_coord("33.87 S", "latitude") == -33.87
+        assert parse_coord("70.67 W", "longitude") == -70.67
+
+    def test_coordinate_parsing_shapes_and_refusals(self):
+        from app import parse_coord
+        assert parse_coord("19.07", "latitude") == 19.07
+        assert parse_coord("-33.87", "latitude") == -33.87
+        assert parse_coord("33.87 S", "latitude") == -33.87
+        assert parse_coord("33,87S", "latitude") == -33.87     # comma decimal
+        assert parse_coord("19.07° N", "latitude") == 19.07     # pasted
+        assert parse_coord("−70.67", "longitude") == -70.67  # unicode −
+        # Refusals that protect the chart from a silently wrong sign:
+        for bad, axis in (("33.87 E", "latitude"),      # wrong hemisphere
+                          ("-33.87 S", "latitude"),     # sign AND letter
+                          ("99.9", "latitude"),         # out of range
+                          ("200", "longitude"),
+                          ("abc", "longitude"), ("", "latitude")):
+            with pytest.raises(ValueError):
+                parse_coord(bad, axis)
+
+    def test_native_time_value_casts_the_same_chart(self, client):
+        """The <input type="time"> wire format must reach the engine intact.
+
+        A shifted hour would move the Lagna by ~15° and could move the Moon
+        across a pada boundary, changing the whole Vimśottarī timeline — so
+        this asserts the identity end to end, not just the parse.
+        """
+        import re as _re
+        signatures = set()
+        for spelling in ("06:57", "6:57 AM", "0657"):
+            html = client.post(
+                "/", data={**GATE_FORM, "time": spelling}
+            ).get_data(as_text=True)
+            signatures.add((
+                _re.search(r"Leo \d+°\d+′\d+″", html).group(0),
+                _re.search(r"Candra in (\w+) p\.(\d)", html).groups(),
+                _re.search(r"(\w+) mahādaśā · (\w+) antara", html).groups(),
+            ))
+        assert len(signatures) == 1, signatures
+        lagna, nak, dasha = signatures.pop()
+        assert lagna == "Leo 11°05′08″"
+        assert nak == ("Rohini", "2")
+        assert dasha == ("Rahu", "Sun")
 
     def test_twelve_hour_input_casts_identical_chart(self, client, page):
         # 06:57 posted as "6:57 AM" must cast the same lagna.

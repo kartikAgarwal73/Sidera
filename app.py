@@ -100,11 +100,16 @@ def cities_api():
 
 _TIME_RE = re.compile(
     r"^\s*(\d{1,2})[:.](\d{2})\s*(am|pm|a\.m\.|p\.m\.)?\s*$", re.IGNORECASE)
+# Separator-free fallback: '1312' or '812'. The field is <input type="time">,
+# which submits 'HH:MM', but a browser that does not support it degrades to a
+# plain text box — and on a phone that box may only offer digits.
+_TIME_BARE_RE = re.compile(r"^\s*(\d{1,2})(\d{2})\s*(am|pm)?\s*$",
+                           re.IGNORECASE)
 
 
 def parse_time(text: str) -> tuple[int, int]:
-    """Accept 24-hour ('14:20') and 12-hour ('2:20 PM') clock times."""
-    m = _TIME_RE.match(text or "")
+    """Accept 24-hour ('14:20'), 12-hour ('2:20 PM') and bare ('1420')."""
+    m = _TIME_RE.match(text or "") or _TIME_BARE_RE.match(text or "")
     if not m:
         raise ValueError(
             "Time must look like 14:20 (24-hour) or 2:20 PM (12-hour).")
@@ -119,6 +124,45 @@ def parse_time(text: str) -> tuple[int, int]:
     elif hour > 23:
         raise ValueError("In 24-hour time the hour runs 0–23.")
     return hour, minute
+
+_COORD_RE = re.compile(
+    r"^\s*([+\-−–]?)\s*(\d{1,3}(?:[.,]\d+)?)\s*°?\s*"
+    r"([NSEWnsew])?\s*$")
+_NEGATIVE_HEMISPHERES = {"s", "w"}
+
+
+def parse_coord(text: str, axis: str) -> float:
+    """Decimal degrees from the several shapes people actually type.
+
+    Signed ('-33.87'), hemisphere-suffixed ('33.87 S', '33.87°S') and
+    comma-decimal ('33,87') all parse. The hemisphere form matters on
+    mobile: a numeric keypad may offer no minus key at all, which would
+    otherwise make the entire southern and western hemispheres unreachable
+    through the manual-coordinate fallback.
+    """
+    limit = 90 if axis == "latitude" else 180
+    m = _COORD_RE.match(text or "")
+    if not m:
+        raise ValueError(
+            f"{axis.capitalize()} must be decimal degrees — e.g. "
+            f"{'-33.87 or 33.87 S' if axis == 'latitude' else '-70.67 or 70.67 W'}.")
+    sign, number, hemisphere = m.group(1), m.group(2), (m.group(3) or "").lower()
+    if hemisphere and hemisphere not in (
+            "ns" if axis == "latitude" else "ew"):
+        raise ValueError(
+            f"{axis.capitalize()} takes "
+            f"{'N or S' if axis == 'latitude' else 'E or W'}, not "
+            f"{hemisphere.upper()}.")
+    if sign and hemisphere:
+        raise ValueError(
+            f"Give {axis} a sign or a hemisphere letter, not both.")
+    value = float(number.replace(",", "."))
+    if sign in ("-", "−", "–") or hemisphere in _NEGATIVE_HEMISPHERES:
+        value = -value
+    if not -limit <= value <= limit:
+        raise ValueError(f"{axis.capitalize()} runs −{limit} to {limit}.")
+    return value
+
 
 ABBR = {
     "Sun": "Su", "Moon": "Mo", "Mars": "Ma", "Mercury": "Me",
@@ -440,7 +484,8 @@ def index():
         birth = BirthData(
             year=date.year, month=date.month, day=date.day,
             hour=hour, minute=minute,
-            latitude=float(form["lat"]), longitude=float(form["lon"]),
+            latitude=parse_coord(form["lat"], "latitude"),
+            longitude=parse_coord(form["lon"], "longitude"),
             tz=tz, place=form.get("place", "").strip(),
         )
         partner_birth = None
@@ -456,7 +501,8 @@ def index():
             partner_birth = BirthData(
                 year=p_date.year, month=p_date.month, day=p_date.day,
                 hour=p_hour, minute=p_minute,
-                latitude=float(form["p_lat"]), longitude=float(form["p_lon"]),
+                latitude=parse_coord(form["p_lat"], "latitude"),
+                longitude=parse_coord(form["p_lon"], "longitude"),
                 tz=p_tz, place=form.get("p_place", "").strip())
         profile = Profile(name=form.get("name", "").strip(), birth=birth,
                           partner_name=form.get("p_name", "").strip(),
