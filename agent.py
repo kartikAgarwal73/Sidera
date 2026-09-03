@@ -77,6 +77,11 @@ WHAT YOU MAY DRAW ON
 `transit.*` is TODAY'S SKY, and the same graha is usually in a different sign \
 in each. Say which you mean — "transiting Jupiter", "your natal Jupiter" — \
 never a bare "Jupiter is in ...".
+`varga.d9.*` and `varga.d10.*` are DIVISIONAL charts — a third and fourth \
+sky. Venus can be in Cancer at birth, Virgo in the D9 and Gemini in the D10, \
+all true at once. Always name the chart: "in the D9, Venus is in ...". These \
+are sign-level only; there is no degree within a divisional sign, so never \
+give a varga degree, nakshatra or dignity-by-degree.
 `rules` — the classical rules you interpret through. Cite by id.
 
 Never state a placement, period or date the ledger does not contain. Do not \
@@ -227,7 +232,16 @@ _TRANSIT_MARK = re.compile(
     r"now in|(?:through|until|till)\s+\w+\s+\d{4})\b", re.IGNORECASE)
 _NATAL_MARK = re.compile(
     r"\b(?:natal|natally|birth chart|at birth|in your chart|radix|"
-    r"you were born with)\b", re.IGNORECASE)
+    r"you were born with|rasi|rashi|d1)\b", re.IGNORECASE)
+# A divisional chart is a THIRD sky. Venus is in Cancer at birth, Virgo in
+# the D9 and Gemini in the D10 — three true statements about one planet.
+# Without this the D9 facts could not be used without being withheld, which
+# is the transit bug wearing a different coat.
+_D9_MARK = re.compile(r"\b(?:d-?9|navamsa|nav[aā]ṃ?[sś]a)\b", re.IGNORECASE)
+_D10_MARK = re.compile(r"\b(?:d-?10|dasamsa|da[sś][aā]ṃ?[sś]a)\b",
+                       re.IGNORECASE)
+# "in the divisional chart" without saying which — accept either varga.
+_VARGA_MARK = re.compile(r"\b(?:divisional|varga|vargas)\b", re.IGNORECASE)
 _CLAUSE_END = ".;:\n"
 
 
@@ -257,7 +271,9 @@ def _frame(text: str, start: int, end: int) -> str:
     lo = boundary + 1
     window = text[lo:min(len(text), end + 45)]
     nearest, frame = None, "natal"
-    for pattern, name in ((_TRANSIT_MARK, "transit"), (_NATAL_MARK, "natal")):
+    for pattern, name in ((_TRANSIT_MARK, "transit"), (_NATAL_MARK, "natal"),
+                          (_D9_MARK, "d9"), (_D10_MARK, "d10"),
+                          (_VARGA_MARK, "varga")):
         for m in pattern.finditer(window):
             at = lo + m.start()
             # English puts the qualifier in front — "transiting Jupiter",
@@ -344,6 +360,22 @@ def _transit_positions(chart: Chart, when: datetime) -> dict:
     return {n: (p.sign, p.natal_house) for n, p in snap.planets.items()}
 
 
+def _frame_positions(chart: Chart, when: datetime) -> dict:
+    """{frame: {planet: (sign, house)}} — every sky a claim may be about."""
+    from vargas import dasamsa, navamsa
+    d9, d10 = navamsa(chart), dasamsa(chart)
+    return {
+        "natal": {n: (p.sign, p.house) for n, p in chart.planets.items()},
+        "transit": _transit_positions(chart, when),
+        "d9": {n: (p.sign, p.house) for n, p in d9.planets.items()},
+        "d10": {n: (p.sign, p.house) for n, p in d10.planets.items()},
+    }
+
+
+_FRAME_LABEL = {"natal": "", "transit": "transiting ",
+                "d9": "in the D9, ", "d10": "in the D10, "}
+
+
 def validate_answer(text: str, chart: Chart, when: datetime,
                     facts_used=(), fact_ids=None,
                     transits=None) -> list[Violation]:
@@ -360,7 +392,8 @@ def validate_answer(text: str, chart: Chart, when: datetime,
     """
     known = fact_ids if fact_ids is not None else {
         f.id for f in build_facts(chart, when)}
-    moving = _transit_positions(chart, when) if transits is None else transits
+    frames = transits if isinstance(transits, dict) and "natal" in (
+        transits or {}) else _frame_positions(chart, when)
     out: list[Violation] = []
 
     for fid in facts_used:
@@ -369,29 +402,46 @@ def validate_answer(text: str, chart: Chart, when: datetime,
                 "unknown-fact-id", fid,
                 f"cited fact '{fid}' is not in the ledger"))
 
+    def _check(planet, claimed, frame, index, matched, unit):
+        """One claim against the sky its clause says it is about.
+
+        'varga' means the clause said "divisional" without naming which, so
+        it is satisfied by either D9 or D10 — that ambiguity is the writer's,
+        and refusing it would withhold a true sentence.
+        """
+        if frame == "varga":
+            candidates = [frames["d9"][planet][index],
+                          frames["d10"][planet][index]]
+            if claimed in candidates:
+                return None
+            actual = " or ".join(str(c) for c in candidates)
+            return Violation(
+                f"wrong-varga-{unit}", matched,
+                f"in the divisional charts {planet} is in {actual}, "
+                f"not {claimed}")
+        actual = frames[frame][planet][index]
+        if claimed == actual:
+            return None
+        return Violation(
+            f"wrong-{frame}-{unit}", matched,
+            f"{_FRAME_LABEL.get(frame, '')}{planet} is in "
+            f"{'house ' if unit == 'house' else ''}{actual}, not {claimed}")
+
     for m in _CLAIM_SIGN.finditer(text):
         planet = _canon(m.group(1), PLANETS)
         claimed = _canon(m.group(2), SIGNS)
-        frame = _frame(text, m.start(), m.end())
-        actual = (moving[planet][0] if frame == "transit"
-                  else chart.planets[planet].sign)
-        if claimed != actual:
-            out.append(Violation(
-                f"wrong-{frame}-sign", m.group(0),
-                f"{'transiting ' if frame == 'transit' else ''}{planet} is "
-                f"in {actual}, not {claimed}"))
+        bad = _check(planet, claimed, _frame(text, m.start(), m.end()),
+                     0, m.group(0), "sign")
+        if bad:
+            out.append(bad)
 
     for m in _CLAIM_HOUSE.finditer(text):
         planet = _canon(m.group(1), PLANETS)
         claimed = int(re.sub(r"\D", "", m.group(2)))
-        frame = _frame(text, m.start(), m.end())
-        actual = (moving[planet][1] if frame == "transit"
-                  else chart.planets[planet].house)
-        if claimed != actual:
-            out.append(Violation(
-                f"wrong-{frame}-house", m.group(0),
-                f"{'transiting ' if frame == 'transit' else ''}{planet} is "
-                f"in house {actual}, not {claimed}"))
+        bad = _check(planet, claimed, _frame(text, m.start(), m.end()),
+                     1, m.group(0), "house")
+        if bad:
+            out.append(bad)
 
     for m in _CLAIM_LAGNA.finditer(text):
         claimed = _canon(m.group(1) or m.group(2), SIGNS)
@@ -408,7 +458,7 @@ def validate_payload(payload: dict, chart: Chart,
     """Validate the whole structured response, prose and citations alike."""
     from rulelib import is_known as _rule_known
     known = {f.id for f in build_facts(chart, when)}
-    moving = _transit_positions(chart, when)
+    moving = _frame_positions(chart, when)
     ledger = _ledger_text(chart, when)
     answer = payload.get("answer", "")
     out = list(validate_answer(answer, chart, when,

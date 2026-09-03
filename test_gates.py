@@ -12,7 +12,7 @@ from pathlib import Path
 import fixtures
 
 from dashas import DASHA_SEQUENCE, nakshatra_of, nakshatra_table, vimshottari
-from engine import BirthData, compute_chart
+from engine import SIGNS, BirthData, compute_chart
 from transits import (
     DRISHTI_OFFSETS,
     angular_distance,
@@ -2233,6 +2233,36 @@ class TestChartFactLedger:
         for house in range(1, 13):
             assert f"house.{house}" in agent_facts
 
+    def test_per_planet_varga_positions_are_in_the_ledger(
+            self, chart, agent_facts):
+        """The app computed and displayed D9/D10 placements all along while
+        the ledger carried only the lagna and the vargottama list — so the
+        agent had to decline D9 questions it held the answers to."""
+        from vargas import dasamsa, navamsa
+        for label, varga in (("d9", navamsa(chart)), ("d10", dasamsa(chart))):
+            assert agent_facts[f"varga.{label}.lagna"].value["lagna"] == \
+                varga.lagna_sign
+            for planet in ("Sun", "Moon", "Mars", "Mercury", "Jupiter",
+                           "Venus", "Saturn", "Rahu", "Ketu"):
+                fact = agent_facts[f"varga.{label}.{planet.lower()}"]
+                vp = varga.planets[planet]
+                assert fact.value["sign"] == vp.sign
+                assert fact.value["house"] == vp.house
+                # The fact must name its chart, or the agent cannot tell the
+                # reader which sky it is describing.
+                assert label.upper() in fact.statement
+
+    def test_varga_facts_admit_they_carry_no_degree(self, agent_facts):
+        """vargas.py maps a longitude to a divisional SIGN and discards the
+        rest. The ledger says so, so the agent does not reach for a varga
+        degree, nakshatra or dignity that this build cannot supply."""
+        fact = agent_facts["varga.d9.venus"]
+        assert fact.value["degree"] is None
+        assert "Sign-level only" in fact.statement
+        from rulelib import RULES
+        assert "rule.varga.sign_level" in RULES
+        assert "not available" in RULES["rule.varga.sign_level"].text
+
     def test_all_nine_transits_are_in_the_ledger(self, chart, agent_facts):
         """A forecast answer is mostly transits. A position the agent does
         not have is one it omits or invents — and the validator can only
@@ -2389,6 +2419,69 @@ class TestGroundedAgent:
         result = ask_chart(chart, AGENT_WHEN, "What do the transits touch?",
                            client=client, model="test-model")
         assert result.ok, result.violations
+
+    def test_varga_statements_pass_validation(self, chart):
+        """A divisional claim is a THIRD frame.
+
+        Adding varga facts without teaching the validator about them would
+        have shipped the transit bug again in a new coat: Venus is in Cancer
+        at birth and Virgo in the D9, so a true D9 sentence would have been
+        withheld as a wrong natal placement.
+        """
+        from agent import ask_chart
+        from vargas import dasamsa, navamsa
+        d9, d10 = navamsa(chart), dasamsa(chart)
+        venus_d9 = d9.planets["Venus"].sign
+        venus_d10 = d10.planets["Venus"].sign
+        # The frames must genuinely disagree, or this proves nothing.
+        assert len({chart.planets["Venus"].sign, venus_d9, venus_d10}) == 3
+
+        answer = (
+            f"Your natal Venus is in {chart.planets['Venus'].sign}, but in "
+            f"the D9 Venus is in {venus_d9}, and in the D10 Venus is in "
+            f"{venus_d10}.")
+        client = FakeClient([_reply(answer, facts=[
+            "planet.venus", "varga.d9.venus", "varga.d10.venus"])])
+        result = ask_chart(chart, AGENT_WHEN, "How is my Venus placed?",
+                           client=client, model="test-model")
+        assert result.ok, result.violations
+
+    def test_varga_claims_are_still_checked_against_the_right_varga(
+            self, chart):
+        """Saying 'in the D9' cannot launder an invented placement."""
+        from agent import ask_chart
+        from vargas import navamsa
+        wrong = next(s for s in SIGNS
+                     if s != navamsa(chart).planets["Venus"].sign)
+        client = FakeClient([_reply(f"In the D9, Venus is in {wrong}.",
+                                    facts=["varga.d9.venus"])])
+        result = ask_chart(chart, AGENT_WHEN, "Where is D9 Venus?",
+                           client=client, model="test-model")
+        assert not result.ok
+        assert any(v.kind == "wrong-d9-sign" for v in result.violations)
+
+    def test_an_unnamed_divisional_claim_accepts_either_varga(self, chart):
+        """'in the divisional chart' without saying which is the writer's
+        ambiguity, not a falsehood — it passes if either varga supports it,
+        and still fails if neither does."""
+        from agent import ask_chart
+        from vargas import dasamsa, navamsa
+        d10_sign = dasamsa(chart).planets["Mars"].sign
+        client = FakeClient([_reply(
+            f"In the divisional charts Mars is in {d10_sign}.",
+            facts=["varga.d10.mars"])])
+        assert ask_chart(chart, AGENT_WHEN, "Mars in the vargas?",
+                         client=client, model="test-model").ok
+
+        bad = next(s for s in SIGNS if s not in
+                   (navamsa(chart).planets["Mars"].sign, d10_sign))
+        client = FakeClient([_reply(
+            f"In the divisional charts Mars is in {bad}.",
+            facts=["varga.d10.mars"])])
+        result = ask_chart(chart, AGENT_WHEN, "Mars in the vargas?",
+                           client=client, model="test-model")
+        assert not result.ok
+        assert any(v.kind == "wrong-varga-sign" for v in result.violations)
 
     def test_transit_claims_are_still_checked_against_the_real_sky(
             self, chart):

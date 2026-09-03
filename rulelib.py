@@ -128,6 +128,37 @@ _TRANSIT_GRAHA = dict([
        "Standard distinction between fast and slow gochara"),
 ])
 
+# --- how a divisional chart is read -------------------------------------------
+
+_VARGA = dict([
+    _r("rule.varga.purpose",
+       "Each divisional chart is read for one department of life and is not "
+       "a second birth chart. The D9 (navamsa) is read for inner strength, "
+       "marriage and whether a natal promise holds up; the D10 (dasamsa) for "
+       "work, standing and the field of action.",
+       "Shodasavarga, Brihat Parashara Hora Shastra"),
+    _r("rule.varga.confirms",
+       "A varga confirms or weakens what the birth chart proposes; it does "
+       "not overrule it. A promise strong in D1 and repeated in the relevant "
+       "varga is read as durable; strong in D1 and absent in the varga, as "
+       "something that does not carry.",
+       "Standard varga method (BPHS; Phaladeepika)"),
+    _r("rule.varga.vargottama",
+       "A graha holding the same sign in D1 and D9 is vargottama, and is "
+       "read as notably strengthened — the two charts agree about it.",
+       "Vargottama, Brihat Parashara Hora Shastra"),
+    _r("rule.varga.from_varga_lagna",
+       "Houses in a divisional chart are counted from that chart's own "
+       "lagna, not from the birth lagna.",
+       "Standard varga construction"),
+    _r("rule.varga.sign_level",
+       "This build computes divisional positions to the SIGN only. Degree "
+       "within a divisional sign, and therefore varga nakshatra and "
+       "dignity-by-degree in a varga, are not available and must not be "
+       "asserted.",
+       "Implementation limit of this build, not a classical rule"),
+])
+
 # --- what each house carries --------------------------------------------------
 
 HOUSE_MATTERS = {
@@ -153,14 +184,14 @@ _HOUSE = dict(
 )
 
 RULES: dict[str, Rule] = {
-    **_DASHA, **_TRANSIT_GENERAL, **_TRANSIT_GRAHA, **_HOUSE,
+    **_DASHA, **_TRANSIT_GENERAL, **_TRANSIT_GRAHA, **_VARGA, **_HOUSE,
 }
 
 _SLOW = ("Saturn", "Jupiter", "Rahu", "Ketu")
 
 
 def rules_for(*, dasha_lords=(), transit_planets=(),
-              houses=()) -> list[Rule]:
+              houses=(), vargas=()) -> list[Rule]:
     """The subset of the library that applies to one chart's active facts.
 
     Sending the whole library every request would be noise; sending the
@@ -183,6 +214,11 @@ def rules_for(*, dasha_lords=(), transit_planets=(),
                 wanted.append(key)
         if any(p in PLANETS and p not in _SLOW for p in transit_planets):
             wanted.append("rule.transit.fast")
+    if vargas:
+        wanted += ["rule.varga.purpose", "rule.varga.confirms",
+                   "rule.varga.from_varga_lagna", "rule.varga.sign_level"]
+        if "D9" in [v.upper() for v in vargas]:
+            wanted.append("rule.varga.vargottama")
     wanted += [f"rule.house.{h}" for h in houses if f"rule.house.{h}" in RULES]
 
     seen, out = set(), []

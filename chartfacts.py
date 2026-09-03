@@ -122,13 +122,46 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
         ))
 
     # --- divisional charts -------------------------------------------------
+    # Per-planet, not just the lagna. The app has computed and displayed
+    # these all along while the ledger carried only a summary, so the agent
+    # had to decline D9 questions it held the answers to.
+    #
+    # These are SIGN-LEVEL: `vargas.py` maps a natal longitude to a
+    # divisional sign and discards the position within it. No varga degree,
+    # so no varga nakshatra and no dignity-by-degree — stated in the fact
+    # so the agent does not reach for what is not there.
+    _VARGA_OF = {"d9": ("Navamsa", "inner strength, marriage and the "
+                                   "durability of a natal promise"),
+                 "d10": ("Dasamsa", "work, standing and the field of "
+                                    "action")}
     for label, varga in (("d9", navamsa(chart)), ("d10", dasamsa(chart))):
+        vname, vfor = _VARGA_OF[label]
         facts.append(Fact(
             id=f"varga.{label}.lagna",
             kind="varga",
-            statement=(f"The {label.upper()} lagna is {varga.lagna_sign}."),
-            value={"varga": label.upper(), "lagna": varga.lagna_sign},
+            statement=(f"The {label.upper()} ({vname}) lagna is "
+                       f"{varga.lagna_sign}. This varga is read for {vfor}."),
+            value={"varga": label.upper(), "name": vname,
+                   "lagna": varga.lagna_sign, "read_for": vfor},
         ))
+        for name in PLANETS:
+            vp = varga.planets[name]
+            facts.append(Fact(
+                id=f"varga.{label}.{name.lower()}",
+                kind="varga",
+                statement=(
+                    f"In the {label.upper()} ({vname}), {name} is in "
+                    f"{vp.sign}, in the {ordinal(vp.house)} house from the "
+                    f"{label.upper()} lagna"
+                    + (" — vargottama, the same sign it holds at birth."
+                       if vp.vargottama else ".")
+                    + " (Sign-level only: this build computes no degree "
+                      "within a divisional sign.)"),
+                value={"varga": label.upper(), "planet": name,
+                       "sign": vp.sign, "house": vp.house,
+                       "vargottama": vp.vargottama,
+                       "degree": None},
+            ))
         vargottama = [n for n, v in varga.planets.items() if v.vargottama]
         if label == "d9" and vargottama:
             facts.append(Fact(
@@ -245,7 +278,8 @@ def active_rules(chart: Chart, when: datetime) -> list:
                        if l in chart.planets})
     return rules_for(dasha_lords=lords,
                      transit_planets=list(PLANETS),
-                     houses=houses)
+                     houses=houses,
+                     vargas=("D9", "D10"))
 
 
 def facts_payload(chart: Chart, when: datetime) -> dict:

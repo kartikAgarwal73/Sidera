@@ -1,5 +1,74 @@
 # PROGRESS
 
+## Varga positions in the ledger; Ashtakavarga roadmap ✅ (2026-09-03)
+
+**Inventory that prompted this.** Sidera computes exactly two divisional
+charts, D9 and D10, **sign-level only** — `vargas.py` maps a natal longitude
+to a divisional sign and discards the position within it, so there is no
+varga degree, no varga nakshatra and no dignity-by-degree. Absent entirely:
+Ashtakavarga (BAV/SAV), arudha padas, Upapada, Bhrigu Bindu, avasthas,
+shadbala, vimsopaka.
+
+**Milestone 1 of 3, delivered here.** The app computed and rendered per-planet
+D9/D10 placements all along while the ledger carried only the two lagnas and
+the vargottama list — so the agent had to decline D9 questions it held the
+answers to. The ledger now carries `varga.d9.<planet>` and
+`varga.d10.<planet>` for all nine grahas: 21 varga facts, ledger 63 → 81,
+payload 25 KB → 33 KB.
+
+**A hazard caught before it shipped.** Adding those facts without touching the
+validator would have re-run the transit bug in a new coat: Venus is in Cancer
+at birth and Virgo in the D9, so a *true* D9 sentence would have been withheld
+as a wrong natal placement. Verified that it did exactly that, then gave the
+validator four frames — natal, transit, d9, d10 — plus a `varga` frame for
+"in the divisional chart" without saying which, which passes if either varga
+supports it. Saying "in the D9" cannot launder an invented placement: it is
+still checked, against the D9.
+
+Five `rule.varga.*` entries added so the facts can be interpreted rather than
+only recited, including `rule.varga.sign_level`, which states the build's own
+limit so the agent does not reach for a varga degree that does not exist.
+
+248 passing.
+
+### Milestone 2 — Ashtakavarga (BAV + SAV). QUEUED, blocked on the UX restructure.
+
+Agreed scope: raw BAV and SAV, **reductions deferred** (trikona and
+ekadhipatya shodhana, Sodhya Pinda — where implementations genuinely
+diverge). Verdict-first dashboard domain: strongest and weakest houses named
+up front, the 12×8 grid folded under. Ledger design agreed as `sav.house.N`
+×12 plus `bav.<planet>` ×7 carrying 12-value arrays — 19 facts rather than
+the 96 that `bav.<planet>.house.N` would need, which would have tripled the
+prompt payload and buried the useful facts.
+
+⚠ **VERIFICATION CONSTRAINT — read before starting.** The gate is meant to be
+the classical checksum: each planet's BAV total (Sun 48, Moon 49, Mars 39,
+Mercury 54, Jupiter 56, Venus 52, Saturn 39) and their sum, 337. Those
+figures are currently **recalled, not verified** — they came from the
+commissioner and from model training data, and this environment cannot reach
+a source to check them (wisdomlib and archive.org both refused egress,
+HTTP 000, on 2026-09-03).
+
+Under this build's own provenance rules a recalled number cannot be an
+`external` gate. So either:
+  (a) verify the 56-row benefic-point table and the totals against a BPHS
+      text off-machine, and gate on them as `external`; or
+  (b) implement, compute the totals, and declare them `characterization`
+      until someone checks them — labelled honestly, not promoted.
+Option (a) is much better: the checksum is exactly the kind of anchor this
+suite is short of, and it catches transcription errors in the 56-row table
+that are otherwise silent and produce plausible-looking bindus.
+
+Estimated 1.5–2 days: ~250-line module, ~12 tests, a dashboard domain, the
+ledger entries. The compute is easy; the table transcription is the risk.
+
+### Milestone 3 — QUEUED
+
+Degree-level vargas; D2, D7, D12, D16, D30, D60; arudha padas and Upapada.
+Degree-level means extending `VargaPosition` with a divisional longitude,
+which unlocks varga nakshatras and dignity-by-degree and is a prerequisite
+for taking any of the finer vargas seriously.
+
 ## Personal birth data removed; fictional reference fixture ✅ (2026-08-26)
 
 The commissioner's own birth record is gone from this repository — from
