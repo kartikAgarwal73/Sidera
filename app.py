@@ -614,10 +614,9 @@ def ask_endpoint():
             reason="withheld: failed ledger validation",
             facts_used=answer.facts_used, model=answer.model,
             violations=answer.violations)
+        why, hint = agent.explain_violations(answer.violations)
         return jsonify(
-            error=("That answer did not check out against your computed "
-                   "chart, so it was withheld. The attempt has been logged. "
-                   "Try rephrasing the question."),
+            error=(f"Withheld: {why}, so it was not shown. {hint}"),
             withheld=True,
             violations=[f"{v.kind}: {v.detail}" for v in answer.violations],
             remaining=remaining), 422

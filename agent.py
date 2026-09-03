@@ -68,6 +68,14 @@ Never state a planet's sign, house, degree, nakshatra or dignity unless a \
 ledger fact says exactly that. Do not infer a placement from another \
 placement. Do not name a yoga, dosha or dasha that has no fact.
 
+NATAL AND TRANSIT ARE DIFFERENT FACTS
+`planet.*` facts are the BIRTH chart. `transit.*` facts are TODAY'S SKY. The \
+same graha is usually in a different sign in each. Never mix them up, and \
+always say which you mean: write "transiting Jupiter is in ..." or "your \
+natal Jupiter is in ...", never a bare "Jupiter is in ...". A statement \
+without that word is read as a claim about the birth chart and will be \
+rejected if it was meant as a transit.
+
 LABEL EVERY STATEMENT
 Each entry in `answer_statements` carries a `label`:
   COMPUTED     — restates a ledger fact. Cite its id in `fact_ids`.
@@ -80,9 +88,25 @@ REFUSALS
 When the question cannot be answered from the ledger, set `refused` to true \
 and explain which fact would be needed. Examples of what is NOT derivable: \
 anything about a second person's chart, events with no dasha or transit fact, \
-questions about the future beyond the dated dasha and transit windows \
-present, and anything requiring a divisional chart or technique absent from \
-the ledger.
+and anything requiring a divisional chart or technique absent from the ledger.
+
+BROAD FORECASTS — REFUSE, THEN REDIRECT
+A question asking how a stretch of time will GO ("how does the rest of 2026 \
+look professionally?", "will next year be good for me?", "what is coming?") \
+asks for an outcome. The ledger holds no outcomes. It holds dated windows: \
+which dasha and antardasha are running and until when, and which grahas are \
+transiting which houses and until when.
+
+Do not attempt an outcome and hedge it. Set `refused` to true, and make the \
+refusal USEFUL in one move:
+  1. Say plainly that the chart does not forecast how a period will go.
+  2. Then give what it DOES say for that stretch — name the running dasha \
+and antardasha with their dates, and the slow transits touching houses \
+relevant to the question, each with its end date. Cite those fact ids and \
+put them in `answer` (not only in `refusal_reason`), labelled COMPUTED.
+  3. Offer one narrower question the ledger can answer.
+A refusal that hands back the dated facts is a good answer. A confident \
+forecast is not.
 
 NEVER GIVE DIRECTIVES
 Do not give medical, legal, financial or psychiatric advice, and do not tell \
@@ -146,18 +170,42 @@ _ORDINAL = r"(?:1st|2nd|3rd|[4-9]th|1[0-2]th)"
 _PLANETS_RE = "|".join(PLANETS)
 _SIGNS_RE = "|".join(SIGNS)
 
-# "Mars is in Leo", "Mars occupies Leo", "Mars in Leo"
+# The verbs a placement can be asserted with. "transiting" and "moving
+# through" are here so a transit claim is EXTRACTED — before they were
+# missing, and "Jupiter is transiting Scorpio" sailed past unchecked
+# because it matched no pattern at all. An unchecked claim is worse than a
+# wrongly-checked one.
+_PLACED = (r"(?:in|occupies|sits in|stands in|transits|transiting|"
+           r"moving through|passing through|crossing)")
+# "Mars is in Leo", "Mars occupies Leo", "Jupiter is transiting Cancer"
 _CLAIM_SIGN = re.compile(
-    rf"\b({_PLANETS_RE})\b(?:\s+is)?(?:\s+placed)?\s+(?:in|occupies|sits in|"
-    rf"stands in)\s+(?:the\s+)?\b({_SIGNS_RE})\b", re.IGNORECASE)
+    rf"\b({_PLANETS_RE})\b(?:\s+is)?(?:\s+currently)?(?:\s+placed)?\s+"
+    rf"{_PLACED}\s+(?:the\s+)?\b({_SIGNS_RE})\b", re.IGNORECASE)
 # "Mars in the 8th house", "Mars occupies the 8th"
 _CLAIM_HOUSE = re.compile(
-    rf"\b({_PLANETS_RE})\b(?:\s+is)?(?:\s+placed)?\s+(?:in|occupies|sits in|"
-    rf"stands in)\s+(?:the\s+)?({_ORDINAL})\b", re.IGNORECASE)
+    rf"\b({_PLANETS_RE})\b(?:\s+is)?(?:\s+currently)?(?:\s+placed)?\s+"
+    rf"{_PLACED}\s+(?:your\s+)?(?:natal\s+)?(?:the\s+)?({_ORDINAL})\b",
+    re.IGNORECASE)
 # "Leo lagna", "the lagna is Leo"
 _CLAIM_LAGNA = re.compile(
     rf"\b(?:lagna|ascendant)\s+(?:is\s+)?(?:in\s+)?\b({_SIGNS_RE})\b"
     rf"|\b({_SIGNS_RE})\s+(?:lagna|ascendant|rising)\b", re.IGNORECASE)
+
+
+# A claim can be about the birth chart or about today's sky, and they are
+# different facts about the same planet. Reading a transit statement as a
+# natal one is not a small mistake: natal Jupiter is in Pisces here while
+# transiting Jupiter is in Cancer, so a CORRECT sentence about the months
+# ahead gets rejected. That failure lands hardest on forward-looking
+# questions — exactly the ones the feature exists to answer.
+_TRANSIT_MARK = re.compile(
+    r"\b(?:transit(?:s|ed|ing)?|gocara|currently|right now|at present|"
+    r"these days|moving through|passing through|crossing|goes through|"
+    r"now in|(?:through|until|till)\s+\w+\s+\d{4})\b", re.IGNORECASE)
+_NATAL_MARK = re.compile(
+    r"\b(?:natal|natally|birth chart|at birth|in your chart|radix|"
+    r"you were born with)\b", re.IGNORECASE)
+_CLAUSE_END = ".;:\n"
 
 
 @dataclass(frozen=True)
@@ -167,6 +215,38 @@ class Violation:
     detail: str
 
 
+def _frame(text: str, start: int, end: int) -> str:
+    """'natal' or 'transit' — which chart a claim at [start:end) is about.
+
+    NEAREST MARKER WINS. One sentence can carry both frames — "Natal
+    Jupiter is in Pisces, while transiting Jupiter is in Cancer" is two
+    true claims about two different skies — so a rule like "any natal word
+    in the sentence means natal" mislabels one of them. Distance to the
+    claim decides instead.
+
+    The window runs from the clause boundary to a little past the claim, so
+    a trailing marker still counts ("Saturn occupies the 8th by transit").
+    With no marker at all the claim is natal: that keeps the default strict,
+    since the ledger is mostly a birth chart.
+    """
+    boundary = max((text.rfind(ch, 0, start) for ch in _CLAUSE_END),
+                   default=-1)
+    lo = boundary + 1
+    window = text[lo:min(len(text), end + 45)]
+    nearest, frame = None, "natal"
+    for pattern, name in ((_TRANSIT_MARK, "transit"), (_NATAL_MARK, "natal")):
+        for m in pattern.finditer(window):
+            at = lo + m.start()
+            # English puts the qualifier in front — "transiting Jupiter",
+            # "your natal Moon" — so a marker before the claim outranks an
+            # equally close one after it. Without this, the next clause's
+            # qualifier can capture the previous clause's claim.
+            distance = (start - at) if at < start else (at - end) + 12
+            if nearest is None or distance < nearest:
+                nearest, frame = distance, name
+    return frame
+
+
 def _canon(word: str, options) -> str:
     for o in options:
         if o.lower() == word.lower():
@@ -174,17 +254,30 @@ def _canon(word: str, options) -> str:
     return word
 
 
+def _transit_positions(chart: Chart, when: datetime) -> dict:
+    """{planet: (sign, natal_house)} for today's sky."""
+    from transits import transit_snapshot
+    snap = transit_snapshot(chart, when)
+    return {n: (p.sign, p.natal_house) for n, p in snap.planets.items()}
+
+
 def validate_answer(text: str, chart: Chart, when: datetime,
-                    facts_used=(), fact_ids=None) -> list[Violation]:
+                    facts_used=(), fact_ids=None,
+                    transits=None) -> list[Violation]:
     """Every placement asserted in `text` must be true of `chart`.
 
     This is the guarantee the system prompt only requests. A model that
     invents "Mars in Leo" for a Cancer Mars produces a violation here and
     the answer is withheld — the reader never sees a plausible sentence
     that happens to be about a different chart.
+
+    Natal and transit claims are checked against their own positions. A
+    transit claim is still checked; it is simply checked against the right
+    sky.
     """
     known = fact_ids if fact_ids is not None else {
         f.id for f in build_facts(chart, when)}
+    moving = _transit_positions(chart, when) if transits is None else transits
     out: list[Violation] = []
 
     for fid in facts_used:
@@ -196,20 +289,26 @@ def validate_answer(text: str, chart: Chart, when: datetime,
     for m in _CLAIM_SIGN.finditer(text):
         planet = _canon(m.group(1), PLANETS)
         claimed = _canon(m.group(2), SIGNS)
-        actual = chart.planets[planet].sign
+        frame = _frame(text, m.start(), m.end())
+        actual = (moving[planet][0] if frame == "transit"
+                  else chart.planets[planet].sign)
         if claimed != actual:
             out.append(Violation(
-                "wrong-sign", m.group(0),
-                f"{planet} is in {actual}, not {claimed}"))
+                f"wrong-{frame}-sign", m.group(0),
+                f"{'transiting ' if frame == 'transit' else ''}{planet} is "
+                f"in {actual}, not {claimed}"))
 
     for m in _CLAIM_HOUSE.finditer(text):
         planet = _canon(m.group(1), PLANETS)
         claimed = int(re.sub(r"\D", "", m.group(2)))
-        actual = chart.planets[planet].house
+        frame = _frame(text, m.start(), m.end())
+        actual = (moving[planet][1] if frame == "transit"
+                  else chart.planets[planet].house)
         if claimed != actual:
             out.append(Violation(
-                "wrong-house", m.group(0),
-                f"{planet} is in house {actual}, not {claimed}"))
+                f"wrong-{frame}-house", m.group(0),
+                f"{'transiting ' if frame == 'transit' else ''}{planet} is "
+                f"in house {actual}, not {claimed}"))
 
     for m in _CLAIM_LAGNA.finditer(text):
         claimed = _canon(m.group(1) or m.group(2), SIGNS)
@@ -225,8 +324,10 @@ def validate_payload(payload: dict, chart: Chart,
                      when: datetime) -> list[Violation]:
     """Validate the whole structured response, prose and citations alike."""
     known = {f.id for f in build_facts(chart, when)}
+    moving = _transit_positions(chart, when)
     out = list(validate_answer(payload.get("answer", ""), chart, when,
-                               payload.get("facts_used", ()), known))
+                               payload.get("facts_used", ()), known,
+                               transits=moving))
     # A refusal asserts nothing about the chart, so there is nothing to
     # cite. Demanding citations from it would push the model toward
     # answering rather than declining — the opposite of what we want.
@@ -236,7 +337,8 @@ def validate_payload(payload: dict, chart: Chart,
         if not (stmt.get("text") or "").strip():
             continue
         out.extend(validate_answer(stmt.get("text", ""), chart, when,
-                                   stmt.get("fact_ids", ()), known))
+                                   stmt.get("fact_ids", ()), known,
+                                   transits=moving))
         if stmt.get("label") == "INTERPRETIVE" and not stmt.get("rule"):
             out.append(Violation(
                 "uncited-interpretation", stmt.get("text", "")[:80],
@@ -254,6 +356,34 @@ def validate_payload(payload: dict, chart: Chart,
             seen.add(key)
             unique.append(v)
     return unique
+
+
+def explain_violations(violations) -> tuple[str, str]:
+    """(what went wrong, what to try) — in the reader's terms.
+
+    "That answer did not check out" tells someone nothing about what to do
+    next. Name the kind of mistake and suggest a narrower question, because
+    the usual cause is a question broad enough that the reply wandered off
+    the computed facts.
+    """
+    kinds = {v.kind for v in violations}
+    if kinds & {"wrong-natal-sign", "wrong-natal-house", "wrong-lagna"}:
+        why = ("the reply made a placement claim that does not match your "
+               "computed chart")
+    elif kinds & {"wrong-transit-sign", "wrong-transit-house"}:
+        why = ("the reply described a transit that does not match where the "
+               "grahas actually are today")
+    elif "unknown-fact-id" in kinds:
+        why = "the reply cited a fact that is not in your chart's ledger"
+    elif kinds & {"uncited-interpretation", "uncited-computed"}:
+        why = "the reply made a claim without citing what it rests on"
+    else:
+        why = "the reply did not check out against your computed chart"
+    hint = ("Broad questions are the usual cause — the reply drifts off the "
+            "computed facts. Try something narrower, like \u201cwhat does my "
+            "current dasha emphasise?\u201d or \u201cwhich house is Saturn "
+            "transiting?\u201d")
+    return why, hint
 
 
 # --- rate limiting ------------------------------------------------------------

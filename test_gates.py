@@ -2233,6 +2233,21 @@ class TestChartFactLedger:
         for house in range(1, 13):
             assert f"house.{house}" in agent_facts
 
+    def test_all_nine_transits_are_in_the_ledger(self, chart, agent_facts):
+        """A forecast answer is mostly transits. A position the agent does
+        not have is one it omits or invents — and the validator can only
+        check a transit claim against a transit fact."""
+        from transits import transit_snapshot
+        snap = transit_snapshot(chart, AGENT_WHEN)
+        for planet in ("Sun", "Moon", "Mars", "Mercury", "Jupiter",
+                       "Venus", "Saturn", "Rahu", "Ketu"):
+            fact = agent_facts[f"transit.{planet.lower()}"]
+            assert fact.value["sign"] == snap.planets[planet].sign
+            assert fact.value["natal_house"] == snap.planets[planet].natal_house
+            # The statement must mark itself as a transit, so the model
+            # cannot mistake it for a birth placement.
+            assert "TRANSIT" in fact.statement
+
     def test_ledger_matches_the_chart_it_came_from(self, chart, agent_facts):
         moon = agent_facts["planet.moon"].value
         assert moon["sign"] == chart.planets["Moon"].sign
@@ -2278,7 +2293,8 @@ class TestGroundedAgent:
                            model="test-model")
         assert not result.ok, (
             f"invented placement passed validation: {answer!r}")
-        assert any(v.kind in ("wrong-sign", "wrong-house", "wrong-lagna")
+        assert any(v.kind in ("wrong-natal-sign", "wrong-natal-house",
+                              "wrong-lagna")
                    for v in result.violations), result.violations
 
     def test_no_placement_in_an_accepted_answer_is_absent_from_the_ledger(
@@ -2297,6 +2313,126 @@ class TestGroundedAgent:
         assert result.ok, result.violations
         for fid in result.facts_used:
             assert fid in agent_facts
+
+    def test_transit_statements_pass_validation(self, chart):
+        """Regression from the live deploy: 'how does the rest of 2026 look
+        professionally?' was withheld.
+
+        The failing claim was `wrong-sign: Jupiter is in Pisces, not Cancer`
+        — natal Jupiter IS in Pisces and transiting Jupiter IS in Cancer,
+        so the reply was right and the validator was wrong. It read a
+        transit sentence as a natal placement.
+
+        The irony is the point: a forward-looking answer must talk about
+        transits, so the check fired hardest on correct answers to exactly
+        the questions the feature exists for.
+        """
+        from agent import ask_chart
+        from transits import transit_snapshot
+        snap = transit_snapshot(chart, AGENT_WHEN)
+        tj, ts = snap.planets["Jupiter"], snap.planets["Saturn"]
+        # The two frames genuinely disagree — otherwise this proves nothing.
+        assert tj.sign != chart.planets["Jupiter"].sign
+        assert ts.sign != chart.planets["Saturn"].sign
+
+        answer = (
+            f"Transiting Jupiter is in {tj.sign} until October 2026, "
+            f"crossing your {tj.natal_house}th house, while transiting "
+            f"Saturn is in {ts.sign}. Your natal Jupiter is in "
+            f"{chart.planets['Jupiter'].sign}.")
+        client = FakeClient([_reply(answer, facts=[
+            "transit.jupiter", "transit.saturn", "planet.jupiter"])])
+        result = ask_chart(chart, AGENT_WHEN, "What do the transits touch?",
+                           client=client, model="test-model")
+        assert result.ok, result.violations
+
+    def test_transit_claims_are_still_checked_against_the_real_sky(
+            self, chart):
+        """Relaxing natal-vs-transit must not create a loophole: saying
+        'transiting' cannot make an invented position acceptable."""
+        from agent import ask_chart
+        client = FakeClient([_reply(
+            "Transiting Saturn is in Capricorn right now, and transiting "
+            "Jupiter is moving through your 3rd house.",
+            facts=["transit.saturn", "transit.jupiter"])])
+        result = ask_chart(chart, AGENT_WHEN, "Where are the slow movers?",
+                           client=client, model="test-model")
+        assert not result.ok
+        kinds = {v.kind for v in result.violations}
+        assert "wrong-transit-sign" in kinds
+        assert "wrong-transit-house" in kinds
+
+    def test_a_bare_planet_claim_is_still_read_as_natal(self, chart):
+        """The default stays strict: with no 'transiting' anywhere, the
+        claim is about the birth chart."""
+        from agent import ask_chart
+        from transits import transit_snapshot
+        moving = transit_snapshot(chart, AGENT_WHEN).planets["Jupiter"].sign
+        client = FakeClient([_reply(f"Jupiter is in {moving}.",
+                                    facts=["planet.jupiter"])])
+        result = ask_chart(chart, AGENT_WHEN, "Where is Jupiter?",
+                           client=client, model="test-model")
+        assert not result.ok
+        assert any(v.kind == "wrong-natal-sign" for v in result.violations)
+
+    def test_forecast_question_gets_the_redirect_refusal(self, chart):
+        """A broad forecast must refuse AND hand back the dated facts.
+
+        The ledger holds no outcomes, only dated windows. A refusal that
+        gives those windows is a useful answer; a hedged forecast is not.
+        """
+        from agent import ask_chart
+        from chartfacts import build_facts
+        facts = {f.id: f for f in build_facts(chart, AGENT_WHEN)}
+        dasha = facts["dasha.current"].value
+        tj = facts["transit.jupiter"].value
+        redirect = (
+            "This chart does not forecast how a stretch of time will go. "
+            f"What it does say for the rest of 2026: the {dasha['mahadasha']} "
+            f"mahadasha with the {dasha['antardasha']} antardasha is running, "
+            f"and transiting Jupiter is in {tj['sign']} until {tj['until']}, "
+            f"crossing your {tj['natal_house']}th house. Ask instead which "
+            "house a particular graha is transiting.")
+        client = FakeClient([_reply(
+            redirect,
+            statements=[{"text": redirect, "label": "COMPUTED",
+                         "fact_ids": ["dasha.current", "transit.jupiter"],
+                         "rule": ""}],
+            facts=["dasha.current", "transit.jupiter"],
+            refused=True,
+            reason="The chart carries dated windows, not outcomes.")])
+        result = ask_chart(
+            chart, AGENT_WHEN,
+            "How does the rest of 2026 look professionally?",
+            client=client, model="test-model")
+        assert result.refused is True
+        assert result.ok, result.violations      # the redirect must survive
+        assert result.answer, "a redirect must carry the facts, not be empty"
+        assert "dasha.current" in result.facts_used
+
+    def test_prompt_routes_forecasts_and_separates_the_two_skies(self):
+        from agent import SYSTEM_PROMPT
+        # Forecast routing, so the model redirects rather than attempting.
+        assert "BROAD FORECASTS" in SYSTEM_PROMPT
+        assert "does not forecast" in SYSTEM_PROMPT or \
+               "no outcomes" in SYSTEM_PROMPT
+        assert "narrower question" in SYSTEM_PROMPT
+        # And the instruction that prevents the false positive at source.
+        assert "NATAL AND TRANSIT ARE DIFFERENT FACTS" in SYSTEM_PROMPT
+        assert "never a bare" in SYSTEM_PROMPT
+
+    def test_withheld_message_says_why_and_suggests_a_narrower_question(self):
+        from agent import Violation, explain_violations
+        why, hint = explain_violations(
+            [Violation("wrong-natal-sign", "Mars is in Leo", "not Leo")])
+        assert "placement claim" in why and "computed chart" in why
+        assert "narrower" in hint
+        why, _ = explain_violations(
+            [Violation("wrong-transit-sign", "x", "not Capricorn")])
+        assert "transit" in why and "today" in why
+        why, _ = explain_violations(
+            [Violation("unknown-fact-id", "planet.pluto", "not in ledger")])
+        assert "ledger" in why
 
     def test_citing_a_fact_that_does_not_exist_is_a_violation(self, chart):
         from agent import ask_chart

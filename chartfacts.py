@@ -178,20 +178,32 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
         ))
 
     # --- transits ----------------------------------------------------------
+    # ALL NINE, not just the slow movers. A question about the months ahead
+    # is answered mostly from transits, and a fact the agent does not have
+    # is one it either omits or invents — the ledger has to carry every
+    # position the validator will later check a claim against.
     snapshot = transit_snapshot(chart, when)
-    for card in transit_weather(chart, snapshot):
+    weather = {c["planet"]: c for c in transit_weather(chart, snapshot)}
+    for name in PLANETS:
+        tp = snapshot.planets[name]
+        card = weather.get(name)
+        retro = " (retrograde)" if tp.retrograde else ""
+        detail = (f" It runs there until {card['until']}. {card['note']}"
+                  if card else "")
         facts.append(Fact(
-            id=f"transit.{card['planet'].lower()}",
+            id=f"transit.{name.lower()}",
             kind="transit",
             statement=(
-                f"Transiting {card['planet']} is in {card['sign']}, moving "
-                f"through the natal {ordinal(card['natal_house'])} house, "
-                f"{ordinal(card['from_moon'])} from the natal Moon, until "
-                f"{card['until']}. {card['note']}"),
-            value={"planet": card["planet"], "sign": card["sign"],
-                   "natal_house": card["natal_house"],
-                   "from_moon": card["from_moon"], "until": card["until"],
-                   "demanding": card["demanding"]},
+                f"TRANSIT (today, not birth): {name} is currently moving "
+                f"through {tp.sign}{retro}, which is your natal "
+                f"{ordinal(tp.natal_house)} house.{detail}"),
+            value={"planet": name, "sign": tp.sign,
+                   "natal_house": tp.natal_house,
+                   "retrograde": tp.retrograde,
+                   "from_moon": card["from_moon"] if card else None,
+                   "until": card["until"] if card else None,
+                   "demanding": card["demanding"] if card else None,
+                   "slow_mover": card is not None},
         ))
 
     # --- doshas ------------------------------------------------------------
