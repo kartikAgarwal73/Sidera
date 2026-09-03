@@ -12,8 +12,19 @@ against the ledger before it reaches the user:
 
     validate_answer()  extracts every (planet, sign) and (planet, house)
                        claim in the prose and verifies each against the
-                       chart. A claim the chart does not support is a
-                       violation, and a violated answer is never rendered.
+                       chart — natal claims against the birth chart, transit
+                       claims against today's sky.
+    validate_payload() adds the two forbidden things: an outcome asserted as
+                       settled, and a date the ledger never produced.
+
+A violated answer is withheld, never captioned.
+
+WHERE THE LINE ACTUALLY SITS
+It is NOT "do not interpret". An earlier version read the constraint that way
+and started listing facts while declining to read them — honest, and useless
+to the person asking. Interpretation is REQUIRED, through `rulelib`, with the
+rule id cited. What is forbidden is certainty about outcomes and invented
+dates. Everything between those is the reading.
 
 That check is pure and deterministic, so the tests exercise it directly with
 adversarial answers rather than depending on a live model, an API key, or the
@@ -53,72 +64,78 @@ CORRECTIONS_LOG = Path(
 
 
 SYSTEM_PROMPT = """\
-You answer questions about ONE person's Vedic (sidereal, Lahiri ayanamsa, \
-Whole Sign) birth chart, using ONLY the fact ledger supplied in the user \
-message.
+You are an astrologer reading ONE person's Vedic (sidereal, Lahiri ayanamsa, \
+Whole Sign) chart. You are given a fact ledger and a rule library. Your job \
+is to READ the chart for them — not to recite it.
 
-THE LEDGER IS YOUR ONLY SOURCE
-Every fact has an `id`. You may use a fact only if it appears in the ledger. \
-You must not compute anything: no positions, no house counting, no dates, no \
-arithmetic on degrees. If answering would require a placement, a period or a \
-technique that is not in the ledger, say so plainly and stop — a refusal is \
-a correct answer, not a failure.
+Lead with the reading, in plain, direct, warm prose. Two or three short \
+paragraphs. Speak to the person, not about the data. A list of placements is \
+not an answer; neither is a disclaimer.
 
-Never state a planet's sign, house, degree, nakshatra or dignity unless a \
-ledger fact says exactly that. Do not infer a placement from another \
-placement. Do not name a yoga, dosha or dasha that has no fact.
+WHAT YOU MAY DRAW ON
+`facts` — everything computed from this chart. `planet.*` is the BIRTH chart; \
+`transit.*` is TODAY'S SKY, and the same graha is usually in a different sign \
+in each. Say which you mean — "transiting Jupiter", "your natal Jupiter" — \
+never a bare "Jupiter is in ...".
+`rules` — the classical rules you interpret through. Cite by id.
 
-NATAL AND TRANSIT ARE DIFFERENT FACTS
-`planet.*` facts are the BIRTH chart. `transit.*` facts are TODAY'S SKY. The \
-same graha is usually in a different sign in each. Never mix them up, and \
-always say which you mean: write "transiting Jupiter is in ..." or "your \
-natal Jupiter is in ...", never a bare "Jupiter is in ...". A statement \
-without that word is read as a claim about the birth chart and will be \
-rejected if it was meant as a transit.
+Never state a placement, period or date the ledger does not contain. Do not \
+compute. Do not name a yoga, dosha or dasha that has no fact.
+
+THE ONE HARD LINE
+You may say what a period FAVOURS, what it ASKS FOR, what it CAUTIONS, what \
+it classically TENDS toward, and what themes are live. You may not say what \
+WILL happen.
+
+  Forbidden: "you will get a job in December", "this guarantees marriage", \
+"you are going to move", any date the ledger does not contain.
+  Required instead: "this is a period that rewards consolidation in visible \
+work rather than quick moves", "classically this favours ...", "the tradition \
+reads this as a season for ...".
+
+That is the whole restriction. Everything else is yours to interpret.
+
+HOW TO READ A PERIOD
+For a question about how a stretch of time looks, work through:
+  1. The running mahadasha lord — the houses it rules (its affairs become the \
+material of the period), the house it occupies (where they play out), its \
+dignity (how much friction). Rahu and Ketu rule nothing: read them from the \
+house occupied.
+  2. The antardasha lord the same way — it inflects the era, it does not \
+replace it. Note whether the two lords are friends or not.
+  3. The slow transits — Saturn, Jupiter, Rahu, Ketu — by the house each \
+occupies and how long it stays, and from the natal Moon where that matters.
+  4. Draw the threads together: what this combination favours, what it asks \
+for, where the tradition would counsel care. Be specific to THIS chart.
+Then give the dated windows so the person knows the shape of the season.
 
 LABEL EVERY STATEMENT
-Each entry in `answer_statements` carries a `label`:
-  COMPUTED     — restates a ledger fact. Cite its id in `fact_ids`.
-  INTERPRETIVE — a classical reading of those facts. Cite the ledger ids it \
-rests on AND name the classical rule or principle in `rule`.
-An INTERPRETIVE statement with no `rule` is invalid. Prefer fewer, \
-better-grounded statements over many thin ones.
+  COMPUTED     — restates a ledger fact. Cite `fact_ids`.
+  INTERPRETIVE — a classical reading. Cite `fact_ids` AND `rule_ids` from the \
+rule library, and put the rule in your own words in `rule`.
+A real reading is mostly INTERPRETIVE. Give at least three interpretive \
+statements for any question about a period or a life area.
 
-REFUSALS
-When the question cannot be answered from the ledger, set `refused` to true \
-and explain which fact would be needed. Examples of what is NOT derivable: \
-anything about a second person's chart, events with no dasha or transit fact, \
-and anything requiring a divisional chart or technique absent from the ledger.
+WHEN TO REFUSE — RARELY
+Refuse only when the question has NO hook in this chart at all: another \
+person's chart ("will she marry me?", "is my boss trustworthy?"), or \
+something astrology does not address ("which stock should I buy?", lottery \
+numbers). Then set `refused` true, say so warmly and briefly, and offer what \
+this chart CAN speak to.
 
-BROAD FORECASTS — REFUSE, THEN REDIRECT
-A question asking how a stretch of time will GO ("how does the rest of 2026 \
-look professionally?", "will next year be good for me?", "what is coming?") \
-asks for an outcome. The ledger holds no outcomes. It holds dated windows: \
-which dasha and antardasha are running and until when, and which grahas are \
-transiting which houses and until when.
+A broad question about the person's own year, work, relationships or health \
+IS answerable — read it through the dasha and transits. Do not refuse it.
 
-Do not attempt an outcome and hedge it. Set `refused` to true, and make the \
-refusal USEFUL in one move:
-  1. Say plainly that the chart does not forecast how a period will go.
-  2. Then give what it DOES say for that stretch — name the running dasha \
-and antardasha with their dates, and the slow transits touching houses \
-relevant to the question, each with its end date. Cite those fact ids and \
-put them in `answer` (not only in `refusal_reason`), labelled COMPUTED.
-  3. Offer one narrower question the ledger can answer.
-A refusal that hands back the dated facts is a good answer. A confident \
-forecast is not.
-
-NEVER GIVE DIRECTIVES
-Do not give medical, legal, financial or psychiatric advice, and do not tell \
-the person what to do about health, money, litigation or relationships. \
-Describe what the chart says classically; leave the decision to them. Do not \
-predict death, disease, or disaster. If a question asks for one of these, \
-refuse that part and answer only the chart-descriptive part, if any.
+NO DIRECTIVES
+Describe what the chart says; leave decisions to them. No medical, legal or \
+financial instructions, no predictions of death or disease. Where a question \
+touches those, speak to the chart's themes and leave the action to the person.
 
 VOICE
-Plain, specific, unhurried. No flattery, no cosmic reassurance, no hedging \
-filler. Astrological terms in their usual roman transliteration. Two to six \
-sentences unless the question genuinely needs more.
+An honest astrologer speaking to someone they respect. Warm, direct, \
+unhurried. No flattery, no cosmic reassurance, no hedging filler, no \
+compliance language. Sanskrit terms in their usual roman transliteration, \
+briefly glossed the first time.
 """
 
 RESPONSE_SCHEMA = {
@@ -139,9 +156,15 @@ RESPONSE_SCHEMA = {
                               "enum": ["COMPUTED", "INTERPRETIVE"]},
                     "fact_ids": {"type": "array",
                                  "items": {"type": "string"}},
-                    "rule": {"type": "string"},
+                    "rule_ids": {"type": "array",
+                                 "items": {"type": "string"},
+                                 "description": "ids from the `rules` list; "
+                                                "required for INTERPRETIVE"},
+                    "rule": {"type": "string",
+                             "description": "the rule in your own words"},
                 },
-                "required": ["text", "label", "fact_ids", "rule"],
+                "required": ["text", "label", "fact_ids", "rule_ids",
+                             "rule"],
                 "additionalProperties": False,
             },
         },
@@ -254,6 +277,66 @@ def _canon(word: str, options) -> str:
     return word
 
 
+# --- the forbidden half: certainty about outcomes, and invented dates ---------
+#
+# The line is NOT "do not interpret" — that produced fact-lists nobody could
+# use. It is "do not assert an outcome as settled, and do not invent a date".
+# Astrology in the classical register describes tendencies and seasons; it is
+# the flat prediction and the specific promised date that this app must never
+# produce.
+_CERTAINTY = re.compile(
+    r"\b(?:"
+    r"you\s+will\s+(?!find\s+(?:that|it)\b)(?:\w+\s+){0,2}?"
+    r"(?:get|gain|receive|land|secure|marry|meet|win|lose|move|leave|join|"
+    r"be\s+(?:offered|promoted|hired|married))|"
+    r"you(?:'re|\s+are)\s+going\s+to\s+\w+|"
+    r"(?:is|are)\s+guaranteed|guarantees\s+you|"
+    r"(?:will|shall)\s+definitely|definitely\s+(?:will|happens?)|"
+    r"certain(?:ly)?\s+to\s+\w+|without\s+(?:doubt|fail)|"
+    r"is\s+assured|promises\s+you|you\s+can\s+expect\s+to\s+"
+    r"(?:get|receive|land|marry)|"
+    r"there\s+will\s+be\s+a\s+(?:job|marriage|promotion|child)"
+    r")\b", re.IGNORECASE)
+
+_MONTHS = ("january", "february", "march", "april", "may", "june", "july",
+           "august", "september", "october", "november", "december")
+_MONTH_RE = "|".join(_MONTHS) + "|" + "|".join(m[:3] for m in _MONTHS)
+_DATE_TOKEN = re.compile(rf"\b({_MONTH_RE})\.?\s+(\d{{4}})\b",
+                         re.IGNORECASE)
+
+
+def _ledger_text(chart: Chart, when: datetime) -> str:
+    parts = []
+    for f in build_facts(chart, when):
+        parts.append(f.statement)
+        parts.append(json.dumps(f.value, default=str))
+    return " ".join(parts).lower()
+
+
+def find_certainty(text: str) -> list[str]:
+    """Outcome claims stated as settled fact."""
+    return [m.group(0) for m in _CERTAINTY.finditer(text or "")]
+
+
+def find_invented_dates(text: str, ledger: str) -> list[str]:
+    """Month-year dates the ledger does not contain.
+
+    'A job in December 2026' is the failure mode: a real-looking window
+    the chart never produced. Bare years are not checked — too coarse to
+    be a fabrication, and the question itself usually names one.
+    """
+    out = []
+    for m in _DATE_TOKEN.finditer(text or ""):
+        month, year = m.group(1).lower(), m.group(2)
+        stem = month[:3]
+        if f"{stem}" in ledger and year in ledger:
+            # the ledger names this month and this year somewhere
+            if re.search(rf"{stem}\w*\s+{year}", ledger):
+                continue
+        out.append(m.group(0))
+    return out
+
+
 def _transit_positions(chart: Chart, when: datetime) -> dict:
     """{planet: (sign, natal_house)} for today's sky."""
     from transits import transit_snapshot
@@ -323,11 +406,34 @@ def validate_answer(text: str, chart: Chart, when: datetime,
 def validate_payload(payload: dict, chart: Chart,
                      when: datetime) -> list[Violation]:
     """Validate the whole structured response, prose and citations alike."""
+    from rulelib import is_known as _rule_known
     known = {f.id for f in build_facts(chart, when)}
     moving = _transit_positions(chart, when)
-    out = list(validate_answer(payload.get("answer", ""), chart, when,
+    ledger = _ledger_text(chart, when)
+    answer = payload.get("answer", "")
+    out = list(validate_answer(answer, chart, when,
                                payload.get("facts_used", ()), known,
                                transits=moving))
+
+    # The forbidden half. Everything else about interpretation is allowed —
+    # these two are what turn a reading into a promise.
+    whole = " ".join(
+        [answer] + [st.get("text", "") for st
+                    in payload.get("answer_statements", [])])
+    for claim in find_certainty(whole):
+        out.append(Violation(
+            "asserted-certainty", claim,
+            "an outcome is stated as settled; the chart describes "
+            "tendencies and seasons, not events"))
+    for token in find_invented_dates(whole, ledger):
+        out.append(Violation(
+            "invented-date", token,
+            f"'{token}' is not a date this chart produced"))
+    for rid in payload.get("rules_applied", ()):
+        if not _rule_known(rid) and rid.startswith("rule."):
+            out.append(Violation(
+                "unknown-rule-id", rid,
+                f"cited rule '{rid}' is not in the rule library"))
     # A refusal asserts nothing about the chart, so there is nothing to
     # cite. Demanding citations from it would push the model toward
     # answering rather than declining — the opposite of what we want.
@@ -339,10 +445,16 @@ def validate_payload(payload: dict, chart: Chart,
         out.extend(validate_answer(stmt.get("text", ""), chart, when,
                                    stmt.get("fact_ids", ()), known,
                                    transits=moving))
-        if stmt.get("label") == "INTERPRETIVE" and not stmt.get("rule"):
-            out.append(Violation(
-                "uncited-interpretation", stmt.get("text", "")[:80],
-                "an INTERPRETIVE statement must name its classical rule"))
+        if stmt.get("label") == "INTERPRETIVE":
+            if not stmt.get("rule") and not stmt.get("rule_ids"):
+                out.append(Violation(
+                    "uncited-interpretation", stmt.get("text", "")[:80],
+                    "an INTERPRETIVE statement must name its classical rule"))
+            for rid in stmt.get("rule_ids", ()):
+                if not _rule_known(rid):
+                    out.append(Violation(
+                        "unknown-rule-id", rid,
+                        f"cited rule '{rid}' is not in the rule library"))
         if stmt.get("label") == "COMPUTED" and not stmt.get("fact_ids"):
             out.append(Violation(
                 "uncited-computed", stmt.get("text", "")[:80],
@@ -367,6 +479,20 @@ def explain_violations(violations) -> tuple[str, str]:
     the computed facts.
     """
     kinds = {v.kind for v in violations}
+    if "asserted-certainty" in kinds:
+        return ("the reply stated an outcome as certain, and this chart "
+                "describes tendencies and seasons rather than events",
+                "Ask what the period favours or asks for, rather than what "
+                "will happen.")
+    if "invented-date" in kinds:
+        return ("the reply named a date your chart did not produce",
+                "Ask about a window the chart does carry — a dasha period or "
+                "a slow transit.")
+    if "unknown-rule-id" in kinds:
+        return ("the reply leaned on a classical rule that is not in this "
+                "app's rule library",
+                "Try asking about a dasha period or a transit, where the "
+                "library is fullest.")
     if kinds & {"wrong-natal-sign", "wrong-natal-house", "wrong-lagna"}:
         why = ("the reply made a placement claim that does not match your "
                "computed chart")
@@ -379,10 +505,8 @@ def explain_violations(violations) -> tuple[str, str]:
         why = "the reply made a claim without citing what it rests on"
     else:
         why = "the reply did not check out against your computed chart"
-    hint = ("Broad questions are the usual cause — the reply drifts off the "
-            "computed facts. Try something narrower, like \u201cwhat does my "
-            "current dasha emphasise?\u201d or \u201cwhich house is Saturn "
-            "transiting?\u201d")
+    hint = ("Try rephrasing — for example \u201cwhat does my current dasha "
+            "emphasise?\u201d or \u201cwhich house is Saturn transiting?\u201d")
     return why, hint
 
 

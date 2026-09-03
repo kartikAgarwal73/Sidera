@@ -566,3 +566,5 @@ details.yoga > summary::-webkit-details-marker { display: none; }
   .agentrow { flex-direction: column; }
   .agentgo { width: 100%; }
 }
+.agentread { margin: 0 0 12px; line-height: 1.62; }
+.agentread:last-of-type { margin-bottom: 14px; }

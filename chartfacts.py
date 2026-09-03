@@ -227,6 +227,27 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
     return facts
 
 
+def active_rules(chart: Chart, when: datetime) -> list:
+    """The classical rules that bear on this chart's active facts.
+
+    Interpretation is required of the agent, not improvised by it — so the
+    rules it may read through travel with the facts, and their ids are
+    checkable exactly as fact ids are.
+    """
+    from rulelib import rules_for
+    timeline = vimshottari(chart)
+    current = timeline.at(when)
+    lords = [md.lord for md in ([current[0]] if current else [])]
+    lords += [current[1].lord] if current else []
+    snapshot = transit_snapshot(chart, when)
+    houses = sorted({p.natal_house for p in snapshot.planets.values()}
+                    | {chart.planets[l].house for l in lords
+                       if l in chart.planets})
+    return rules_for(dasha_lords=lords,
+                     transit_planets=list(PLANETS),
+                     houses=houses)
+
+
 def facts_payload(chart: Chart, when: datetime) -> dict:
     """The ledger as the JSON the agent is given. Sorted, so it caches."""
     facts = build_facts(chart, when)
@@ -234,6 +255,7 @@ def facts_payload(chart: Chart, when: datetime) -> dict:
         "as_of": when.date().isoformat(),
         "system": "sidereal, Lahiri ayanamsa, Whole Sign houses",
         "facts": [f.as_dict() for f in facts],
+        "rules": [r.as_dict() for r in active_rules(chart, when)],
     }
 
 

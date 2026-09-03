@@ -621,13 +621,19 @@ def ask_endpoint():
             violations=[f"{v.kind}: {v.detail}" for v in answer.violations],
             remaining=remaining), 422
 
+    import rulelib
     facts = {f.id: f.statement for f in chartfacts.build_facts(chart, when)}
     return jsonify(
         answer=answer.answer,
         statements=answer.statements,
         facts_used=[{"id": fid, "statement": facts.get(fid, "")}
                     for fid in answer.facts_used],
-        rules_applied=answer.rules_applied,
+        rules_applied=[
+            {"id": rid,
+             "text": rulelib.RULES[rid].text if rid in rulelib.RULES else rid,
+             "source": (rulelib.RULES[rid].source
+                        if rid in rulelib.RULES else "")}
+            for rid in answer.rules_applied],
         confidence=answer.confidence,
         refused=answer.refused,
         refusal_reason=answer.refusal_reason,

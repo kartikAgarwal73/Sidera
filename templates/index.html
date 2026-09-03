@@ -541,13 +541,14 @@
 <!-- Ask about this chart — grounded agent (v1.1) -->
 <section class="ledger" id="agent">
   <div class="kicker">Ask about this chart · grounded answers</div>
-  <p class="ratehint">Free-text questions, answered <em>only</em> from the
-  computed facts above. The agent never calculates
-  and never invents a placement: every answer is checked against your chart
-  before it is shown, and one that fails the check is withheld, not
-  captioned. Statements are labelled <strong>COMPUTED</strong> (a restated
-  fact) or <strong>INTERPRETIVE</strong> (a classical reading, with its
-  rule). Limit {{ data.agent_max }} questions.</p>
+  <p class="ratehint">Ask anything about this chart and get a reading — what
+  the classical rules make of what is actually running, not a list of
+  placements. Every answer is built from the computed facts above and the
+  stored rule library, and checked against your chart before it is shown. It
+  will tell you what a period favours and what it asks for; it will not tell
+  you what <em>will</em> happen, and it cannot invent a date. Open
+  <em>Facts and rules used</em> under any answer to see exactly what it rests
+  on. Limit {{ data.agent_max }} questions.</p>
 
   {% if not data.agent_ready %}
   <p class="yoganote">The agent is not configured on this deployment
@@ -968,23 +969,36 @@ wirePlace("p_");
   }
 
   function render(q, data) {
+    // The reading leads. Paragraph breaks are the model's own; keep them,
+    // because a wall of text reads like a disclaimer and this should read
+    // like someone talking.
+    const prose = (data.answer || data.refusal_reason || "")
+      .split(/\n\s*\n/).filter(p => p.trim())
+      .map(p => `<p class="agentread">${esc(p.trim())}</p>`).join("");
     const stmts = (data.statements || []).map(s =>
       `<div class="row"><span class="mut">${esc(s.label)}</span>` +
       `<span>${esc(s.text)}</span></div>` +
       (s.rule ? `<div class="row"><span class="mut">Rule</span>` +
-                `<span class="num">${esc(s.rule)}</span></div>` : "")
+                `<span class="num">${esc(s.rule)}` +
+                ((s.rule_ids || []).length
+                  ? ` <span class="mut">(${esc((s.rule_ids || []).join(", "))})</span>`
+                  : "") + `</span></div>` : "")
     ).join("");
     const facts = (data.facts_used || []).map(f =>
       `<div class="row"><span class="mut">${esc(f.id)}</span>` +
       `<span>${esc(f.statement)}</span></div>`).join("");
+    const rules = (data.rules_applied || []).map(r =>
+      `<div class="row"><span class="mut">rule</span>` +
+      `<span>${esc(r.text || r.id || r)}</span></div>`).join("");
     const el = card(
-      `<p class="agentq">${esc(q)}</p>` +
-      `<p class="yogadetail">${esc(data.answer || data.refusal_reason)}</p>` +
-      (data.refused ? `<p class="yoganote">Not derivable from this chart.</p>` : "") +
+      `<p class="agentq">${esc(q)}</p>` + prose +
+      (data.refused
+        ? `<p class="yoganote">This one sits outside your chart.</p>` : "") +
       `<span class="chip chip-${esc((data.confidence || "").toLowerCase())}">` +
       `${esc(data.confidence)}</span>` +
-      `<details class="fold"><summary>Facts used</summary>` +
-      `<div class="rows">${stmts}${facts || '<div class="row"><span class="mut">none cited</span></div>'}</div>` +
+      `<details class="fold"><summary>Facts and rules used</summary>` +
+      `<div class="rows">${stmts}${facts}${rules}` +
+      `${(stmts || facts || rules) ? "" : '<div class="row"><span class="mut">none cited</span></div>'}</div>` +
       `</details>` +
       `<button type="button" class="thumbdown" title="This answer is wrong">` +
       `\u261F Report</button>`);

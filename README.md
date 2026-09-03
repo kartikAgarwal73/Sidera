@@ -30,14 +30,21 @@ checked instead:
   authored fragment library by a seeded, deterministic pipeline: the same
   person on the same day gets the same sentence forever.
 - **The one LLM feature is fenced in code, not by prompt.** "Ask about this
-  chart" answers free-text questions from a **fact ledger** — the computed
-  chart, flattened to ~58 statements with stable IDs. It never computes. Every
-  answer is then parsed and checked against the chart: a claim like "Mars in
-  Leo" for a Cancer Mars is a *violation*, and a violated answer is withheld
-  rather than shown with a caveat. Statements are labelled COMPUTED or
-  INTERPRETIVE (with the classical rule), and the panel expands to show which
-  fact IDs each answer cited. The feature is optional — with no
-  `ANTHROPIC_API_KEY` the panel says so and everything else is unaffected.
+  chart" reads free-text questions against two things it may not depart from:
+  a **fact ledger** (the computed chart, ~63 statements with stable IDs) and a
+  **rule library** (`rulelib.py` — classical daśā-phala and gocara rules, each
+  with its named source). It never computes. It is *required* to interpret —
+  a fact-list is not a reading — and every interpretive statement must cite a
+  rule ID that exists.
+
+  The line it works to is narrow and specific: **it may say what a period
+  favours, asks for or classically tends toward; it may not say what will
+  happen.** Answers are parsed and checked before display — an invented
+  placement, a transit put in the wrong sign, an outcome asserted as settled
+  ("you will get a job"), or a date the chart never produced are each a
+  *violation*, and a violated answer is withheld rather than captioned. The
+  feature is optional: with no `ANTHROPIC_API_KEY` the panel says so and
+  everything else is unaffected.
 - **Where sources genuinely differ, the app says so** instead of inventing a
   table cell — see the yoni and vaśya notes in `gunamilan.py`.
 
@@ -137,6 +144,7 @@ doshas.py         doshas with auto-run cancellations, transit weather
 gunamilan.py      aṣṭakūṭa compatibility
 ask.py            question → weighted lenses → verdict (deterministic)
 chartfacts.py     the computed fact ledger, with stable citation IDs
+rulelib.py        classical rules the agent interprets through, each sourced
 agent.py          grounded 'Ask about this chart' + its answer validator
 reading/          the daily reading: detect · select · compose · fragments
 explain.py        three-layer explanations with confidence tags

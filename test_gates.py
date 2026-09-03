@@ -2203,7 +2203,7 @@ def _reply(answer, *, statements=None, facts=(), rules=(),
         "answer": answer,
         "answer_statements": statements if statements is not None else [
             {"text": answer, "label": "COMPUTED",
-             "fact_ids": list(facts), "rule": ""}],
+             "fact_ids": list(facts), "rule_ids": [], "rule": ""}],
         "facts_used": list(facts),
         "rules_applied": list(rules),
         "confidence": confidence,
@@ -2262,6 +2262,50 @@ class TestChartFactLedger:
         a = json.dumps(facts_payload(chart, AGENT_WHEN), sort_keys=True)
         b = json.dumps(facts_payload(chart, AGENT_WHEN), sort_keys=True)
         assert a == b
+
+
+class TestRuleLibrary:
+    """The classical rules interpretation rests on."""
+
+    def test_every_rule_names_a_source(self):
+        from rulelib import RULES
+        assert len(RULES) >= 20
+        for rid, rule in RULES.items():
+            assert rid.startswith("rule."), rid
+            assert rule.id == rid
+            assert rule.text.strip() and rule.text.strip().endswith(".")
+            assert rule.source.strip(), f"{rid} cites no source"
+
+    def test_the_two_families_the_reading_needs_are_present(self):
+        """Dasha-lord-by-lordship and transit-by-house are what a period
+        question is actually answered from."""
+        from rulelib import RULES
+        for rid in ("rule.dasha.lordship", "rule.dasha.placement",
+                    "rule.dasha.dignity", "rule.dasha.node",
+                    "rule.transit.house", "rule.transit.from_moon",
+                    "rule.transit.saturn", "rule.transit.jupiter",
+                    "rule.transit.rahu", "rule.transit.ketu"):
+            assert rid in RULES, rid
+        for house in range(1, 13):
+            assert f"rule.house.{house}" in RULES
+
+    def test_applicable_subset_is_selected_not_dumped(self):
+        from rulelib import RULES, rules_for
+        picked = rules_for(dasha_lords=["Rahu", "Sun"],
+                           transit_planets=["Saturn", "Jupiter"],
+                           houses=[1, 10])
+        ids = [r.id for r in picked]
+        assert "rule.dasha.node" in ids          # a nodal lord is running
+        assert "rule.transit.saturn" in ids
+        assert "rule.house.10" in ids
+        assert "rule.house.7" not in ids         # not in play
+        assert len(ids) == len(set(ids))
+        assert len(ids) < len(RULES)
+
+    def test_nodal_rule_only_when_a_node_rules_the_period(self):
+        from rulelib import rules_for
+        ids = [r.id for r in rules_for(dasha_lords=["Venus"])]
+        assert "rule.dasha.node" not in ids
 
 
 class TestGroundedAgent:
@@ -2375,58 +2419,173 @@ class TestGroundedAgent:
         assert not result.ok
         assert any(v.kind == "wrong-natal-sign" for v in result.violations)
 
-    def test_forecast_question_gets_the_redirect_refusal(self, chart):
-        """A broad forecast must refuse AND hand back the dated facts.
+    def test_broad_year_question_is_read_not_refused(self, chart):
+        """The 2026 question must produce a READING.
 
-        The ledger holds no outcomes, only dated windows. A refusal that
-        gives those windows is a useful answer; a hedged forecast is not.
+        Re-drawn after the agent over-refused: it listed dasha and transit
+        facts and declined to interpret them, which is honest and useless.
+        A real answer interprets the active facts through the classical
+        rules — at least three INTERPRETIVE statements, each citing a rule
+        that exists — and asserts no outcome as certain.
         """
         from agent import ask_chart
         from chartfacts import build_facts
+        from rulelib import is_known
         facts = {f.id: f for f in build_facts(chart, AGENT_WHEN)}
-        dasha = facts["dasha.current"].value
-        tj = facts["transit.jupiter"].value
-        redirect = (
-            "This chart does not forecast how a stretch of time will go. "
-            f"What it does say for the rest of 2026: the {dasha['mahadasha']} "
-            f"mahadasha with the {dasha['antardasha']} antardasha is running, "
-            f"and transiting Jupiter is in {tj['sign']} until {tj['until']}, "
-            f"crossing your {tj['natal_house']}th house. Ask instead which "
-            "house a particular graha is transiting.")
-        client = FakeClient([_reply(
-            redirect,
-            statements=[{"text": redirect, "label": "COMPUTED",
-                         "fact_ids": ["dasha.current", "transit.jupiter"],
-                         "rule": ""}],
-            facts=["dasha.current", "transit.jupiter"],
-            refused=True,
-            reason="The chart carries dated windows, not outcomes.")])
-        result = ask_chart(
-            chart, AGENT_WHEN,
-            "How does the rest of 2026 look professionally?",
-            client=client, model="test-model")
-        assert result.refused is True
-        assert result.ok, result.violations      # the redirect must survive
-        assert result.answer, "a redirect must carry the facts, not be empty"
-        assert "dasha.current" in result.facts_used
+        d = facts["dasha.current"].value
+        tj, ts = facts["transit.jupiter"].value, facts["transit.saturn"].value
 
-    def test_prompt_routes_forecasts_and_separates_the_two_skies(self):
+        reading = (
+            f"The {d['mahadasha']} mahadasha is the current era, and with "
+            f"{d['mahadasha']} standing in your 1st house the period keeps "
+            f"turning attention back onto you — how you are met, what you "
+            f"are willing to want. The {d['antardasha']} antardasha inflects "
+            f"it toward visibility and the matter of authority.\n\n"
+            f"Transiting Jupiter in {tj['sign']} is crossing your "
+            f"{tj['natal_house']}th house until {tj['until']}, which "
+            f"classically favours retreat, study and quiet expenditure more "
+            f"than public push. Transiting Saturn in {ts['sign']} works your "
+            f"{ts['natal_house']}th until {ts['until']} — a slow, structural "
+            f"season that rewards what is built to last.\n\n"
+            f"Taken together this is a year that favours consolidation over "
+            f"quick moves, and cautions against forcing visibility while "
+            f"Jupiter is still in the 12th.")
+        statements = [
+            {"text": f"{d['mahadasha']} rules no sign, so its period is read "
+                     f"from the house it occupies.",
+             "label": "INTERPRETIVE", "fact_ids": ["dasha.current"],
+             "rule_ids": ["rule.dasha.node", "rule.dasha.placement"],
+             "rule": "A nodal dasha is read from its house, not lordship."},
+            {"text": "Transiting Jupiter activates the house it occupies for "
+                     "as long as it stays there.",
+             "label": "INTERPRETIVE", "fact_ids": ["transit.jupiter"],
+             "rule_ids": ["rule.transit.house", "rule.transit.jupiter"],
+             "rule": "A transit activates the house it occupies."},
+            {"text": "Saturn's transit consolidates rather than delivers.",
+             "label": "INTERPRETIVE", "fact_ids": ["transit.saturn"],
+             "rule_ids": ["rule.transit.saturn"],
+             "rule": "Saturn tests and consolidates the house it crosses."},
+            {"text": f"The {d['mahadasha']} mahadasha runs with the "
+                     f"{d['antardasha']} antardasha.",
+             "label": "COMPUTED", "fact_ids": ["dasha.current"],
+             "rule_ids": [], "rule": ""},
+        ]
+        client = FakeClient([_reply(
+            reading, statements=statements,
+            facts=["dasha.current", "transit.jupiter", "transit.saturn"],
+            rules=["rule.dasha.node", "rule.transit.house",
+                   "rule.transit.saturn"],
+            confidence="Interpretive")])
+        result = ask_chart(chart, AGENT_WHEN,
+                           "How does the rest of 2026 look?",
+                           client=client, model="test-model")
+
+        assert result.ok, result.violations
+        assert result.refused is False, "a chart-hooked question must be read"
+
+        interpretive = [st for st in result.statements
+                        if st["label"] == "INTERPRETIVE"]
+        assert len(interpretive) >= 3, interpretive
+        for st in interpretive:
+            assert st["rule_ids"], f"uncited interpretation: {st['text']}"
+            for rid in st["rule_ids"]:
+                assert is_known(rid), rid
+
+        # …and nothing stated as a settled outcome.
+        from agent import find_certainty
+        assert find_certainty(result.answer) == []
+
+    def test_a_reading_that_promises_an_outcome_is_withheld(self, chart):
+        """The line moved, it did not disappear."""
+        from agent import ask_chart
+        client = FakeClient([_reply(
+            "This is a strong year — you will get a promotion, and there "
+            "will be a marriage before it ends.",
+            statements=[{"text": "You will get a promotion.",
+                         "label": "INTERPRETIVE",
+                         "fact_ids": ["dasha.current"],
+                         "rule_ids": ["rule.dasha.lordship"],
+                         "rule": "The dasha lord delivers its houses."}],
+            facts=["dasha.current"])])
+        result = ask_chart(chart, AGENT_WHEN, "How is my year?",
+                           client=client, model="test-model")
+        assert not result.ok
+        assert any(v.kind == "asserted-certainty" for v in result.violations)
+
+    def test_an_invented_date_is_withheld(self, chart):
+        from agent import ask_chart
+        client = FakeClient([_reply(
+            "The opening comes around December 2028, once Jupiter has moved.",
+            facts=["transit.jupiter"])])
+        result = ask_chart(chart, AGENT_WHEN, "When does it ease?",
+                           client=client, model="test-model")
+        assert not result.ok
+        bad = [v for v in result.violations if v.kind == "invented-date"]
+        assert bad and "December 2028" in bad[0].claim
+
+    def test_interpretation_must_cite_a_rule_that_exists(self, chart):
+        from agent import ask_chart
+        client = FakeClient([_reply(
+            "This favours slow work.",
+            statements=[{"text": "This favours slow work.",
+                         "label": "INTERPRETIVE",
+                         "fact_ids": ["transit.saturn"],
+                         "rule_ids": ["rule.transit.invented"],
+                         "rule": "Made up."}],
+            facts=["transit.saturn"])])
+        result = ask_chart(chart, AGENT_WHEN, "What is Saturn doing?",
+                           client=client, model="test-model")
+        assert not result.ok
+        assert any(v.kind == "unknown-rule-id" for v in result.violations)
+
+    def test_only_hookless_questions_are_refused(self, chart):
+        """Refusal is now the narrow case: another person, or not astrology."""
+        from agent import ask_chart
+        client = FakeClient([_reply(
+            "", statements=[], refused=True,
+            reason=("That turns on someone else's chart, which this reading "
+                    "does not have. I can tell you what your own 7th house "
+                    "and its lord are doing."))])
+        result = ask_chart(chart, AGENT_WHEN, "Will she marry me?",
+                           client=client, model="test-model")
+        assert result.refused is True and result.ok
+        assert "someone else's chart" in result.refusal_reason
+
+    def test_prompt_asks_for_a_reading_not_a_recital(self):
+        """Re-drawn 2026-09-03. The previous prompt routed broad questions to
+        a refusal-plus-fact-list: technically honest, practically useless.
+        The line is now about certainty, not about interpreting at all."""
         from agent import SYSTEM_PROMPT
-        # Forecast routing, so the model redirects rather than attempting.
-        assert "BROAD FORECASTS" in SYSTEM_PROMPT
-        assert "does not forecast" in SYSTEM_PROMPT or \
-               "no outcomes" in SYSTEM_PROMPT
-        assert "narrower question" in SYSTEM_PROMPT
-        # And the instruction that prevents the false positive at source.
-        assert "NATAL AND TRANSIT ARE DIFFERENT FACTS" in SYSTEM_PROMPT
+        # Interpretation is REQUIRED, and the prose comes first.
+        assert "Lead with the reading" in SYSTEM_PROMPT
+        assert "at least three interpretive" in SYSTEM_PROMPT
+        assert "HOW TO READ A PERIOD" in SYSTEM_PROMPT
+        # The one hard line: outcomes, not interpretation.
+        assert "THE ONE HARD LINE" in SYSTEM_PROMPT
+        assert "You may not say what WILL happen." in SYSTEM_PROMPT
+        assert "That is the whole restriction." in SYSTEM_PROMPT
+        # Refusal is now the narrow case, and named as such.
+        assert "WHEN TO REFUSE — RARELY" in SYSTEM_PROMPT
+        assert "IS answerable" in SYSTEM_PROMPT
+        assert "Do not refuse it." in SYSTEM_PROMPT
+        # The natal/transit separation survives the rewrite.
         assert "never a bare" in SYSTEM_PROMPT
+        # Tone.
+        assert "no compliance language" in SYSTEM_PROMPT
 
     def test_withheld_message_says_why_and_suggests_a_narrower_question(self):
         from agent import Violation, explain_violations
         why, hint = explain_violations(
             [Violation("wrong-natal-sign", "Mars is in Leo", "not Leo")])
         assert "placement claim" in why and "computed chart" in why
-        assert "narrower" in hint
+        assert "rephrasing" in hint
+        why, hint = explain_violations(
+            [Violation("asserted-certainty", "you will get", "settled")])
+        assert "outcome" in why and "certain" in why
+        assert "favours" in hint
+        why, _ = explain_violations(
+            [Violation("invented-date", "December 2028", "not produced")])
+        assert "date" in why
         why, _ = explain_violations(
             [Violation("wrong-transit-sign", "x", "not Capricorn")])
         assert "transit" in why and "today" in why
@@ -2504,11 +2663,14 @@ class TestGroundedAgent:
         assert "julian" not in body.lower()
         # The system prompt carries the constraint verbatim.
         system = sent["system"][0]["text"]
-        assert "ONLY the fact ledger" in system
+        assert "fact ledger" in system and "rule library" in system
         assert "COMPUTED" in system and "INTERPRETIVE" in system
-        assert "medical, legal, financial" in system
-        assert "refusal is a correct answer" in system
+        assert "No medical, legal or" in system
+        assert "You may not say what WILL happen." in system
         # Structured output is enforced by schema, not by asking nicely.
+        # The rule library travels with the facts, so interpretation has
+        # something citable to rest on.
+        assert '"rules"' in body and "rule.dasha.lordship" in body
         schema = sent["output_config"]["format"]["schema"]
         assert schema["required"] == [
             "answer", "answer_statements", "facts_used", "rules_applied",
@@ -2661,10 +2823,13 @@ class TestAgentEndpoint:
         assert 'id="agent"' in page
         assert 'href="#agent"' in page
         assert page.count('class="sugq"') == 3      # three suggested questions
-        assert "Facts used" in page                  # the Why? pattern
+        assert "Facts and rules used" in page        # the Why? pattern
         assert "thumbdown" in page
         assert 'id="agentq"' in page
-        assert "COMPUTED" in page and "INTERPRETIVE" in page
+        # The panel promises a reading, not a compliance notice.
+        assert "get a reading" in page
+        assert "what it <em>will</em> happen" not in page
+        assert "will</em> happen" in page            # the one hard line
         # The key is set on the server for this render and must not appear
         # anywhere in what the browser receives.
         assert "sk-ant" not in page
