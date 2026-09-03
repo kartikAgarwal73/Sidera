@@ -2,6 +2,7 @@
 
 Run with: pytest test_gates.py -v
 """
+import json
 import re
 from datetime import date, datetime, timedelta, timezone
 
@@ -2155,3 +2156,380 @@ class TestAskYourChart:
         assert _agreement_label(0.9) == "strong convergence"
         assert _agreement_label(0.6) == "partial convergence"
         assert _agreement_label(0.3) == "lenses disagree"
+
+# --- v1.1: 'Ask about this chart' grounded agent ------------------------------
+
+AGENT_WHEN = datetime(2026, 9, 3, tzinfo=timezone.utc)
+
+
+class FakeMessages:
+    """Stands in for `client.messages`, returning canned JSON.
+
+    The agent's guarantee is enforced by `validate_payload`, which is pure.
+    Driving it through a fake transport exercises the real assembly, parsing
+    and validation path without an API key, a network call, or a dependence
+    on how the model happens to behave the day CI runs — and lets the suite
+    assert the ADVERSARIAL cases, which a live model would rarely produce
+    on demand.
+    """
+
+    def __init__(self, replies):
+        self.replies = list(replies)
+        self.calls = []
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        payload = self.replies.pop(0)
+
+        class _Block:
+            type = "text"
+            text = json.dumps(payload)
+
+        class _Response:
+            stop_reason = "end_turn"
+            content = [_Block()]
+
+        return _Response()
+
+
+class FakeClient:
+    def __init__(self, replies):
+        self.messages = FakeMessages(replies)
+
+
+def _reply(answer, *, statements=None, facts=(), rules=(),
+           confidence="Interpretive", refused=False, reason=""):
+    return {
+        "answer": answer,
+        "answer_statements": statements if statements is not None else [
+            {"text": answer, "label": "COMPUTED",
+             "fact_ids": list(facts), "rule": ""}],
+        "facts_used": list(facts),
+        "rules_applied": list(rules),
+        "confidence": confidence,
+        "refused": refused,
+        "refusal_reason": reason,
+    }
+
+
+@pytest.fixture(scope="module")
+def agent_facts(chart):
+    from chartfacts import build_facts
+    return {f.id: f for f in build_facts(chart, AGENT_WHEN)}
+
+
+class TestChartFactLedger:
+    def test_every_fact_has_a_unique_stable_id(self, agent_facts):
+        from chartfacts import build_facts
+        assert len(agent_facts) >= 40
+        ids = [f.id for f in build_facts(GATE_BIRTH and compute_chart(
+            GATE_BIRTH), AGENT_WHEN)]
+        assert len(ids) == len(set(ids)), "duplicate fact ids"
+        # IDs are the citation vocabulary — they must be addressable, not
+        # positional, so a stored answer survives a re-computation.
+        assert "lagna" in agent_facts
+        for planet in ("sun", "moon", "mars", "saturn", "rahu", "ketu"):
+            assert f"planet.{planet}" in agent_facts
+        for house in range(1, 13):
+            assert f"house.{house}" in agent_facts
+
+    def test_ledger_matches_the_chart_it_came_from(self, chart, agent_facts):
+        moon = agent_facts["planet.moon"].value
+        assert moon["sign"] == chart.planets["Moon"].sign
+        assert moon["house"] == chart.planets["Moon"].house
+        assert agent_facts["lagna"].value["sign"] == chart.lagna.sign
+        for house in range(1, 13):
+            assert (agent_facts[f"house.{house}"].value["sign"]
+                    == chart.house_signs[house])
+
+    def test_payload_is_deterministic_so_the_prefix_caches(self, chart):
+        from chartfacts import facts_payload
+        a = json.dumps(facts_payload(chart, AGENT_WHEN), sort_keys=True)
+        b = json.dumps(facts_payload(chart, AGENT_WHEN), sort_keys=True)
+        assert a == b
+
+
+class TestGroundedAgent:
+    """The constraint, asserted: answers come only from the ledger."""
+
+    # Five questions, each paired with a plausible-sounding answer that
+    # asserts a placement THIS CHART DOES NOT HAVE. Every one must be
+    # caught — a fluent sentence about the wrong Mars is the exact failure
+    # this feature must not ship.
+    INVENTED = [
+        ("What does my Mars do?",
+         "Mars is in Leo in the 1st house, which sharpens the personality."),
+        ("Tell me about my career.",
+         "With a Sagittarius lagna, the 10th house falls in Virgo."),
+        ("Where is my Moon?",
+         "The Moon stands in Gemini, giving a restless mind."),
+        ("Is Saturn difficult for me?",
+         "Saturn occupies the 4th house, pressing on home life."),
+        ("What about Jupiter?",
+         "Jupiter is in Sagittarius, its own sign, in the 5th house."),
+    ]
+
+    @pytest.mark.parametrize("question,answer", INVENTED)
+    def test_invented_placements_are_always_caught(
+            self, chart, question, answer):
+        from agent import ask_chart
+        client = FakeClient([_reply(answer, facts=["planet.mars"])])
+        result = ask_chart(chart, AGENT_WHEN, question, client=client,
+                           model="test-model")
+        assert not result.ok, (
+            f"invented placement passed validation: {answer!r}")
+        assert any(v.kind in ("wrong-sign", "wrong-house", "wrong-lagna")
+                   for v in result.violations), result.violations
+
+    def test_no_placement_in_an_accepted_answer_is_absent_from_the_ledger(
+            self, chart, agent_facts):
+        """The positive half: a true answer passes, and everything it
+        asserts is present in the ledger."""
+        from agent import ask_chart
+        moon = chart.planets["Moon"]
+        truthful = (
+            f"The Moon is in {moon.sign} in the "
+            f"{moon.house}th house, and the lagna is {chart.lagna.sign}.")
+        client = FakeClient([_reply(truthful,
+                                    facts=["planet.moon", "lagna"])])
+        result = ask_chart(chart, AGENT_WHEN, "Where is my Moon?",
+                           client=client, model="test-model")
+        assert result.ok, result.violations
+        for fid in result.facts_used:
+            assert fid in agent_facts
+
+    def test_citing_a_fact_that_does_not_exist_is_a_violation(self, chart):
+        from agent import ask_chart
+        client = FakeClient([_reply(
+            "Your chart is balanced.",
+            facts=["planet.moon", "planet.pluto", "house.13"])])
+        result = ask_chart(chart, AGENT_WHEN, "How am I?", client=client,
+                           model="test-model")
+        assert not result.ok
+        bad = {v.claim for v in result.violations
+               if v.kind == "unknown-fact-id"}
+        assert bad == {"planet.pluto", "house.13"}
+
+    def test_out_of_scope_question_is_refused_not_answered(self, chart):
+        from agent import ask_chart
+        client = FakeClient([_reply(
+            "", statements=[], refused=True,
+            reason=("Your partner's birth details are not in this chart's "
+                    "fact ledger, so their placements are not derivable "
+                    "from it."))])
+        result = ask_chart(
+            chart, AGENT_WHEN,
+            "What is my future husband's mother's profession?",
+            client=client, model="test-model")
+        assert result.refused is True
+        assert result.ok, "a refusal must not itself be a violation"
+        assert "not derivable" in result.refusal_reason
+
+    def test_interpretive_statements_must_name_their_rule(self, chart):
+        from agent import ask_chart
+        client = FakeClient([_reply(
+            "This is a chart of steady work.",
+            statements=[{"text": "This is a chart of steady work.",
+                         "label": "INTERPRETIVE", "fact_ids": ["planet.moon"],
+                         "rule": ""}])])
+        result = ask_chart(chart, AGENT_WHEN, "Summarise me?", client=client,
+                           model="test-model")
+        assert not result.ok
+        assert any(v.kind == "uncited-interpretation"
+                   for v in result.violations)
+
+    def test_computed_statements_must_cite_a_fact(self, chart):
+        from agent import ask_chart
+        client = FakeClient([_reply(
+            "The chart is Leo rising.",
+            statements=[{"text": "The chart is Leo rising.",
+                         "label": "COMPUTED", "fact_ids": [], "rule": ""}])])
+        result = ask_chart(chart, AGENT_WHEN, "What is my lagna?",
+                           client=client, model="test-model")
+        assert not result.ok
+        assert any(v.kind == "uncited-computed" for v in result.violations)
+
+    def test_the_ledger_is_the_whole_context_sent(self, chart):
+        """The model must not be handed anything it could compute from."""
+        from agent import ask_chart
+        client = FakeClient([_reply("Fine.", facts=[])])
+        ask_chart(chart, AGENT_WHEN, "Anything?", client=client,
+                  model="test-model")
+        sent = client.messages.calls[0]
+        body = sent["messages"][0]["content"]
+        # Facts, yes. The BIRTH RECORD — from which a chart could be
+        # recomputed, and which is the one thing that must never leave the
+        # server — no.
+        assert '"facts"' in body
+        assert str(GATE_BIRTH.latitude) not in body
+        assert str(GATE_BIRTH.longitude) not in body
+        assert GATE_BIRTH.tz not in body
+        assert f"{GATE_BIRTH.hour:02d}:{GATE_BIRTH.minute:02d}" not in body
+        assert "julian" not in body.lower()
+        # The system prompt carries the constraint verbatim.
+        system = sent["system"][0]["text"]
+        assert "ONLY the fact ledger" in system
+        assert "COMPUTED" in system and "INTERPRETIVE" in system
+        assert "medical, legal, financial" in system
+        assert "refusal is a correct answer" in system
+        # Structured output is enforced by schema, not by asking nicely.
+        schema = sent["output_config"]["format"]["schema"]
+        assert schema["required"] == [
+            "answer", "answer_statements", "facts_used", "rules_applied",
+            "confidence", "refused", "refusal_reason"]
+        assert schema["additionalProperties"] is False
+
+    def test_question_length_is_bounded(self, chart):
+        from agent import ask_chart
+        with pytest.raises(ValueError):
+            ask_chart(chart, AGENT_WHEN, "x" * 401, client=FakeClient([]))
+        with pytest.raises(ValueError):
+            ask_chart(chart, AGENT_WHEN, "   ", client=FakeClient([]))
+
+    def test_missing_api_key_is_a_clear_message_not_a_crash(self, chart,
+                                                            monkeypatch):
+        from agent import AgentUnavailable, ask_chart
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        with pytest.raises(AgentUnavailable) as exc:
+            ask_chart(chart, AGENT_WHEN, "Where is my Moon?")
+        assert "ANTHROPIC_API_KEY" in str(exc.value)
+
+
+class TestAgentLimitsAndLog:
+    def test_session_cap_is_ten_questions(self):
+        from agent import MAX_QUESTIONS_PER_SESSION, RateLimiter
+        assert MAX_QUESTIONS_PER_SESSION == 10
+        limiter = RateLimiter()
+        for i in range(10):
+            allowed, _, remaining = limiter.check("1.2.3.4", "sess")
+            assert allowed, f"blocked at question {i + 1}"
+            assert remaining == 10 - i
+            limiter.record("1.2.3.4", "sess")
+        allowed, reason, remaining = limiter.check("1.2.3.4", "sess")
+        assert not allowed and remaining == 0
+        assert "10-question limit" in reason
+        # A different session is unaffected — the cap is per session.
+        assert limiter.check("1.2.3.4", "other")[0] is True
+
+    def test_ip_window_limits_independently_of_session(self):
+        from agent import RateLimiter
+        limiter = RateLimiter(window=3600, per_window=3, per_session=100)
+        for i in range(3):
+            assert limiter.check("9.9.9.9", f"s{i}")[0] is True
+            limiter.record("9.9.9.9", f"s{i}")
+        allowed, reason, _ = limiter.check("9.9.9.9", "fresh-session")
+        assert not allowed and "this address" in reason
+        # Another IP is unaffected…
+        assert limiter.check("8.8.8.8", "fresh-session")[0] is True
+
+    def test_ip_window_expires(self):
+        from agent import RateLimiter
+        limiter = RateLimiter(window=60, per_window=1, per_session=100)
+        limiter.record("7.7.7.7", "s", now=1000.0)
+        assert limiter.check("7.7.7.7", "s2", now=1030.0)[0] is False
+        assert limiter.check("7.7.7.7", "s2", now=1100.0)[0] is True
+
+    def test_corrections_log_appends_and_never_holds_birth_data(self, tmp_path):
+        from agent import log_correction
+        log = tmp_path / "corrections.jsonl"
+        log_correction("Q1?", "A1.", reason="thumbs-down",
+                       facts_used=["planet.moon"], model="m", path=log)
+        log_correction("Q2?", "A2.", reason="thumbs-down", path=log)
+        lines = log.read_text(encoding="utf-8").strip().split("\n")
+        assert len(lines) == 2                       # append-only
+        first = json.loads(lines[0])
+        assert first["question"] == "Q1?" and first["answer"] == "A1."
+        assert first["reason"] == "thumbs-down"
+        assert first["at"].endswith("+00:00")
+        # The log records the exchange, never the birth record.
+        blob = log.read_text(encoding="utf-8")
+        for leaked in (str(GATE_BIRTH.latitude), str(GATE_BIRTH.longitude),
+                       GATE_BIRTH.place, str(GATE_BIRTH.year)):
+            assert leaked not in blob
+
+
+class TestAgentEndpoint:
+    def _body(self, **over):
+        body = {"sid": "test-session", "question": "Where is my Moon?",
+                **{k: v for k, v in GATE_FORM.items()}}
+        body.update(over)
+        return body
+
+    def test_ask_requires_a_session_id(self, client):
+        r = client.post("/ask", json=self._body(sid=""))
+        assert r.status_code == 400
+        assert "session id" in r.get_json()["error"]
+
+    def test_ask_reports_unconfigured_rather_than_500(self, client,
+                                                      monkeypatch):
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        r = client.post("/ask", json=self._body(sid="unconfigured-session"))
+        assert r.status_code == 503
+        assert "ANTHROPIC_API_KEY" in r.get_json()["error"]
+
+    def test_ask_rejects_incomplete_birth_details(self, client):
+        r = client.post("/ask", json=self._body(sid="bad-birth", tz=""))
+        assert r.status_code == 400
+        assert "timezone" in r.get_json()["error"]
+
+    def test_feedback_appends_to_the_log(self, client, tmp_path,
+                                         monkeypatch):
+        import agent as agent_mod
+        log = tmp_path / "c.jsonl"
+        monkeypatch.setattr(agent_mod, "CORRECTIONS_LOG", log)
+        r = client.post("/ask/feedback",
+                        json={"question": "Q?", "answer": "A.",
+                              "facts_used": ["planet.moon"]})
+        assert r.status_code == 200 and r.get_json()["ok"] is True
+        entry = json.loads(log.read_text(encoding="utf-8").strip())
+        assert entry["reason"] == "thumbs-down"
+        assert entry["facts_used"] == ["planet.moon"]
+        # Empty feedback is refused rather than logged as noise.
+        assert client.post("/ask/feedback", json={}).status_code == 400
+
+    def test_ground_colour_is_never_used_as_text_colour(self):
+        """Regression: `--ink` is the GROUND, `--cream` is the text.
+
+        The agent panel first shipped with `color: var(--ink)` on its
+        suggestion buttons, which painted the text the same colour as the
+        page behind it — the buttons rendered as three empty boxes. The
+        markup was correct and the DOM had the text, so nothing but looking
+        at the render caught it.
+
+        Inverted elements (a light `--accent-300` background with dark text)
+        are the legitimate use, so the rule is not "never" — it is "never
+        without a background in the same block".
+        """
+        css = (HERE / "static/style.css").read_text(encoding="utf-8")
+        offenders = []
+        for block in re.finditer(r"\{([^{}]*)\}", css):
+            body = block.group(1)
+            if re.search(r"color:\s*var\(--ink\)", body) and \
+                    not re.search(r"background(-color)?:", body):
+                offenders.append(" ".join(body.split())[:70])
+        assert offenders == [], (
+            "text painted with the ground colour: " + "; ".join(offenders))
+
+    def test_panel_hides_controls_when_unconfigured(self, page):
+        """Graceful degradation: the section explains itself and the rest of
+        the dashboard is unaffected."""
+        assert 'id="agent"' in page
+        assert 'href="#agent"' in page
+        assert "ANTHROPIC_API_KEY" in page and "not configured" in page
+        assert 'id="agentq"' not in page          # no dead input offered
+
+    def test_panel_renders_with_suggestions_and_disclosure(
+            self, client, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-not-a-real-key")
+        page = client.post("/", data=GATE_FORM).get_data(as_text=True)
+        assert 'id="agent"' in page
+        assert 'href="#agent"' in page
+        assert page.count('class="sugq"') == 3      # three suggested questions
+        assert "Facts used" in page                  # the Why? pattern
+        assert "thumbdown" in page
+        assert 'id="agentq"' in page
+        assert "COMPUTED" in page and "INTERPRETIVE" in page
+        # The key is set on the server for this render and must not appear
+        # anywhere in what the browser receives.
+        assert "sk-ant" not in page
+        assert "not-a-real-key" not in page

@@ -82,12 +82,43 @@ picks it up automatically you can leave Start Command blank.
 
 ## 2. Environment variables
 
-**None are required.** The app has no API keys, no database and no secrets.
-Set these only if you want them:
+**One is needed, and only for the optional agent.** Everything the app
+computes — kundli, daśās, transits, yogas, doshas, compatibility, the daily
+reading and the rule-based "Ask your chart" — runs with no key, no database
+and no network. Deploying with no variables at all is a valid, complete
+install.
+
+### The one exception: `ANTHROPIC_API_KEY`
+
+The v1.1 **"Ask about this chart"** panel takes free-text questions and
+answers them from the computed fact ledger via the Anthropic API. It is the
+only part of Sidera that leaves the box.
+
+1. Get a key from **console.anthropic.com → API keys**.
+2. Render → your service → **Environment** → **Add Environment Variable**.
+3. Key `ANTHROPIC_API_KEY`, value `sk-ant-...`. Save; Render redeploys.
+
+| | |
+|---|---|
+| **Where it lives** | Server-side only. The key is read in `agent.py` and never rendered into a page, never sent to the browser, never logged. A test asserts it does not appear in the HTML. |
+| **If you leave it unset** | The panel says so and offers no input; every other section is unaffected. Nothing errors. |
+| **What it costs** | Default model `claude-sonnet-5` ($2/$10 per MTok). A question sends the ~18 KB fact ledger plus the system prompt, which is cached, and gets back a short structured answer — well under a cent per question in normal use. Capped at 10 questions per session and 30/hour per IP. |
+| **Choosing another model** | `SIDERA_ASK_MODEL` overrides it, e.g. `claude-haiku-4-5` to go cheaper. |
+| **Rotating it** | Change the value in Render and save. No code change. |
+| **Never** | put the key in the repo, in `requirements.txt`, in a build command, or in a client-side script. It belongs only in Render's Environment tab. |
+
+The corrections log (thumbs-down feedback) writes to `corrections.jsonl` in
+the working directory. **Render's filesystem is ephemeral** — that file is
+lost on redeploy. Point `SIDERA_CORRECTIONS_LOG` at a mounted disk if you
+want the feedback to survive.
+
+### Optional
 
 | Key | Value | Why |
 |---|---|---|
 | `PYTHON_VERSION` | `3.11.9` | Pin the runtime; the app is developed on 3.11 |
+| `SIDERA_ASK_MODEL` | *(leave unset)* | Overrides the agent model; default `claude-sonnet-5` |
+| `SIDERA_CORRECTIONS_LOG` | *(leave unset)* | Path for thumbs-down feedback; defaults beside the app, on ephemeral disk |
 | `SE_EPHE_PATH` | *(leave unset)* | Only if you later add Swiss `.se1` files. **Setting it changes the numerical source — re-verify the gates before trusting output** |
 | `SIDERA_FIXTURES` | *(leave unset)* | Test-only; substitutes the verification charts |
 
@@ -104,6 +135,9 @@ Render builds and gives you `https://<service>.onrender.com`. Confirm:
    longitude and **timezone** fill in from the suggestion.
 3. Open **Read the full day** and check the reading shows its facts.
 4. Open a yoga's "Why?" and confirm the rule text appears.
+5. If you set `ANTHROPIC_API_KEY`: scroll to **Ask about this chart**, click a
+   suggested question, and confirm the answer expands to show "Facts used"
+   with the fact IDs it cited.
 
 On the free tier the service sleeps after inactivity, so the first request
 after idle takes ~30 seconds and the app looks slow. That is Render, not the

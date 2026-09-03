@@ -29,6 +29,15 @@ checked instead:
 - **No language model writes readings.** The daily reading is composed from an
   authored fragment library by a seeded, deterministic pipeline: the same
   person on the same day gets the same sentence forever.
+- **The one LLM feature is fenced in code, not by prompt.** "Ask about this
+  chart" answers free-text questions from a **fact ledger** — the computed
+  chart, flattened to ~58 statements with stable IDs. It never computes. Every
+  answer is then parsed and checked against the chart: a claim like "Mars in
+  Leo" for a Cancer Mars is a *violation*, and a violated answer is withheld
+  rather than shown with a caveat. Statements are labelled COMPUTED or
+  INTERPRETIVE (with the classical rule), and the panel expands to show which
+  fact IDs each answer cited. The feature is optional — with no
+  `ANTHROPIC_API_KEY` the panel says so and everything else is unaffected.
 - **Where sources genuinely differ, the app says so** instead of inventing a
   table cell — see the yoni and vaśya notes in `gunamilan.py`.
 
@@ -59,9 +68,13 @@ eclipse) that anyone can verify in any ephemeris.
 ## Stack
 
 Python 3.11 · Flask (server-rendered Jinja) · pyswisseph · gunicorn in
-production. No database, no API keys, no network calls at runtime — the city
-lookup is a bundled offline GeoNames extract. Front end is hand-written CSS
-and vanilla JS with no build step.
+production. No database. The city lookup is a bundled offline GeoNames
+extract, and every computed section works with no network and no keys. Front
+end is hand-written CSS and vanilla JS with no build step.
+
+The single exception is the optional "Ask about this chart" agent, which
+calls the Anthropic API server-side using `ANTHROPIC_API_KEY`. It is off
+unless that variable is set; see [DEPLOY.md](DEPLOY.md).
 
 **Ephemeris note:** no `.se1` files are shipped, so swisseph uses its built-in
 Moshier analytical ephemeris — sub-arcsecond over the dates this app handles,
@@ -122,7 +135,9 @@ transits.py       gocara, drishti, ingress finder
 yogas.py          lordships, dignities, yoga detection
 doshas.py         doshas with auto-run cancellations, transit weather
 gunamilan.py      aṣṭakūṭa compatibility
-ask.py            question → weighted lenses → verdict
+ask.py            question → weighted lenses → verdict (deterministic)
+chartfacts.py     the computed fact ledger, with stable citation IDs
+agent.py          grounded 'Ask about this chart' + its answer validator
 reading/          the daily reading: detect · select · compose · fragments
 explain.py        three-layer explanations with confidence tags
 lessons.py        the 20-card literacy path

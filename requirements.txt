@@ -8,6 +8,11 @@ pyswisseph==2.10.3.2
 Flask==3.1.3
 gunicorn==23.0.0
 #
+# 'Ask about this chart' (v1.1). Optional at runtime: with no
+# ANTHROPIC_API_KEY the agent panel explains that it is unconfigured and
+# every computed section still works, so a deploy without a key is valid.
+anthropic==1.3.0
+#
 # Test
 pytest==9.1.1
 #

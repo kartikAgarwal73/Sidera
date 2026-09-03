@@ -121,7 +121,7 @@
 <!-- ============ Dashboard ============ -->
 
 <nav class="secnav" id="secnav">
-  <a href="#glance">Glance</a><a href="#plate">Chart</a><a href="#dashas">Daśās</a><a href="#lifeline">Timeline</a><a href="#weather">Transits</a><a href="#doshas">Doshas</a><a href="#myths">Myths</a><a href="#yogas">Yogas</a>{% if data.match %}<a href="#match">Match</a>{% endif %}<a href="#ask">Ask</a><a href="#patha">Paṭha</a><a href="#grahas">Grahas</a><a href="#learnpath">Learn</a>
+  <a href="#glance">Glance</a><a href="#plate">Chart</a><a href="#dashas">Daśās</a><a href="#lifeline">Timeline</a><a href="#weather">Transits</a><a href="#doshas">Doshas</a><a href="#myths">Myths</a><a href="#yogas">Yogas</a>{% if data.match %}<a href="#match">Match</a>{% endif %}<a href="#ask">Ask</a><a href="#agent">Agent</a><a href="#patha">Paṭha</a><a href="#grahas">Grahas</a><a href="#learnpath">Learn</a>
 </nav>
 
 <section class="chartof" id="glance">
@@ -538,6 +538,42 @@
   {% endfor %}
 </section>
 
+<!-- Ask about this chart — grounded agent (v1.1) -->
+<section class="ledger" id="agent">
+  <div class="kicker">Ask about this chart · grounded answers</div>
+  <p class="ratehint">Free-text questions, answered <em>only</em> from the
+  computed facts above. The agent never calculates
+  and never invents a placement: every answer is checked against your chart
+  before it is shown, and one that fails the check is withheld, not
+  captioned. Statements are labelled <strong>COMPUTED</strong> (a restated
+  fact) or <strong>INTERPRETIVE</strong> (a classical reading, with its
+  rule). Limit {{ data.agent_max }} questions.</p>
+
+  {% if not data.agent_ready %}
+  <p class="yoganote">The agent is not configured on this deployment
+  (<code>ANTHROPIC_API_KEY</code> is unset). Everything above is computed
+  locally and works without it.</p>
+  {% else %}
+  <div id="agentbox"
+       data-sid="{{ data.agent_sid }}"
+       data-birth='{{ data.agent_birth | tojson }}'>
+    <div class="agentsuggest">
+      {% for q in data.agent_suggestions %}
+      <button type="button" class="sugq">{{ q }}</button>
+      {% endfor %}
+    </div>
+    <div class="agentrow">
+      <input id="agentq" type="text" maxlength="400" autocomplete="off"
+             placeholder="Ask about a placement, a period, a transit…">
+      <button type="button" id="agentgo" class="cast agentgo">Ask</button>
+    </div>
+    <p class="agentleft"><span id="agentremaining">{{ data.agent_max }}</span>
+    questions left this session</p>
+    <div id="agentout"></div>
+  </div>
+  {% endif %}
+</section>
+
 <!-- Paṭha — the chart, explained in three layers -->
 <section class="ledger" id="patha">
   <div class="kicker">Paṭha · your chart, explained</div>
@@ -908,6 +944,92 @@ function wirePlace(prefix) {
 }
 wirePlace("");
 wirePlace("p_");
+
+/* ---- Ask about this chart: grounded agent panel (v1.1) ---- */
+(function () {
+  const box = document.getElementById("agentbox");
+  if (!box) return;
+  const sid = box.dataset.sid;
+  const birth = JSON.parse(box.dataset.birth);
+  const input = document.getElementById("agentq");
+  const go = document.getElementById("agentgo");
+  const out = document.getElementById("agentout");
+  const left = document.getElementById("agentremaining");
+
+  const esc = t => { const d = document.createElement("div");
+                     d.textContent = t == null ? "" : t; return d.innerHTML; };
+
+  function card(html, cls) {
+    const el = document.createElement("div");
+    el.className = "agentcard " + (cls || "");
+    el.innerHTML = html;
+    out.prepend(el);
+    return el;
+  }
+
+  function render(q, data) {
+    const stmts = (data.statements || []).map(s =>
+      `<div class="row"><span class="mut">${esc(s.label)}</span>` +
+      `<span>${esc(s.text)}</span></div>` +
+      (s.rule ? `<div class="row"><span class="mut">Rule</span>` +
+                `<span class="num">${esc(s.rule)}</span></div>` : "")
+    ).join("");
+    const facts = (data.facts_used || []).map(f =>
+      `<div class="row"><span class="mut">${esc(f.id)}</span>` +
+      `<span>${esc(f.statement)}</span></div>`).join("");
+    const el = card(
+      `<p class="agentq">${esc(q)}</p>` +
+      `<p class="yogadetail">${esc(data.answer || data.refusal_reason)}</p>` +
+      (data.refused ? `<p class="yoganote">Not derivable from this chart.</p>` : "") +
+      `<span class="chip chip-${esc((data.confidence || "").toLowerCase())}">` +
+      `${esc(data.confidence)}</span>` +
+      `<details class="fold"><summary>Facts used</summary>` +
+      `<div class="rows">${stmts}${facts || '<div class="row"><span class="mut">none cited</span></div>'}</div>` +
+      `</details>` +
+      `<button type="button" class="thumbdown" title="This answer is wrong">` +
+      `\u261F Report</button>`);
+    el.querySelector(".thumbdown").addEventListener("click", ev => {
+      const b = ev.currentTarget;
+      b.disabled = true;
+      b.textContent = "Reported \u2713";
+      fetch("/ask/feedback", {
+        method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({question: q, answer: data.answer,
+                              facts_used: (data.facts_used || []).map(f => f.id)})
+      }).catch(() => {});
+    });
+  }
+
+  async function ask(q) {
+    if (!q.trim()) return;
+    go.disabled = true; go.textContent = "Asking\u2026";
+    try {
+      const r = await fetch("/ask", {
+        method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(Object.assign({sid: sid, question: q}, birth))
+      });
+      const data = await r.json();
+      if (typeof data.remaining === "number") left.textContent = data.remaining;
+      if (!r.ok) {
+        card(`<p class="agentq">${esc(q)}</p>` +
+             `<p class="yoganote">${esc(data.error)}</p>`, "agenterr");
+      } else {
+        render(q, data);
+      }
+    } catch (e) {
+      card(`<p class="yoganote">Could not reach the agent.</p>`, "agenterr");
+    } finally {
+      go.disabled = false; go.textContent = "Ask";
+    }
+  }
+
+  go.addEventListener("click", () => { const q = input.value; input.value = ""; ask(q); });
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); go.click(); }
+  });
+  document.querySelectorAll(".sugq").forEach(b =>
+    b.addEventListener("click", () => ask(b.textContent.trim())));
+})();
 </script>
 </body>
 </html>

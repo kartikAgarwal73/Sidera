@@ -97,6 +97,18 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
     "TestAskYourChart": ("characterization", "engine output frozen"),
     "TestReadingEngine": ("invariant", "pipeline structure and determinism"),
     "TestDeployability": ("invariant", "production-readiness product rules"),
+    # v1.1 agent. The whole point of these is that they are product rules,
+    # not frozen output: an LLM's behaviour is not reproducible, so the
+    # guarantee lives in the validator and the validator is what is tested.
+    "TestChartFactLedger": (
+        "invariant", "the ledger must describe the chart it came from"),
+    "TestGroundedAgent": (
+        "invariant", "product rule: an answer may assert only what the "
+                     "computed ledger contains"),
+    "TestAgentLimitsAndLog": (
+        "invariant", "rate-limit arithmetic and append-only logging"),
+    "TestAgentEndpoint": (
+        "invariant", "product rules for the /ask surface"),
 }
 
 # Per-test overrides, keyed "Class::test_name" (parametrisation stripped).

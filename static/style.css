@@ -534,3 +534,35 @@ details.yoga > summary::-webkit-details-marker { display: none; }
   text-decoration: none;
 }
 .cta:hover { background: var(--ghost); }
+
+/* --- Ask about this chart: grounded agent panel (v1.1) --- */
+.agentsuggest { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 4px; }
+.sugq {
+  font: inherit; font-size: 13px; color: var(--cream);
+  background: transparent; border: 1px solid var(--accent-300);
+  padding: 7px 11px; cursor: pointer; text-align: left;
+}
+.sugq:hover { border-color: var(--accent); }
+.agentrow { display: flex; gap: 10px; margin-top: 14px; align-items: stretch; }
+#agentq {
+  flex: 1 1 auto; min-width: 0; font: inherit; color: var(--cream);
+  background: transparent; border: 0; border-bottom: 1px solid var(--accent-300);
+  padding: 9px 2px;
+}
+#agentq:focus { outline: none; border-bottom-color: var(--accent); }
+.agentgo { flex: 0 0 auto; margin: 0; padding: 9px 20px; }
+.agentleft { font-size: 12px; color: var(--cream-50); margin: 8px 0 0; }
+.agentcard { border-top: 1px solid var(--accent-300); padding: 16px 0; margin-top: 16px; }
+.agentcard.agenterr { border-top-style: dashed; }
+.agentq { font-style: italic; color: var(--cream-70); margin: 0 0 8px; }
+.thumbdown {
+  font: inherit; font-size: 12px; color: var(--cream-60); background: transparent;
+  border: 1px solid var(--accent-300); padding: 4px 10px; cursor: pointer;
+  margin-top: 12px;
+}
+.thumbdown:hover:not(:disabled) { color: var(--cream); border-color: var(--accent); }
+.thumbdown:disabled { opacity: .55; cursor: default; }
+@media (max-width: 560px) {
+  .agentrow { flex-direction: column; }
+  .agentgo { width: 100%; }
+}

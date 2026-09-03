@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import re
 import unicodedata
 from dataclasses import dataclass
@@ -33,6 +34,8 @@ from transits import (
     upcoming_ingresses,
 )
 from vargas import dasamsa, navamsa
+import agent
+import chartfacts
 from yogas import detect_all, dignity, dignity_grade
 
 app = Flask(__name__)
@@ -389,6 +392,21 @@ def build_dashboard(profile: Profile) -> dict:
         # covers lagna, grahas, nakshatras, dasha and gocara only.
         "patha": explain_dashboard(chart, timeline, snapshot, []),
         "today": now,
+        # --- grounded agent panel (v1.1) ---
+        "agent_ready": agent.is_configured(),
+        "agent_suggestions": agent.SUGGESTED_QUESTIONS,
+        "agent_max": agent.MAX_QUESTIONS_PER_SESSION,
+        # Per-render id, only ever used as a rate-limit key. Not a login,
+        # not stored, and carries nothing about the person.
+        "agent_sid": secrets.token_urlsafe(12),
+        # Echoed back with each question so no birth record is held server
+        # side between requests.
+        "agent_birth": {
+            "date": f"{birth.year:04d}-{birth.month:02d}-{birth.day:02d}",
+            "time": f"{birth.hour:02d}:{birth.minute:02d}",
+            "lat": str(birth.latitude), "lon": str(birth.longitude),
+            "tz": birth.tz, "place": birth.place,
+        },
     }
 
 
@@ -462,6 +480,37 @@ def _parse_date(text: str) -> datetime:
         raise ValueError("Date must be a real calendar date (YYYY-MM-DD).")
 
 
+def birth_from_fields(fields, prefix: str = "") -> BirthData:
+    """A BirthData from form or JSON fields. Shared by / and /ask.
+
+    /ask re-posts the birth details rather than the server holding a chart
+    between requests: no birth record is stored server-side, not even for
+    the length of a session.
+    """
+    def get(name: str) -> str:
+        return (fields.get(prefix + name) or "").strip()
+
+    date = _parse_date(get("date"))
+    hour, minute = parse_time(get("time"))
+    tz = get("tz")
+    if not tz:
+        raise ValueError(
+            "No timezone. Pick a city from the suggestions (which sets "
+            "it automatically) or enter one manually — the birth "
+            "timezone must never be guessed.")
+    if not get("lat") or not get("lon"):
+        raise ValueError(
+            "No coordinates. Pick a city from the suggestions or enter "
+            "latitude and longitude manually.")
+    return BirthData(
+        year=date.year, month=date.month, day=date.day,
+        hour=hour, minute=minute,
+        latitude=parse_coord(get("lat"), "latitude"),
+        longitude=parse_coord(get("lon"), "longitude"),
+        tz=tz, place=get("place"),
+    )
+
+
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "GET":
@@ -515,6 +564,91 @@ def index():
         return render_template("index.html", data=None, form=form,
                                error=f"Could not cast the chart: {exc}"), 400
     return render_template("index.html", data=data, error=None, form=form)
+
+
+@app.route("/ask", methods=["POST"])
+def ask_endpoint():
+    """One grounded question about a chart.
+
+    The birth details ride along with every request rather than the server
+    holding a chart between calls: no birth record is stored server-side,
+    and the endpoint stays as stateless as the rest of the app.
+    """
+    body = request.get_json(silent=True) or {}
+    session_id = str(body.get("sid", "")).strip()[:64]
+    if not session_id:
+        return jsonify(error="Missing session id — reload the page."), 400
+
+    ip = (request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+          or request.remote_addr or "unknown")
+    allowed, reason, remaining = agent.LIMITER.check(ip, session_id)
+    if not allowed:
+        return jsonify(error=reason, remaining=remaining), 429
+
+    try:
+        birth = birth_from_fields(body)
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+    except Exception as exc:
+        return jsonify(error=f"Could not read the birth details: {exc}"), 400
+
+    try:
+        chart = compute_chart(birth)
+        when = datetime.now(timezone.utc)
+        answer = agent.ask_chart(chart, when, body.get("question", ""))
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+    except agent.AgentUnavailable as exc:
+        return jsonify(error=str(exc)), 503
+
+    agent.LIMITER.record(ip, session_id)
+    remaining = agent.LIMITER.remaining(session_id)
+
+    if not answer.ok:
+        # The model asserted something the chart does not support. The
+        # answer is withheld rather than shown with a warning: a caveat
+        # under a fluent wrong sentence is not a correction, and this is
+        # exactly the failure the feature exists to prevent.
+        agent.log_correction(
+            body.get("question", ""), answer.answer,
+            reason="withheld: failed ledger validation",
+            facts_used=answer.facts_used, model=answer.model,
+            violations=answer.violations)
+        return jsonify(
+            error=("That answer did not check out against your computed "
+                   "chart, so it was withheld. The attempt has been logged. "
+                   "Try rephrasing the question."),
+            withheld=True,
+            violations=[f"{v.kind}: {v.detail}" for v in answer.violations],
+            remaining=remaining), 422
+
+    facts = {f.id: f.statement for f in chartfacts.build_facts(chart, when)}
+    return jsonify(
+        answer=answer.answer,
+        statements=answer.statements,
+        facts_used=[{"id": fid, "statement": facts.get(fid, "")}
+                    for fid in answer.facts_used],
+        rules_applied=answer.rules_applied,
+        confidence=answer.confidence,
+        refused=answer.refused,
+        refusal_reason=answer.refusal_reason,
+        remaining=remaining,
+    )
+
+
+@app.route("/ask/feedback", methods=["POST"])
+def ask_feedback():
+    """Thumbs-down: append the Q/A to the corrections log."""
+    body = request.get_json(silent=True) or {}
+    question = str(body.get("question", ""))[:agent.MAX_QUESTION_CHARS]
+    answer = str(body.get("answer", ""))[:4000]
+    if not question or not answer:
+        return jsonify(error="Nothing to record."), 400
+    agent.log_correction(
+        question, answer, reason="thumbs-down",
+        facts_used=[str(f)[:80] for f in body.get("facts_used", [])][:40],
+        model=str(body.get("model", ""))[:64])
+    return jsonify(ok=True)
 
 
 def _env_flag(name: str, default: bool = False) -> bool:

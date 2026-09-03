@@ -29,3 +29,7 @@ Thumbs.db
 # Ephemeris data files, if ever added via SE_EPHE_PATH (large binaries)
 *.se1
 *.se2
+
+# Runtime output from the "Ask about this chart" thumbs-down feedback.
+# Append-only operational data, never source.
+corrections.jsonl
