@@ -102,6 +102,10 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
     # guarantee lives in the validator and the validator is what is tested.
     "TestChartFactLedger": (
         "invariant", "the ledger must describe the chart it came from"),
+    "TestPlateGeometry": (
+        "invariant", "product rule: a graha is drawn in the cell of the "
+                     "house it is computed in, and both layers share one "
+                     "geometry table"),
     "TestFixtureHygiene": (
         "invariant", "standing rule: no real birth record is ever a fixture"),
     "TestRuleLibrary": (

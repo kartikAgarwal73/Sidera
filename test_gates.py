@@ -12,7 +12,7 @@ from pathlib import Path
 import fixtures
 
 from dashas import DASHA_SEQUENCE, nakshatra_of, nakshatra_table, vimshottari
-from engine import SIGNS, BirthData, compute_chart
+from engine import PLANETS, SIGNS, BirthData, compute_chart
 from transits import (
     DRISHTI_OFFSETS,
     angular_distance,
@@ -1120,9 +1120,200 @@ class TestPhase8ShowYourWorking:
         assert 'data-planets="Sun,Mercury"' in page    # Budhaditya
 
     def test_house_shapes_cover_all_twelve(self, page):
-        for h in range(1, 13):
-            assert f"\n  {h}: " in page or f" {h}:  [" in page or \
-                re.search(rf"\b{h}:\s+\[\[", page), f"house {h} shape missing"
+        """Re-pointed 2026-09-04: the plate geometry moved out of the
+        template into app.py and is injected as JSON, so this checks the
+        injected table rather than a hand-written JS literal."""
+        import json as _json
+        m = re.search(r"const HOUSE_SHAPES = (\{.*?\});", page, re.S)
+        assert m, "plate geometry not injected into the page"
+        shapes = _json.loads(m.group(1))
+        assert sorted(int(k) for k in shapes) == list(range(1, 13))
+        for h, poly in shapes.items():
+            assert len(poly) in (3, 4), f"house {h} is not a triangle/diamond"
+
+
+class TestPlateGeometry:
+    """The chart wheel: which cell a graha is actually drawn in.
+
+    LAUNCH-BLOCKER, 2026-09-04. A 9th-house Venus rendered inside the
+    8th-house cell while the text correctly said 9th. Not an off-by-one and
+    not a sign-vs-house confusion — the house mapping was right in both
+    layers. `kundli_houses` clamped the DEGREE label's x to [62, 238] to keep
+    long text inside the plate border, and for the four narrow triangles
+    (3, 5, 9, 11) that clamp moved the anchor ACROSS a cell boundary: house
+    9's label landed at x=238 while its own cell begins at x=240 on that row.
+
+    It hid because the compact layer was fine and only the degree layer —
+    which is the DEFAULT view — was wrong.
+    """
+
+    # A Sagittarius-lagna chart with three grahas in the 9th, which is the
+    # shape the bug was reported on. Synthetic: no real birth record.
+    BIRTH = BirthData(year=1990, month=9, day=5, hour=14, minute=0,
+                      latitude=28.61, longitude=77.21, tz="+05:30",
+                      place="Test")
+
+    def _plate(self, client, layer):
+        html = client.post("/", data={
+            "date": "1990-09-05", "time": "14:00", "lat": "28.61",
+            "lon": "77.21", "tz": "+05:30", "place": "Test",
+        }).get_data(as_text=True)
+        d1 = html[html.index('aria-label="North-Indian chart d1"'):]
+        d1 = d1[:d1.index("</svg>")]
+        block = d1[d1.index(f"grahas {layer}"):]
+        return block[:block.index("</g>")]
+
+    def test_the_reported_shape_is_the_one_under_test(self):
+        chart = compute_chart(self.BIRTH)
+        assert chart.lagna.sign == "Sagittarius"
+        assert chart.planets["Venus"].sign == "Leo"
+        assert chart.planets["Venus"].house == 9
+
+    @pytest.mark.parametrize("layer", ["grahas-compact", "grahas-deg"])
+    def test_every_graha_is_drawn_in_its_own_house_cell(self, client, layer):
+        """Both layers, because the bug was in only one of them."""
+        from app import ABBR, house_at
+        chart = compute_chart(self.BIRTH)
+        block = self._plate(client, layer)
+        drawn = {}
+        for m in re.finditer(r'<text x="([\d.]+)" y="([\d.-]+)"[^>]*>(.*?)</text>',
+                             block, re.S):
+            x, y = float(m.group(1)), float(m.group(2))
+            for token in re.findall(r"\b([A-Z][a-z])\b", m.group(3)):
+                drawn.setdefault(token, (x, y))
+        for name, pos in chart.planets.items():
+            abbr = ABBR[name]
+            assert abbr in drawn, f"{name} not drawn in {layer}"
+            x, y = drawn[abbr]
+            cell = house_at(x, y)
+            assert cell == pos.house, (
+                f"{layer}: {name} is computed in house {pos.house} but drawn "
+                f"at ({x}, {y}), which is inside the house-{cell} cell")
+
+    def test_degree_anchors_stay_in_their_own_cell(self):
+        """The regression itself, at the table level.
+
+        The old clamp put houses 3, 5, 9 and 11 in cells 4, 6, 8 and 10.
+        """
+        from app import DEG_POS, NUMBER_POS, PLANET_POS, house_at
+        for label, table in (("DEG_POS", DEG_POS), ("PLANET_POS", PLANET_POS),
+                             ("NUMBER_POS", NUMBER_POS)):
+            for house, (x, y) in table.items():
+                assert house_at(x, y) == house, (
+                    f"{label}[{house}] is at ({x}, {y}), inside cell "
+                    f"{house_at(x, y)}")
+        # And the specific clamp that caused it must not come back.
+        source = (HERE / "app.py").read_text(encoding="utf-8")
+        assert "min(max(x, 62), 238)" not in source
+
+    def test_label_anchors_do_not_collide_within_a_cell(self):
+        """The sign number and the graha stack must not sit on each other.
+
+        Chasing the wrong-cell bug produced three arrangements in a row that
+        each traded one collision for another — number over label, label
+        over neighbour, label over border. Measured in a browser at the
+        time; pinned here so the class of fault fails fast without one.
+        """
+        from app import DEG_POS, NUMBER_POS, PLANET_POS
+        for house in range(1, 13):
+            nx, ny = NUMBER_POS[house]
+            for label, table in (("DEG_POS", DEG_POS),
+                                 ("PLANET_POS", PLANET_POS)):
+                gx, gy = table[house]
+                gap = max(abs(nx - gx), abs(ny - gy))
+                assert gap >= 18, (
+                    f"house {house}: {label} {table[house]} sits {gap}px from "
+                    f"its sign number {NUMBER_POS[house]} — they will overlap")
+
+    def test_crowded_cells_drop_the_sign_number_not_the_grahas(self):
+        """Three degree-labelled grahas fill a narrow triangle completely.
+
+        Something has to give, and it is the sign number — one character,
+        recoverable from the lagna and shown in the graha table — never a
+        placement. It returns when the degree layer is toggled off.
+        """
+        from app import kundli_houses
+        crowded = kundli_houses(
+            8, {p: (9 if p in ("Sun", "Mercury", "Venus") else 1)
+                for p in PLANETS},
+            degrees={p: (5.0, False) for p in PLANETS}, lagna_degree=1.9)
+        by_house = {h["house"]: h for h in crowded}
+        assert by_house[9]["crowded"] is True     # three grahas
+        assert by_house[3]["crowded"] is False    # empty
+        assert len(by_house[9]["detail_lines"]) == 3
+        # Only the number is dropped, and only while degrees are showing.
+        css = (HERE / "static/style.css").read_text(encoding="utf-8")
+        assert ".plate.showdeg #pane-d1 .signnum text.crowded" in css
+        assert "display: none" in css
+        # The grahas themselves are never dropped.
+        assert "grahas-deg text.crowded { display: none" not in css
+
+    def test_the_plate_is_north_indian_houses_fixed_signs_rotating(self):
+        """Confirming the style, since the two conventions map oppositely.
+
+        North Indian: the twelve cells are HOUSES and never move; the sign
+        numbers printed in them rotate with the lagna. (South Indian is the
+        reverse — signs fixed, lagna marked.) So house 1 is always the
+        top-centre diamond, and the count runs anticlockwise.
+        """
+        from app import HOUSE_CENTER, kundli_houses
+        # House 1 top-centre; 4, 7, 10 at left, bottom, right — the kendras
+        # on the cardinal points, which is the signature of the layout.
+        assert HOUSE_CENTER[1][0] == 150 and HOUSE_CENTER[1][1] < 100
+        assert HOUSE_CENTER[4][0] < 100 and HOUSE_CENTER[7][1] > 200
+        assert HOUSE_CENTER[10][0] > 200
+        # Signs rotate: the same cell carries a different sign per lagna.
+        aries = {h["house"]: h["sign_num"] for h in
+                 kundli_houses(0, {p: 1 for p in PLANETS})}
+        sagittarius = {h["house"]: h["sign_num"] for h in
+                       kundli_houses(8, {p: 1 for p in PLANETS})}
+        assert aries[1] == 1 and sagittarius[1] == 9
+        assert aries[9] == 9 and sagittarius[9] == 5   # Leo in the 9th
+        # …while the cells themselves do not move.
+        from app import PLANET_POS
+        assert PLANET_POS[9] == (272, 240)
+
+    def test_one_geometry_table_shared_by_both_layers(self, page):
+        """The structural fix: the placement layer and the browser's
+        highlight layer must index the SAME table, not two copies."""
+        import json as _json
+        from app import HOUSE_CENTER, HOUSE_POLY
+        shapes = _json.loads(
+            re.search(r"const HOUSE_SHAPES = (\{.*?\});", page, re.S).group(1))
+        centers = _json.loads(
+            re.search(r"const HOUSE_CENTER = (\{.*?\});", page, re.S).group(1))
+        for house in range(1, 13):
+            assert [list(pt) for pt in HOUSE_POLY[house]] == shapes[str(house)]
+            assert list(HOUSE_CENTER[house]) == centers[str(house)]
+
+    def test_aspect_targets_come_from_the_server_not_a_second_formula(
+            self, page):
+        """A highlighted house must be the house the text names. The JS may
+        walk intermediate cells for the animation, but a TARGET is read from
+        the server's aspect table."""
+        assert "const h = asp ? asp.house :" in page
+
+    @pytest.mark.parametrize("planet,house,expected", [
+        ("Jupiter", 1, [5, 7, 9]),      # 5th, 7th, 9th
+        ("Mars", 1, [4, 7, 8]),         # 4th, 7th, 8th
+        ("Saturn", 1, [3, 7, 10]),      # 3rd, 7th, 10th
+        ("Jupiter", 8, [12, 2, 4]),     # wraps past 12
+        ("Saturn", 11, [1, 5, 8]),
+    ])
+    def test_special_aspects_land_on_the_right_houses(
+            self, planet, house, expected):
+        """Jupiter 5/7/9, Mars 4/7/8, Saturn 3/7/10 — the houses the
+        explorer highlights, straight from the payload the plate uses."""
+        from app import planet_explorer
+        sign = (house - 1) % 12          # lagna Aries → house n is sign n-1
+        chart = synthetic_chart(0, {p: (sign if p == planet else 0)
+                                    for p in PLANETS})
+        assert chart.planets[planet].house == house
+        px = planet_explorer(chart)[planet]
+        assert px["house"] == house
+        assert [a["house"] for a in px["aspects"]] == expected
+        assert [a["offset"] for a in px["aspects"]] == \
+            sorted(DRISHTI_OFFSETS[planet])
 
 
 class TestPhase9LifeTimeline:

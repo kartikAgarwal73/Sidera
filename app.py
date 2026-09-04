@@ -43,6 +43,16 @@ app.template_filter("ordinal")(ordinal)  # '3' → '3rd', app-wide
 app.template_filter("fraction")(fraction)  # 28.5 → '28½'
 
 
+@app.context_processor
+def _plate_geometry():
+    """The plate tables, available to every template render.
+
+    Injected rather than duplicated in the template so the browser's
+    highlight layer and the server's placement layer cannot disagree.
+    """
+    return {"house_poly": HOUSE_POLY, "house_center": HOUSE_CENTER}
+
+
 @app.route("/favicon.ico")
 @app.route("/apple-touch-icon.png")
 @app.route("/apple-touch-icon-precomposed.png")
@@ -172,19 +182,86 @@ ABBR = {
     "Jupiter": "Ju", "Venus": "Ve", "Saturn": "Sa", "Rahu": "Ra", "Ketu": "Ke",
 }
 
-# North-Indian plate geometry (viewBox 0 0 300 300), houses fixed,
-# house 1 the top-centre diamond, counting anticlockwise — matches the
-# design file's kundli exactly.
+# --- North-Indian plate geometry — ONE source of truth ------------------------
+#
+# STYLE: North Indian. Houses are FIXED cells; the SIGNS rotate with the
+# lagna, which is why each cell carries a sign number rather than a house
+# number. House 1 is the top-centre diamond and the count runs anticlockwise.
+#
+# This table is the single authority. The Python placement layer indexes it
+# directly, and the browser's aspect/highlight layer receives THIS dict via
+# the template — previously each had its own copy, which is exactly the kind
+# of duplication that lets two layers drift apart silently.
+HOUSE_POLY = {
+    1:  [(150, 3), (223.5, 76.5), (150, 150), (76.5, 76.5)],
+    2:  [(3, 3), (150, 3), (76.5, 76.5)],
+    3:  [(3, 3), (76.5, 76.5), (3, 150)],
+    4:  [(3, 150), (76.5, 76.5), (150, 150), (76.5, 223.5)],
+    5:  [(3, 150), (3, 297), (76.5, 223.5)],
+    6:  [(3, 297), (150, 297), (76.5, 223.5)],
+    7:  [(150, 297), (76.5, 223.5), (150, 150), (223.5, 223.5)],
+    8:  [(150, 297), (297, 297), (223.5, 223.5)],
+    9:  [(297, 297), (297, 150), (223.5, 223.5)],
+    10: [(297, 150), (223.5, 223.5), (150, 150), (223.5, 76.5)],
+    11: [(297, 150), (297, 3), (223.5, 76.5)],
+    12: [(297, 3), (150, 3), (223.5, 76.5)],
+}
+HOUSE_CENTER = {
+    1: (150, 77), 2: (76, 28), 3: (28, 76), 4: (76, 150), 5: (28, 223),
+    6: (76, 272), 7: (150, 223), 8: (223, 272), 9: (272, 223), 10: (223, 150),
+    11: (272, 76), 12: (223, 28),
+}
+# Sign numbers hug the OUTER border of their cell; the graha labels take the
+# cell body. In the eight triangles both were competing for the same space,
+# and a sign number sitting under a degree stack is unreadable — the number
+# is one or two characters and moves easily, a three-line stack does not.
 NUMBER_POS = {
-    1: (150, 70), 2: (75, 22), 3: (26, 72), 4: (75, 146),
-    5: (26, 222), 6: (75, 272), 7: (150, 222), 8: (225, 272),
-    9: (274, 222), 10: (225, 146), 11: (274, 72), 12: (225, 22),
+    1: (150, 70), 2: (76, 15), 3: (20, 42), 4: (75, 146),
+    5: (20, 264), 6: (76, 291), 7: (150, 222), 8: (224, 291),
+    9: (280, 264), 10: (225, 146), 11: (280, 42), 12: (224, 15),
 }
 PLANET_POS = {
     1: (150, 92), 2: (75, 40), 3: (28, 92), 4: (90, 164),
     5: (28, 240), 6: (75, 254), 7: (150, 240), 8: (225, 254),
     9: (272, 240), 10: (210, 164), 11: (272, 92), 12: (225, 40),
 }
+# Anchors for the wider degree labels.
+#
+# These were once PLANET_POS with x clamped to [62, 238] to keep long text
+# inside the plate border. That clamp moved houses 3, 5, 9 and 11 — the four
+# narrow triangles — ACROSS a cell boundary: house 9's label landed at x=238
+# while its own cell begins at x=240 on that row, so a 9th-house graha was
+# drawn in the 8th-house cell. The text said 9th and the plate said 8th.
+#
+# A label must never leave its own cell; slight crowding is a cosmetic
+# problem, a label in the wrong house is a wrong chart. These anchors sit
+# inside their own polygons, verified by test_degree_anchors_stay_in_cell.
+# Each anchor sits near its own cell's CENTROID, not pulled toward the plate
+# centre. Anchors nudged toward the middle converge at the vertices the cells
+# share, so two houses' stacks visually run together — which is how a 9th-house
+# graha can *read* as 8th even when it is drawn in the right cell.
+DEG_POS = {
+    1: (150, 92),  2: (76, 38),  3: (34, 92),  4: (90, 164),
+    5: (34, 220),  6: (76, 264), 7: (150, 240), 8: (223, 264),
+    9: (262, 223), 10: (210, 164), 11: (266, 88), 12: (223, 38),
+}
+
+
+def house_at(x: float, y: float) -> int | None:
+    """Which house cell a point falls in. Shared by the tests and by any
+    caller that needs to reason about the plate geometrically."""
+    for house, poly in HOUSE_POLY.items():
+        inside, n = False, len(poly)
+        for i in range(n):
+            x1, y1 = poly[i]
+            x2, y2 = poly[(i + 1) % n]
+            if (y1 > y) != (y2 > y):
+                cross = (x2 - x1) * (y - y1) / (y2 - y1) + x1
+                if x < cross:
+                    inside = not inside
+        if inside:
+            return house
+    return None
 
 
 def _deg_min(degree_in_sign: float) -> str:
@@ -228,12 +305,17 @@ def kundli_houses(lagna_sign_index: int, house_of: dict[str, int],
             "sign_num": (lagna_sign_index + h - 1) % 12 + 1,
             "num_pos": NUMBER_POS[h],
             "pl_pos": PLANET_POS[h],
-            # degree labels are wider — pull corner-house anchors inward so
-            # text stays inside the plate border
-            "deg_pos": (min(max(x, 62), 238), y),
+            "deg_pos": DEG_POS[h],
             "line1": "·".join(line1),
             "line2": "·".join(line2),
             "detail_lines": detail[h],
+            # Three stacked degree labels fill a narrow triangle completely.
+            # The sign number underneath them is then unreadable, so it is
+            # dropped WHILE THE DEGREE LAYER IS ON — the compact view still
+            # shows it, and the sign is never lost (it is in the graha
+            # table). Better one legible number fewer than two illegible
+            # overlapping texts.
+            "crowded": len(detail[h]) >= 3,
         })
     return houses
 

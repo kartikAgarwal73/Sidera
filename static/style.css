@@ -239,7 +239,11 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 }
 .kundli .signnum text { font-family: var(--font-heading); font-size: 15px; fill: rgba(236, 229, 216, .42); }
 .kundli .grahas text { font-family: var(--font-body); font-size: 13px; font-weight: 600; fill: var(--accent-300); }
-.kundli .grahas-deg text { font-size: 10px; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* 9px, not 10: the four narrow triangles (houses 3, 5, 9, 11) can hold
+   three stacked degree labels, and at 10px a three-graha stack bled past
+   the plate hairline. Shrinking the type is the right lever — the anchor
+   must stay inside its own cell, so the text cannot be moved instead. */
+.kundli .grahas-deg text { font-size: 9px; font-weight: 600; font-variant-numeric: tabular-nums; }
 /* degree toggle: detail labels on D1 by default; unchecking falls back to
    compact abbreviations (vargas are sign-level and always compact) */
 .plate .grahas-deg { display: none; }
@@ -568,3 +572,11 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 }
 .agentread { margin: 0 0 12px; line-height: 1.62; }
 .agentread:last-of-type { margin-bottom: 14px; }
+
+/* A cell holding three degree-labelled grahas has no room left for its sign
+   number; showing both renders neither. The number returns as soon as the
+   degree layer is toggled off. */
+.plate.showdeg #pane-d1 .signnum text.crowded { display: none; }
+/* …and the stack itself steps down a size, because three lines at 9px are
+   wider than the narrow triangles (houses 3, 5, 9, 11) are at that height. */
+.kundli .grahas-deg text.crowded { font-size: 8px; }

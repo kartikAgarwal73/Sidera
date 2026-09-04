@@ -232,7 +232,7 @@
         <path d="M150 3 L297 150 L150 297 L3 150 Z"/>
       </g>
       <g class="signnum" text-anchor="middle">
-        {% for h in houses %}<text x="{{ h.num_pos[0] }}" y="{{ h.num_pos[1] }}">{{ h.sign_num }}</text>{% endfor %}
+        {% for h in houses %}<text x="{{ h.num_pos[0] }}" y="{{ h.num_pos[1] }}"{% if h.crowded %} class="crowded"{% endif %}>{{ h.sign_num }}</text>{% endfor %}
       </g>
       <g class="grahas grahas-compact" text-anchor="middle">
         {% for h in houses %}{% if h.line1 %}
@@ -242,7 +242,7 @@
       {% if key == 'd1' %}
       <g class="grahas grahas-deg" text-anchor="middle">
         {% for h in houses %}{% if h.detail_lines %}
-        <text x="{{ h.deg_pos[0] }}" y="{{ h.deg_pos[1] - 6 * (h.detail_lines | length - 1) }}">
+        <text x="{{ h.deg_pos[0] }}" y="{{ h.deg_pos[1] - 6 * (h.detail_lines | length - 1) }}"{% if h.crowded %} class="crowded"{% endif %}>
           {%- for line in h.detail_lines -%}
           <tspan x="{{ h.deg_pos[0] }}" {% if not loop.first %}dy="12.5"{% endif %}>{{ line }}</tspan>
           {%- endfor -%}
@@ -710,27 +710,11 @@ document.querySelectorAll(".gchip").forEach(chip =>
 // ---- Phase 8: show-your-working chart explorer ----
 {% if data %}
 const EXPLORER = {{ data.explorer | tojson }};
-// North-Indian plate geometry (viewBox 300×300): region outline + centroid
-// per house, for highlight overlays and the counting animation.
-const HOUSE_SHAPES = {
-  1:  [[150,3],[223.5,76.5],[150,150],[76.5,76.5]],
-  2:  [[3,3],[150,3],[76.5,76.5]],
-  3:  [[3,3],[76.5,76.5],[3,150]],
-  4:  [[3,150],[76.5,76.5],[150,150],[76.5,223.5]],
-  5:  [[3,150],[3,297],[76.5,223.5]],
-  6:  [[3,297],[150,297],[76.5,223.5]],
-  7:  [[150,297],[76.5,223.5],[150,150],[223.5,223.5]],
-  8:  [[150,297],[297,297],[223.5,223.5]],
-  9:  [[297,297],[297,150],[223.5,223.5]],
-  10: [[297,150],[223.5,223.5],[150,150],[223.5,76.5]],
-  11: [[297,150],[297,3],[223.5,76.5]],
-  12: [[297,3],[150,3],[223.5,76.5]],
-};
-const HOUSE_CENTER = {
-  1: [150,77], 2: [76,28], 3: [28,76], 4: [76,150], 5: [28,223],
-  6: [76,272], 7: [150,223], 8: [223,272], 9: [272,223], 10: [223,150],
-  11: [272,76], 12: [223,28],
-};
+// Plate geometry comes from app.py — ONE table, shared by the placement
+// layer and this highlight/aspect layer. Each used to keep its own copy,
+// which is how two layers drift apart without anything going red.
+const HOUSE_SHAPES = {{ house_poly | tojson }};
+const HOUSE_CENTER = {{ house_center | tojson }};
 const SVGNS = "http://www.w3.org/2000/svg";
 const ord = n => n + (n === 2 ? "nd" : n === 3 ? "rd" : "th");
 const d1svg = document.querySelector("#pane-d1 svg");
@@ -790,8 +774,12 @@ function selectPlanet(name) {
   // animated house counting: step through intermediate houses to each target
   const maxOff = Math.max(...px.aspects.map(a => a.offset));
   for (let k = 2; k <= maxOff; k++) {
-    const h = ((px.house - 1 + k - 1) % 12) + 1;
     const asp = px.aspects.find(a => a.offset === k);
+    // A TARGET house comes from the server's own aspect table, never from a
+    // formula re-derived here. The intermediate counting steps are pure
+    // animation and may be walked locally; a house we assert a drishti onto
+    // must be the same house the text names.
+    const h = asp ? asp.house : ((px.house - 1 + k - 1) % 12) + 1;
     animTimers.push(setTimeout(() => {
       if (asp) {
         poly(h, "hl-target");
