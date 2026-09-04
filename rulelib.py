@@ -101,6 +101,74 @@ _TRANSIT_GENERAL = dict([
        "Gochara as time-bound (standard)"),
 ])
 
+# --- what a graha means in its own right, and when a transit lands on one ----
+#
+# WHY THIS GROUP EXISTS
+# A live reading called transit Ketu "supportive" because Ketu stood 3rd from
+# the natal Moon — while sitting 2.66° from natal Venus. Both rules were in
+# the library; nothing said which one wins, so the general one was reported as
+# the verdict and the specific one was dropped. The precedence is classical;
+# it just was not written down here.
+
+KARAKATVAS = {
+    "Sun": "authority, the father, vitality and standing",
+    "Moon": "the mind, the mother, comfort and receptivity",
+    "Mars": "energy, courage, siblings, land and contention",
+    "Mercury": "speech, commerce, analysis and correspondence",
+    "Jupiter": "wisdom, teachers, children, counsel and increase",
+    "Venus": "love, marriage, beauty, comfort, vehicles and refinement",
+    "Saturn": "labour, endurance, structure, delay and the long view",
+    "Rahu": "appetite, the foreign, amplification and the unfamiliar",
+    "Ketu": "detachment, loosened grip, insight and release",
+}
+
+# Naisargika (natural) benefics. Moon and Mercury are conditional in the
+# tradition — the Moon by paksha, Mercury by company — and the rule text
+# below says so rather than silently flattening it.
+NATURAL_BENEFICS = ("Jupiter", "Venus", "Moon", "Mercury")
+
+_CONTACT = dict([
+    _r("rule.transit.contact",
+       "A transiting graha within about 3° of a natal graha or of the lagna "
+       "is in contact with that point. It then acts on THAT point — the "
+       "houses that graha rules in this chart and its natural karakatvas — "
+       "and not merely on the house the transit happens to occupy. The "
+       "contact lasts while the orb holds: a season for the slow movers, "
+       "days for the fast ones.",
+       "Gochara by conjunction with natal points; standard transit practice"),
+    _r("rule.transit.node_on_natal",
+       "Rahu or Ketu on a natal graha eclipses it. While the contact holds, "
+       "that graha's significations are obscured, withheld or distorted "
+       "rather than delivered — Ketu by withdrawal and severance, Rahu by "
+       "inflation and adulteration. On a natural benefic the reading is "
+       "suppression of exactly what that benefic protects, so the "
+       "significations must be named concretely: the houses it lords here, "
+       "and its karakatvas.",
+       "Eclipse read into gochara; nodal nature per Uttara Kalamrita and "
+       "standard nodal-transit commentary"),
+    _r("rule.transit.contact_over_gocara",
+       "PRECEDENCE. Where a close contact with a natal point and the generic "
+       "gocara-from-the-Moon verdict point different ways, the contact "
+       "governs: the specific reading displaces the general one. A sign that "
+       "is 3rd from the Moon is not simply 'supportive' while a node sits on "
+       "a natal graha inside it.",
+       "Visesa over samanya — the specific displaces the general; standard "
+       "interpretive priority in jyotisha"),
+    _r("rule.precedence.name_both",
+       "When two rules bear on the same fact and disagree, the reading must "
+       "name BOTH, state which one governs, and say why. Presenting the "
+       "outranked rule as the verdict, or dropping it in silence, both "
+       "misreport the chart.",
+       "Interpretive method: conflicting gochara and yoga indications are "
+       "weighed in the open in the classical commentaries"),
+    _r("rule.graha.karakatva",
+       "A graha carries natural significations independent of what it rules "
+       "in any one chart. When a graha is strengthened or suppressed, name "
+       "both registers: the houses it lords in THIS chart, and its "
+       "karakatvas.",
+       "Naisargika karakatva, Brihat Parashara Hora Shastra"),
+])
+
 _TRANSIT_GRAHA = dict([
     _r("rule.transit.saturn",
        "Saturn transiting a house tests and consolidates it: slow, "
@@ -184,14 +252,23 @@ _HOUSE = dict(
 )
 
 RULES: dict[str, Rule] = {
-    **_DASHA, **_TRANSIT_GENERAL, **_TRANSIT_GRAHA, **_VARGA, **_HOUSE,
+    **_DASHA, **_TRANSIT_GENERAL, **_TRANSIT_GRAHA, **_CONTACT, **_VARGA,
+    **_HOUSE,
 }
+
+# The general rule a contact displaces, and the rule that says so. Kept as
+# named constants because `chartfacts` writes both ids into the ledger and
+# the tests assert the pairing — a precedence that only exists in prose is
+# the state we are fixing.
+GENERAL_GOCARA_RULE = "rule.transit.from_moon"
+CONTACT_PRECEDENCE_RULE = "rule.transit.contact_over_gocara"
+NAME_BOTH_RULE = "rule.precedence.name_both"
 
 _SLOW = ("Saturn", "Jupiter", "Rahu", "Ketu")
 
 
 def rules_for(*, dasha_lords=(), transit_planets=(),
-              houses=(), vargas=()) -> list[Rule]:
+              houses=(), vargas=(), contacts=()) -> list[Rule]:
     """The subset of the library that applies to one chart's active facts.
 
     Sending the whole library every request would be noise; sending the
@@ -214,6 +291,14 @@ def rules_for(*, dasha_lords=(), transit_planets=(),
                 wanted.append(key)
         if any(p in PLANETS and p not in _SLOW for p in transit_planets):
             wanted.append("rule.transit.fast")
+    if contacts:
+        # `contacts` is the transiting grahas that are within orb of a natal
+        # point. The precedence rules ride along with them, because they are
+        # only in play when there is a conflict to resolve.
+        wanted += ["rule.transit.contact", CONTACT_PRECEDENCE_RULE,
+                   NAME_BOTH_RULE, "rule.graha.karakatva"]
+        if any(c in ("Rahu", "Ketu") for c in contacts):
+            wanted.append("rule.transit.node_on_natal")
     if vargas:
         wanted += ["rule.varga.purpose", "rule.varga.confirms",
                    "rule.varga.from_varga_lagna", "rule.varga.sign_level"]

@@ -82,6 +82,8 @@ sky. Venus can be in Cancer at birth, Virgo in the D9 and Gemini in the D10, \
 all true at once. Always name the chart: "in the D9, Venus is in ...". These \
 are sign-level only; there is no degree within a divisional sign, so never \
 give a varga degree, nakshatra or dignity-by-degree.
+`contact.*` — a transiting graha sitting within 3° of a NATAL graha or the \
+lagna. These are the sharpest facts in the ledger; use them.
 `rules` — the classical rules you interpret through. Cite by id.
 
 Never state a placement, period or date the ledger does not contain. Do not \
@@ -113,6 +115,22 @@ occupies and how long it stays, and from the natal Moon where that matters.
   4. Draw the threads together: what this combination favours, what it asks \
 for, where the tradition would counsel care. Be specific to THIS chart.
 Then give the dated windows so the person knows the shape of the season.
+
+WHEN TWO RULES CONFLICT — PRECEDENCE
+A `contact.*` fact OUTRANKS the generic "3rd/6th/10th/11th from the Moon is \
+supportive" verdict for that same graha. The specific reading displaces the \
+general one. So:
+  * Never call a transit supportive, favourable or easy on the from-the-Moon \
+count alone while a `contact.*` fact names it. That is the exact mistake \
+this rule exists to stop.
+  * Name BOTH readings, say which governs, and say why. Do not drop the \
+outranked one in silence either — the person should see the conflict and the \
+resolution.
+  * For a node (Rahu/Ketu) on a natal graha, say concretely WHAT is being \
+eclipsed: the houses that graha rules in THIS chart, and its karakatvas. \
+"Ketu on natal Venus, which rules your 6th and 11th and carries love, \
+comfort and refinement" is the reading; "Ketu is supportive" is not.
+The contact fact spells out both rule ids. Cite them.
 
 LABEL EVERY STATEMENT
   COMPUTED     — restates a ledger fact. Cite `fact_ids`.
@@ -321,6 +339,89 @@ _DATE_TOKEN = re.compile(rf"\b({_MONTH_RE})\.?\s+(\d{{4}})\b",
                          re.IGNORECASE)
 
 
+# A transit sitting within 3° of a natal graha is a specific fact about that
+# graha; "3rd from the Moon" is a fact about nothing in particular. A live
+# reading gave the second as the verdict for a Ketu 2.66° off natal Venus and
+# never mentioned Venus. That is not a wrong placement — every position in it
+# was right — so none of the checks above could see it. This one can.
+_GENERIC_POSITIVE = re.compile(
+    r"\b(?:supportive|support|favourable|favorable|favours|favors|benign|"
+    r"benevolent|auspicious|easy|smooth|helpful|gentle|kind|working\s+in\s+"
+    r"your\s+favou?r|well[- ]placed)\b", re.IGNORECASE)
+_ANY_PLANET = re.compile(rf"\b({_PLANETS_RE})\b", re.IGNORECASE)
+# The Moon named as the thing a transit is COUNTED FROM is not the subject of
+# the sentence. Without this, "supportive" in "3rd from your natal Moon,
+# which is supportive" attaches to the Moon and the check never reaches the
+# graha the verdict is actually about.
+_COUNTED_FROM = re.compile(r"\bfrom\b[^.;:\n]{0,25}$", re.IGNORECASE)
+_NEAR = 300  # chars either side — one long sentence or two short ones
+
+
+def _subject_of(text: str, at: int) -> tuple[str, int] | None:
+    """The graha a claim at `at` is about: the nearest one named, skipping
+    any graha that is only the reference point of a count."""
+    best = None
+    for m in _ANY_PLANET.finditer(text or ""):
+        distance = abs(m.start() - at)
+        if distance > _NEAR:
+            continue
+        if _COUNTED_FROM.search(text[max(0, m.start() - 26):m.start()]):
+            continue
+        if best is None or distance < best[0]:
+            best = (distance, _canon(m.group(1), PLANETS), m.start())
+    return (best[1], best[2]) if best else None
+
+
+def find_ungoverned_generic(text: str, cited, contacts) -> list[Violation]:
+    """Transits called supportive while a contact fact governs them.
+
+    A contact counts as acknowledged if the natal point is named anywhere in
+    the reading, or its `contact.*` fact is cited. That is deliberately
+    lenient: the requirement is that the conflict is visible to the reader,
+    not that it is phrased a particular way. What it will not accept is the
+    general verdict standing alone.
+
+    Attribution is by nearest subject, the same way `_frame` decides which
+    sky a claim is about — so a supportive Jupiter in one clause does not
+    convict a contacted Ketu in the next.
+    """
+    text = text or ""
+    out: list[Violation] = []
+    cited = set(cited or ())
+    by_planet = {}
+    for c in contacts:
+        if c["id"] in cited:
+            continue
+        if re.search(rf"\b{re.escape(c['point'])}\b", text, re.IGNORECASE):
+            continue
+        by_planet.setdefault(c["transit"], c)
+
+    for hit in _GENERIC_POSITIVE.finditer(text):
+        subject = _subject_of(text, hit.start())
+        if subject is None:
+            continue
+        planet, at = subject
+        c = by_planet.get(planet)
+        if c is None:
+            continue
+        # Only a TRANSIT can be outranked by a transit contact; a sentence
+        # about the natal graha is a different claim entirely.
+        if _frame(text, at, at + len(planet)) != "transit":
+            continue
+        out.append(Violation(
+            "ungoverned-generic",
+            text[max(0, hit.start() - 90):hit.end() + 40].strip()[:140],
+            f"transit {planet} is {c['orb']}° from "
+            + ("the lagna" if c["point"] == "Lagna"
+               else f"natal {c['point']}")
+            + f"; that contact governs the from-the-Moon verdict "
+              f"({c['governing_rule']} over {c['outranks_rule']}), so this "
+              f"transit cannot be called '{hit.group(0)}' without naming "
+              f"the contact and saying it governs ({c['id']})"))
+        by_planet.pop(planet, None)          # one report per transit
+    return out
+
+
 def _ledger_text(chart: Chart, when: datetime) -> str:
     parts = []
     for f in build_facts(chart, when):
@@ -479,6 +580,15 @@ def validate_payload(payload: dict, chart: Chart,
         out.append(Violation(
             "invented-date", token,
             f"'{token}' is not a date this chart produced"))
+    # A correct-but-misreported reading: every placement true, the governing
+    # rule dropped. Skipped for refusals, which assert nothing.
+    if not payload.get("refused"):
+        from chartfacts import transit_contacts_summary
+        cited = set(payload.get("facts_used", ()))
+        for stmt in payload.get("answer_statements", []):
+            cited.update(stmt.get("fact_ids", ()))
+        out.extend(find_ungoverned_generic(
+            whole, cited, transit_contacts_summary(chart, when)))
     for rid in payload.get("rules_applied", ()):
         if not _rule_known(rid) and rid.startswith("rule."):
             out.append(Violation(
@@ -538,6 +648,12 @@ def explain_violations(violations) -> tuple[str, str]:
         return ("the reply named a date your chart did not produce",
                 "Ask about a window the chart does carry — a dasha period or "
                 "a slow transit.")
+    if "ungoverned-generic" in kinds:
+        return ("the reply gave the general from-the-Moon verdict for a "
+                "transit that is sitting on one of your natal grahas, where "
+                "the contact is what governs",
+                "Ask about the contact itself — for example “what does "
+                "the transit sitting on my natal Venus mean?”")
     if "unknown-rule-id" in kinds:
         return ("the reply leaned on a classical rule that is not in this "
                 "app's rule library",

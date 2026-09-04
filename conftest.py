@@ -118,6 +118,13 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
         "invariant", "rate-limit arithmetic and append-only logging"),
     "TestAgentEndpoint": (
         "invariant", "product rules for the /ask surface"),
+    # Rule precedence. Mostly product rules about which classical rule is
+    # allowed to be reported as the verdict — enforced in the validator, so
+    # they hold regardless of what any model does on the day.
+    "TestContactPrecedence": (
+        "invariant", "product rule: a specific transit-to-natal contact "
+                     "governs the generic gocara-from-Moon verdict, and a "
+                     "conflict between rules must be named, not flattened"),
 }
 
 # Per-test overrides, keyed "Class::test_name" (parametrisation stripped).
@@ -336,6 +343,18 @@ OVERRIDE: dict[str, tuple[str, str]] = {
         ("external", "framework: the pañcāṅga set always yields something"),
     "TestReadingEngine::test_ui_renders_the_reading":
         ("characterization", "rendered output frozen"),
+
+    # The classical precedence itself (the specific displaces the general;
+    # a node on a natal graha eclipses it) is not this build's invention.
+    "TestContactPrecedence::test_precedence_rules_are_in_the_library_with_sources":
+        ("external", "visesa-over-samanya priority; nodal eclipse reading in "
+                     "the nodal-transit literature — each rule names its "
+                     "source in rulelib.py"),
+    # This one pins where transit Ketu actually is on a fixed date, which any
+    # ephemeris can check; the natal half is constructed around it.
+    "TestContactPrecedence::test_the_fixture_is_the_configuration_under_test":
+        ("external", "transit Ketu at Leo 14°03′58″ on 2026-03-15 — "
+                     "checkable in any ephemeris"),
 
     # --- deployability
     "TestDeployability::test_ephemeris_backend_is_explicit":

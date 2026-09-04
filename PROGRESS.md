@@ -1,5 +1,52 @@
 # PROGRESS
 
+## Rule precedence: a contact outranks the generic gocara verdict ✅ (2026-09-04)
+
+**The bug.** A live reading called transit Ketu *supportive* because Ketu
+stood 3rd from the natal Moon — while sitting 2.66° from natal Venus. Every
+placement in that answer was correct, so no validator check could see it. What
+was wrong was **which rule got reported as the verdict**: both rules were in
+the library, and nothing said which one wins.
+
+**Why the ledger was complicit.** `transit.ketu`'s statement ends on the
+weather card's own words — "Counted from the Moon it stands 3rd — a supportive
+gocara position." The agent quoted the ledger accurately. The contact existed
+in `doshas.transit_weather` for the dashboard but never reached the ledger at
+all, so the sharper fact was invisible to the agent.
+
+**What shipped.**
+
+* Five rules with named sources: `rule.transit.contact`,
+  `rule.transit.node_on_natal` (the eclipse reading — Ketu withdraws and
+  severs, Rahu inflates and adulterates), `rule.transit.contact_over_gocara`
+  (the precedence — *viśeṣa* displaces *sāmānya*), `rule.precedence.name_both`
+  (a conflict is named and resolved in the open, never flattened), and
+  `rule.graha.karakatva`. They travel only when a contact exists.
+* A new `contact.*` fact kind. Each carries the orb, the natal point's
+  **lordships in this chart** and its **karakatvas** — so "Venus is eclipsed"
+  becomes "your 6th and 11th, and love, comfort and refinement" — plus the
+  outranked verdict *quoted with its own rule id* and the statement that the
+  contact governs it.
+* `transit.<planet>` now ends on a GOVERNING CONTACT clause when one applies,
+  so the generic verdict is never the last thing the fact says.
+* A validator check, `find_ungoverned_generic`. It attributes a
+  supportive/favourable/easy claim to its **nearest subject graha** — the same
+  nearest-marker rule `_frame` uses, and skipping a graha that is only the
+  reference point of a count ("3rd *from* the Moon") — and withholds the
+  answer if that graha has an unacknowledged contact. Naming the natal point
+  anywhere, or citing the `contact.*` fact, satisfies it: the requirement is
+  that the conflict is visible, not that it is phrased one way.
+
+**The fixture is synthetic, and built backwards from a real ephemeris.**
+Transit Ketu genuinely sits at Leo 14°03′58″ on 2026-03-15; natal Venus is
+placed 2.66° ahead of it, the Moon in Gemini so Ketu's sign is 3rd from the
+Moon, and the lagna in Sagittarius so Venus lands in the 9th and rules the 6th
+and 11th — the reported configuration exactly, with no real birth record
+involved. 14 tests; the central one asserts that an answer whose every
+placement is correct is still withheld.
+
+279 passing (external 52 / invariant 141 / characterization 80).
+
 ## Varga positions in the ledger; Ashtakavarga roadmap ✅ (2026-09-03)
 
 **Inventory that prompted this.** Sidera computes exactly two divisional

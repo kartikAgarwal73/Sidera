@@ -3154,3 +3154,271 @@ class TestAgentEndpoint:
         # anywhere in what the browser receives.
         assert "sk-ant" not in page
         assert "not-a-real-key" not in page
+
+
+# --- rule precedence: a contact outranks the generic gocara verdict ----------
+#
+# A live reading called transit Ketu "supportive" from the 3rd-from-the-Moon
+# rule while Ketu sat 2.66° off natal Venus. Every placement in it was
+# correct, so no placement check could catch it; what was wrong was which
+# rule got reported as the verdict.
+#
+# The fixture below is SYNTHETIC and fictional — no birth record is ever a
+# fixture here. It is built backwards from a fixed moment: transit Ketu is
+# genuinely at Leo 14°03′58″ on 2026-03-15, so natal Venus is placed 2.66°
+# ahead of it, the Moon in Gemini so Ketu's sign is 3rd from the Moon (the
+# "supportive" count), and the lagna in Sagittarius so Venus lands in the 9th
+# and rules the 6th and 11th. The ephemeris half is real; only the birth half
+# is invented.
+CONTACT_WHEN = datetime(2026, 3, 15, 12, 0, tzinfo=timezone.utc)
+
+_CONTACT_NATAL = {
+    "Sun": 155.0, "Moon": 72.0, "Mars": 20.0, "Mercury": 170.0,
+    "Jupiter": 98.0, "Venus": 136.7261, "Saturn": 295.0,
+    "Rahu": 355.0, "Ketu": 175.0,
+}
+_CONTACT_LAGNA = 250.0            # Sagittarius 10°
+
+
+def node_on_benefic_chart():
+    """A node within 3° of a natal benefic, in a sign 3rd from the Moon."""
+    from engine import Chart, PlanetPosition, Position
+    lagna_sign = int(_CONTACT_LAGNA // 30)
+    planets = {
+        name: PlanetPosition(longitude=lon, name=name,
+                             house=(int(lon // 30) - lagna_sign) % 12 + 1)
+        for name, lon in _CONTACT_NATAL.items()
+    }
+    birth = BirthData(year=1990, month=6, day=1, hour=12, minute=0,
+                      latitude=19.0, longitude=73.0, tz="+05:30",
+                      place="(synthetic)")
+    return Chart(birth=birth, lagna=Position(longitude=_CONTACT_LAGNA),
+                 planets=planets, ayanamsa=24.0)
+
+
+@pytest.fixture(scope="module")
+def contact_chart():
+    return node_on_benefic_chart()
+
+
+class TestContactPrecedence:
+    def test_the_fixture_is_the_configuration_under_test(self, contact_chart):
+        """If this drifts, everything below is testing something else."""
+        from transits import angular_distance, transit_snapshot
+        from yogas import houses_owned_by
+        venus = contact_chart.planets["Venus"]
+        assert (venus.sign, venus.house) == ("Leo", 9)
+        assert houses_owned_by(contact_chart, "Venus") == (6, 11)
+        snap = transit_snapshot(contact_chart, CONTACT_WHEN)
+        ketu = snap.planets["Ketu"]
+        assert ketu.sign == "Leo"
+        orb = angular_distance(ketu.position.longitude, venus.longitude)
+        assert orb == pytest.approx(2.66, abs=0.05)
+        # …and the sign Ketu transits is 3rd from the natal Moon, which the
+        # generic rule calls supportive. That is the conflict.
+        moon_sign = contact_chart.planets["Moon"].sign_index
+        assert (ketu.position.sign_index - moon_sign) % 12 + 1 == 3
+
+    def test_contact_is_a_fact_with_its_own_id(self, contact_chart):
+        from chartfacts import build_facts
+        facts = {f.id: f for f in build_facts(contact_chart, CONTACT_WHEN)}
+        assert "contact.ketu-venus" in facts
+        value = facts["contact.ketu-venus"].value
+        assert value["transit"] == "Ketu" and value["point"] == "Venus"
+        assert value["orb"] == pytest.approx(2.66, abs=0.05)
+        assert value["node"] is True and value["benefic"] is True
+        assert value["from_moon"] == 3
+        assert value["generic_quality"] == "supportive"
+        assert value["governs"] is True
+        assert value["outranks_rule"] == "rule.transit.from_moon"
+        assert value["governing_rule"] == "rule.transit.node_on_natal"
+
+    def test_the_suppressed_significations_are_concrete(self, contact_chart):
+        """'Venus is eclipsed' is not usable; 'your 6th and 11th, and love,
+        comfort and refinement' is."""
+        from chartfacts import build_facts
+        facts = {f.id: f for f in build_facts(contact_chart, CONTACT_WHEN)}
+        fact = facts["contact.ketu-venus"]
+        assert fact.value["lordships"] == [6, 11]
+        assert "6th and 11th house" in fact.statement
+        assert "karaka of love, marriage" in fact.statement
+        assert "eclipse" in fact.statement
+
+    def test_the_fact_names_both_rules_and_says_which_governs(
+            self, contact_chart):
+        from chartfacts import build_facts
+        facts = {f.id: f for f in build_facts(contact_chart, CONTACT_WHEN)}
+        statement = facts["contact.ketu-venus"].statement
+        # the outranked rule, quoted with its own verdict…
+        assert "rule.transit.from_moon" in statement
+        assert "3rd from the natal Moon" in statement
+        assert "supportive" in statement
+        # …and the rule that displaces it, said plainly.
+        assert "GOVERNS" in statement
+        assert "rule.transit.contact_over_gocara" in statement
+        assert "rule.precedence.name_both" in statement
+
+    def test_the_transit_fact_no_longer_ends_on_the_generic_verdict(
+            self, contact_chart):
+        """The 'supportive' wording lives inside the transit fact itself.
+        Left as the last word there, it is what the reading quoted."""
+        from chartfacts import build_facts
+        facts = {f.id: f for f in build_facts(contact_chart, CONTACT_WHEN)}
+        transit = facts["transit.ketu"]
+        assert transit.value["governing_contacts"] == ["contact.ketu-venus"]
+        assert "GOVERNING CONTACT" in transit.statement
+        assert transit.statement.index("supportive") < \
+            transit.statement.index("GOVERNING CONTACT")
+        # …and no contact means no override clause, so the fact stays clean.
+        assert "GOVERNING CONTACT" not in facts["transit.jupiter"].statement
+        assert facts["transit.jupiter"].value["governing_contacts"] == []
+
+    def test_precedence_rules_are_in_the_library_with_sources(self):
+        from rulelib import RULES
+        for rid in ("rule.transit.contact", "rule.transit.node_on_natal",
+                    "rule.transit.contact_over_gocara",
+                    "rule.precedence.name_both", "rule.graha.karakatva"):
+            assert rid in RULES, rid
+            assert RULES[rid].source.strip()
+        assert "eclipse" in RULES["rule.transit.node_on_natal"].text
+        assert "governs" in RULES["rule.transit.contact_over_gocara"].text
+        assert "BOTH" in RULES["rule.precedence.name_both"].text
+
+    def test_precedence_rules_travel_only_when_a_contact_exists(
+            self, contact_chart, chart):
+        from chartfacts import active_rules
+        from rulelib import rules_for
+        ids = [r.id for r in active_rules(contact_chart, CONTACT_WHEN)]
+        assert "rule.transit.node_on_natal" in ids
+        assert "rule.transit.contact_over_gocara" in ids
+        assert "rule.precedence.name_both" in ids
+        assert "rule.graha.karakatva" in ids
+        # No contact, no precedence rules — the library stays a selection.
+        bare = [r.id for r in rules_for(transit_planets=["Saturn"])]
+        assert "rule.transit.contact_over_gocara" not in bare
+        assert "rule.transit.node_on_natal" not in bare
+        # A non-nodal contact gets the contact rules but not the nodal one.
+        venus_only = [r.id for r in rules_for(transit_planets=["Venus"],
+                                              contacts=["Venus"])]
+        assert "rule.transit.contact" in venus_only
+        assert "rule.transit.node_on_natal" not in venus_only
+
+    # --- the validator: the reading itself ---------------------------------
+
+    GENERIC_VERDICT = (
+        "Transiting Ketu is moving through Leo, your 9th house. Counted "
+        "from your natal Moon it stands 3rd, which is a supportive gocara "
+        "position, so this is an easy stretch for matters of fortune and "
+        "teachers.")
+
+    def test_the_generic_verdict_alone_is_a_violation(self, contact_chart):
+        """Every placement in this answer is correct. It is still wrong."""
+        from agent import validate_payload
+        payload = {
+            "answer": self.GENERIC_VERDICT,
+            "answer_statements": [
+                {"text": self.GENERIC_VERDICT, "label": "INTERPRETIVE",
+                 "fact_ids": ["transit.ketu"],
+                 "rule_ids": ["rule.transit.from_moon"],
+                 "rule": "the 3rd from the Moon is supportive"}],
+            "facts_used": ["transit.ketu"], "rules_applied": [],
+            "confidence": "Interpretive", "refused": False,
+            "refusal_reason": "",
+        }
+        violations = validate_payload(payload, contact_chart, CONTACT_WHEN)
+        kinds = {v.kind for v in violations}
+        assert "ungoverned-generic" in kinds, violations
+        # No placement claim is wrong — that is the point of this test.
+        assert not (kinds & {"wrong-natal-sign", "wrong-natal-house",
+                             "wrong-transit-sign", "wrong-transit-house"})
+        detail = next(v for v in violations
+                      if v.kind == "ungoverned-generic").detail
+        assert "natal Venus" in detail and "contact.ketu-venus" in detail
+
+    def test_the_reading_passes_once_the_conjunction_is_named_as_governing(
+            self, contact_chart):
+        from agent import validate_payload
+        answer = (
+            "Transiting Ketu is moving through Leo, your 9th house. By the "
+            "generic count it stands 3rd from your natal Moon, which the "
+            "gocara rule reads as supportive — but that is not what governs "
+            "here. Ketu is sitting 2.66° from your natal Venus, and a "
+            "node on a natal graha is read as an eclipse of it. Venus rules "
+            "your 6th and 11th houses and carries love, comfort and "
+            "refinement; those are the significations under a shadow while "
+            "this contact holds, and the conjunction is what governs, not "
+            "the from-the-Moon count.")
+        payload = {
+            "answer": answer,
+            "answer_statements": [
+                {"text": answer, "label": "INTERPRETIVE",
+                 "fact_ids": ["transit.ketu", "contact.ketu-venus",
+                              "planet.venus"],
+                 "rule_ids": ["rule.transit.node_on_natal",
+                              "rule.transit.contact_over_gocara",
+                              "rule.precedence.name_both"],
+                 "rule": "a node on a natal graha eclipses it, and the "
+                         "contact outranks the from-the-Moon verdict"}],
+            "facts_used": ["transit.ketu", "contact.ketu-venus"],
+            "rules_applied": ["rule.transit.contact_over_gocara"],
+            "confidence": "Interpretive", "refused": False,
+            "refusal_reason": "",
+        }
+        assert validate_payload(payload, contact_chart, CONTACT_WHEN) == []
+
+    def test_naming_the_natal_point_is_enough_to_qualify(self, contact_chart):
+        """The check requires the conflict to be visible, not phrased one
+        particular way — an answer that talks about the Venus contact and
+        also mentions the from-the-Moon count is not withheld."""
+        from agent import find_ungoverned_generic
+        from chartfacts import transit_contacts_summary
+        contacts = transit_contacts_summary(contact_chart, CONTACT_WHEN)
+        text = ("Transiting Ketu stands 3rd from the Moon, generically "
+                "supportive, but it is on your natal Venus and that "
+                "conjunction governs.")
+        assert find_ungoverned_generic(text, (), contacts) == []
+        # Citing the contact fact qualifies it too, even without the name.
+        bare = ("Transiting Ketu is in a supportive gocara position from "
+                "the Moon.")
+        assert find_ungoverned_generic(bare, ["contact.ketu-venus"],
+                                       contacts) == []
+        assert find_ungoverned_generic(bare, (), contacts)
+
+    def test_a_transit_with_no_contact_is_free_to_be_called_supportive(
+            self, contact_chart):
+        """The rule bites only where there is a conflict to resolve."""
+        from agent import find_ungoverned_generic
+        from chartfacts import transit_contacts_summary
+        contacts = transit_contacts_summary(contact_chart, CONTACT_WHEN)
+        assert [c["id"] for c in contacts] == ["contact.ketu-venus"]
+        text = ("Transiting Jupiter is moving through Gemini and stands in a "
+                "supportive position from your Moon.")
+        assert find_ungoverned_generic(text, (), contacts) == []
+
+    def test_a_refusal_is_not_checked_for_precedence(self, contact_chart):
+        """A refusal asserts nothing about the chart, so there is no verdict
+        to outrank."""
+        from agent import validate_payload
+        payload = {
+            "answer": "That is another person's chart, so I cannot read it "
+                      "here.",
+            "answer_statements": [], "facts_used": [], "rules_applied": [],
+            "confidence": "Interpretive", "refused": True,
+            "refusal_reason": "no hook in this chart",
+        }
+        assert validate_payload(payload, contact_chart, CONTACT_WHEN) == []
+
+    def test_withheld_message_explains_the_precedence_failure(self):
+        from agent import Violation, explain_violations
+        why, hint = explain_violations([Violation(
+            "ungoverned-generic", "…supportive…", "…")])
+        assert "governs" in why and "natal" in why
+        assert hint.strip()
+
+    def test_the_prompt_states_the_precedence(self):
+        from agent import SYSTEM_PROMPT
+        assert "PRECEDENCE" in SYSTEM_PROMPT
+        assert "OUTRANKS" in SYSTEM_PROMPT
+        assert "contact.*" in SYSTEM_PROMPT
+        assert "karakatvas" in SYSTEM_PROMPT
+        assert "Name BOTH" in SYSTEM_PROMPT
