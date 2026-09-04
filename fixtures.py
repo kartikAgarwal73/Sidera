@@ -2,10 +2,16 @@
 
 WHY THIS FILE EXISTS
 Sidera's claim is that its numbers are checkable. That claim is carried by a
-handful of charts whose expected values came from OUTSIDE this build, and the
-suite asserts against them (see `conftest.py` for how provenance is tracked).
-Those charts are real birth records, so they live in one place, they are
-overridable, and they can be removed without touching a single test.
+handful of charts the suite asserts against (see `conftest.py` for how
+provenance is tracked). They live in one place and are overridable, so a
+chart can be swapped or removed without touching a single test — which is
+exactly what happened when the original record was retired.
+
+**No real person's birth record is committed to this repository.** Every
+committed fixture is fictional, and that is a standing rule, not a current
+state of affairs: external cross-checks (ERFA today, AstroSage for
+Ashtakavarga) are run against the fictional chart, never against a real one.
+`TestFixtureHygiene` fails if a third record appears here.
 
 OVERRIDING
 Point `SIDERA_FIXTURES` at a JSON file to supply your own:

@@ -2294,6 +2294,42 @@ class TestChartFactLedger:
         assert a == b
 
 
+class TestFixtureHygiene:
+    """No real person's birth record is ever a fixture.
+
+    A standing instruction from the commissioner, and the reason this repo
+    exists as a fresh one. Encoded as a test because the rule has to survive
+    sessions where nobody remembers being told — and because milestone 2
+    adds an externally-supplied Ashtakavarga fixture, which is a new place a
+    real record could quietly arrive.
+    """
+
+    def test_committed_fixtures_are_all_fictional(self):
+        import fixtures as fx
+        assert set(fx._BUILT_IN) == {"reference", "aisha", "partner"}
+        # `reference` IS the fictional Aisha persona, not a third record.
+        assert fx._BUILT_IN["reference"] is fx._BUILT_IN["aisha"]
+        assert fx._BUILT_IN["aisha"] == fx._DEFAULT_AISHA
+        assert fx._BUILT_IN["partner"] == fx._DEFAULT_PARTNER
+        # Both are the corrected framework persona and the second fictional
+        # record — a new entry here needs a deliberate decision, not a drift.
+        assert (fx._DEFAULT_AISHA["year"], fx._DEFAULT_AISHA["place"]) == \
+            (1998, "Jaipur")
+        assert (fx._DEFAULT_PARTNER["year"], fx._DEFAULT_PARTNER["place"]) \
+            == (1993, "Pune")
+
+    def test_the_module_says_so_in_words(self):
+        import fixtures as fx
+        assert "No real person's birth record is committed" in fx.__doc__
+
+    def test_external_cross_checks_run_against_the_fictional_chart(self):
+        """ERFA today, AstroSage at milestone 2: an outside check must be
+        run against the fictional fixture, never against a real record."""
+        source = (HERE / "tools/erfa_cross_check.py").read_text(
+            encoding="utf-8")
+        assert 'fixtures.birth("reference")' in source
+
+
 class TestRuleLibrary:
     """The classical rules interpretation rests on."""
 

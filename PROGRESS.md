@@ -41,33 +41,65 @@ up front, the 12×8 grid folded under. Ledger design agreed as `sav.house.N`
 the 96 that `bav.<planet>.house.N` would need, which would have tripled the
 prompt payload and buried the useful facts.
 
-⚠ **VERIFICATION CONSTRAINT — read before starting.** The gate is meant to be
-the classical checksum: each planet's BAV total (Sun 48, Moon 49, Mars 39,
-Mercury 54, Jupiter 56, Venus 52, Saturn 39) and their sum, 337. Those
-figures are currently **recalled, not verified** — they came from the
-commissioner and from model training data, and this environment cannot reach
-a source to check them (wisdomlib and archive.org both refused egress,
-HTTP 000, on 2026-09-03).
+**TWO EXTERNAL GATES — route (a), agreed 2026-09-03.** This environment
+cannot reach a BPHS text (wisdomlib and archive.org both refused egress,
+HTTP 000), so verification happens off-machine and comes back as fixtures.
+Both gates are `external`; neither is written until its source is confirmed.
 
-Under this build's own provenance rules a recalled number cannot be an
-`external` gate. So either:
-  (a) verify the 56-row benefic-point table and the totals against a BPHS
-      text off-machine, and gate on them as `external`; or
-  (b) implement, compute the totals, and declare them `characterization`
-      until someone checks them — labelled honestly, not promoted.
-Option (a) is much better: the checksum is exactly the kind of anchor this
-suite is short of, and it catches transcription errors in the 56-row table
-that are otherwise silent and produce plausible-looking bindus.
+  GATE 1 · the classical checksum. Per-planet BAV totals — Sun 48, Moon 49,
+  Mars 39, Mercury 54, Jupiter 56, Venus 52, Saturn 39 — and their sum, 337.
+  Commissioner verifies these AND the 56-row benefic-point table against BPHS
+  text. Until that confirmation lands these figures are RECALLED, not
+  verified, and must not be gated on.
+
+  GATE 2 · an independent implementation. Commissioner runs the fictional
+  fixture through AstroSage and supplies its BAV/SAV. Same logic as the ERFA
+  cross-check: our own arithmetic agreeing with itself proves nothing.
+
+The two fail differently, which is why both. A compensating pair of
+transcription errors in the 56-row table can survive the checksum; AstroSage
+catches those. AstroSage cannot catch a shared misreading of the method;
+the checksum can.
+
+**Precondition on gate 2, else the comparison is meaningless:** AstroSage's
+D1 for the fixture must match ours first — Leo lagna 11°05′08″, Moon Taurus
+15°17′26″ (Rohiṇī pada 2), Lahiri ayanāṃśa 23.8378. If its chart differs, its
+Ashtakavarga will differ for reasons that have nothing to do with our BAV
+code.
+
+**Three ways that off-machine effort gets wasted — capture accordingly:**
+  1. **Per SIGN, not per house.** Ashtakavarga is computed per rāśi. Software
+     often displays it rotated to houses-from-lagna. Capture Aries→Pisces, or
+     capture both and label which is which.
+  2. **RAW, before reductions.** Milestone 2 defers trikoṇa and ekādhipatya
+     śodhana. A table already reduced will not match and will look like a bug
+     in our code. If AstroSage only shows reduced figures, we need the raw
+     ones or the gate is unusable.
+  3. **Seven BAVs, not eight.** Some software shows a Lagna BAV row as well.
+     We want the seven grahas; note separately if a Lagna row is present.
+
+Fixture lands as `fixtures_ashtakavarga.json` at the repo root, loaded by
+`test_gates.py` — a data file, so the numbers are inspectable and diffable
+rather than buried in assertions.
 
 Estimated 1.5–2 days: ~250-line module, ~12 tests, a dashboard domain, the
 ledger entries. The compute is easy; the table transcription is the risk.
 
+**Standing rule, restated 2026-09-03 and now enforced by a test:** no real
+person's birth record is ever a fixture. Every verification chart is
+fictional; external cross-checks (ERFA, AstroSage) run against the fictional
+fixture, never against a real one. `test_committed_fixtures_are_all_fictional`
+fails if a third record appears in `fixtures.py`.
+
 ### Milestone 3 — QUEUED
 
-Degree-level vargas; D2, D7, D12, D16, D30, D60; arudha padas and Upapada.
-Degree-level means extending `VargaPosition` with a divisional longitude,
-which unlocks varga nakshatras and dignity-by-degree and is a prerequisite
-for taking any of the finer vargas seriously.
+Ordering confirmed: **degree-level vargas FIRST**, then the finer divisionals
+(D2, D7, D12, D16, D30, D60), then arudha padas and Upapada. Extending
+`VargaPosition` with a divisional longitude is the prerequisite — it unlocks
+varga nakshatras and dignity-by-degree, and shipping D30 or D60 at sign level
+would mean building six charts that cannot be read properly and then
+rebuilding them.
+
 
 ## Personal birth data removed; fictional reference fixture ✅ (2026-08-26)
 
