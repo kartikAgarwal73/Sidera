@@ -102,19 +102,47 @@ reads this as a season for ...".
 
 That is the whole restriction. Everything else is yours to interpret.
 
-HOW TO READ A PERIOD
-For a question about how a stretch of time looks, work through:
-  1. The running mahadasha lord — the houses it rules (its affairs become the \
-material of the period), the house it occupies (where they play out), its \
-dignity (how much friction). Rahu and Ketu rule nothing: read them from the \
-house occupied.
-  2. The antardasha lord the same way — it inflects the era, it does not \
-replace it. Note whether the two lords are friends or not.
-  3. The slow transits — Saturn, Jupiter, Rahu, Ketu — by the house each \
-occupies and how long it stays, and from the natal Moon where that matters.
-  4. Draw the threads together: what this combination favours, what it asks \
-for, where the tradition would counsel care. Be specific to THIS chart.
-Then give the dated windows so the person knows the shape of the season.
+THE METHOD — WORK ALL FIVE FRAMES BEFORE YOU ANSWER
+When the question is about a life domain (love and marriage, work and money, \
+health and vitality, home, study and children) the ledger carries a `domain` \
+block: the houses that domain owns, why each is in the list, its natural \
+significators, the divisional chart that tests it, and the exact fact ids \
+each step is answerable from. Work the steps IN ORDER. Do not answer from \
+one fact.
+
+  1. NATAL. Every house in `domain.houses`, not only the first. For each: \
+what sign and what sits in it (`house.N`), where its LORD sits and in what \
+dignity (`natal.NL`), and what casts drishti onto it. A house is weak or \
+strong through its lord as much as through its occupants.
+  2. KARAKA. The natural significator's own condition — sign, house, \
+dignity, retrogression, what it rules here, what aspects it (`karaka.X`). A \
+domain whose karaka is afflicted reads differently from one whose karaka is \
+strong, whatever the houses say.
+  3. VARGA. The divisional chart named in `domain.varga` — its lagna \
+(`varga.d9.lagna`), the domain house within it (`d9.7th`), what occupies \
+that house and where its lord sits. This is the test of whether a natal \
+promise HOLDS. Strong in D1 and absent in the varga is the classic "promised \
+but does not carry".
+  4. DASHA. The running mahadasha and antardasha lords (`dasha.current`) — \
+what do THEY rule relative to the domain houses? A period run by the lord of \
+a domain house brings that domain forward. Quote the dates from the ledger.
+  5. TRANSIT. The slow movers, by BOTH what they occupy AND what they \
+aspect. `transit.saturn` gives the house it sits in; `transit.saturn.aspects` \
+gives the natal houses its own drishti reaches, with the dates it entered and \
+leaves. USE THE ASPECTS: "transiting Saturn in your 4th also aspects your \
+10th, so the career house is under its discipline until <the ledger's date>" \
+is the kind of sentence this step exists to produce. Check \
+`contact.*` for any transit sitting within 3° of a natal point, and \
+`transit.X.station` for retrogrades.
+  6. SYNTHESIS. Two to four paragraphs weaving all five together — what \
+SUPPORTS the matter, what DELAYS or complicates it, and what the running \
+period is emphasising right now. Not five labelled sections: one reading in \
+which the frames agree, disagree, and are weighed. Where two frames point \
+different ways, say so and say which governs.
+
+Every sentence of the synthesis is INTERPRETIVE and cites its rule. Timing \
+appears ONLY as a window already in the ledger — a dasha period's dates or a \
+transit's entry and exit. Never a month the ledger did not give you.
 
 WHEN TWO RULES CONFLICT — PRECEDENCE
 A `contact.*` fact OUTRANKS the generic "3rd/6th/10th/11th from the Moon is \
@@ -422,6 +450,60 @@ def find_ungoverned_generic(text: str, cited, contacts) -> list[Violation]:
     return out
 
 
+# --- transit-aspect claims ---------------------------------------------------
+#
+# Step 5 of the method asks for drishti, not only occupancy, which is a whole
+# new class of assertion: "transiting Saturn also aspects your 10th". That is
+# checkable — the ledger publishes `transit.saturn.aspects` — and if it is not
+# checked, the most useful sentences in a reading become the least verified.
+#
+# The offsets follow the reader's answer to "How far does the influence of
+# Rahu and Ketu reach?", so a claim is checked against the table the SELECTED
+# SCHOOL produced. Under "they do not reach out at all", any nodal aspect
+# claim is a violation.
+_ASPECT_VERB = (r"(?:aspects?|aspecting|casts?\s+(?:its\s+\w+\s+)?"
+                r"(?:drishti|dṛṣṭi|glance|gaze)\s+(?:on|onto|upon|to)|"
+                r"throws?\s+its\s+\w+\s+(?:onto|on)|looks?\s+(?:at|upon))")
+_CLAIM_TRANSIT_ASPECT = re.compile(
+    rf"\b({_PLANETS_RE})\b[^.;:\n]{{0,60}}?{_ASPECT_VERB}\s+"
+    rf"(?:your\s+|the\s+|his\s+|her\s+|their\s+)*(?:natal\s+)?"
+    rf"({_ORDINAL})\s*(?:house|bhava)?", re.IGNORECASE)
+
+
+def find_bad_transit_aspects(text: str, aspects: dict) -> list[Violation]:
+    """Drishti claims about a TRANSIT that the ledger does not support.
+
+    Only transit-framed claims are checked here: a natal drishti claim is a
+    different table, and `aspect.*` facts already cover it.
+    """
+    out: list[Violation] = []
+    seen = set()
+    for m in _CLAIM_TRANSIT_ASPECT.finditer(text or ""):
+        planet = _canon(m.group(1), PLANETS)
+        house = int(re.sub(r"\D", "", m.group(2)))
+        if _frame(text, m.start(), m.end()) != "transit":
+            continue
+        key = (planet, house)
+        if key in seen:
+            continue
+        seen.add(key)
+        allowed = aspects.get(planet, [])
+        if house in allowed:
+            continue
+        def _ord(n):
+            return {1: "1st", 2: "2nd", 3: "3rd"}.get(n, f"{n}th")
+        detail = (
+            f"transiting {planet} aspects the "
+            + ", ".join(_ord(h) for h in allowed) + " house"
+            + ("s" if len(allowed) > 1 else "")
+            if allowed else
+            f"transiting {planet} aspects no house at all under the "
+            f"selected school") + f" — not the {_ord(house)}"
+        out.append(Violation("wrong-transit-aspect", m.group(0).strip(),
+                             detail))
+    return out
+
+
 def _ledger_text(chart: Chart, when: datetime) -> str:
     parts = []
     for f in build_facts(chart, when):
@@ -582,6 +664,11 @@ def validate_payload(payload: dict, chart: Chart,
             f"'{token}' is not a date this chart produced"))
     # A correct-but-misreported reading: every placement true, the governing
     # rule dropped. Skipped for refusals, which assert nothing.
+    # Drishti claims about a transit, against the table the ledger
+    # published for the selected school.
+    from chartfacts import transit_aspects
+    out.extend(find_bad_transit_aspects(whole,
+                                        transit_aspects(chart, when)))
     if not payload.get("refused"):
         from chartfacts import transit_contacts_summary
         cited = set(payload.get("facts_used", ()))
@@ -648,6 +735,11 @@ def explain_violations(violations) -> tuple[str, str]:
         return ("the reply named a date your chart did not produce",
                 "Ask about a window the chart does carry — a dasha period or "
                 "a slow transit.")
+    if "wrong-transit-aspect" in kinds:
+        return ("the reply said a transiting graha aspects a house that it "
+                "does not aspect from where it currently stands",
+                "Ask what a particular transit is touching — for example "
+                "\u201cwhat is Saturn working on right now?\u201d")
     if "ungoverned-generic" in kinds:
         return ("the reply gave the general from-the-Moon verdict for a "
                 "transit that is sitting on one of your natal grahas, where "
@@ -811,6 +903,30 @@ def build_user_message(payload: dict, question: str) -> str:
     )
 
 
+def user_blocks(payload: dict, question: str) -> list[dict]:
+    """The ledger and the question as separate blocks, ledger cached.
+
+    The ledger roughly doubled when the checklist facts landed — house
+    lords, karakas, varga houses, transit drishti — and a session may ask
+    ten questions of the SAME chart. Splitting it out and marking it
+    ephemeral means the second question onward re-reads it from cache
+    instead of paying for it again. The question, which changes every time,
+    stays outside the cached block.
+
+    `domain` is part of the cached block and does vary with the question,
+    so a session that switches domains pays one cache miss. That is the
+    right trade: most sessions ask about one thing.
+    """
+    return [
+        {"type": "text",
+         "text": ("Fact ledger for this chart (your only source):\n"
+                  + json.dumps(payload, ensure_ascii=False,
+                               sort_keys=True, indent=1)),
+         "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": "Question: " + question.strip()},
+    ]
+
+
 def ask_chart(chart: Chart, when: datetime, question: str, *,
               client=None, model: str | None = None) -> AgentAnswer:
     """Answer one question, validated against the ledger before returning.
@@ -827,7 +943,10 @@ def ask_chart(chart: Chart, when: datetime, question: str, *,
 
     model = model or os.environ.get("SIDERA_ASK_MODEL", DEFAULT_MODEL)
     client = client or _client()
-    payload = facts_payload(chart, when)
+    # The question selects the domain, and the domain brings its checklist
+    # and the fact ids each step is answerable from. A general question gets
+    # no `domain` block and the five-frame method does not apply.
+    payload = facts_payload(chart, when, question)
 
     try:
         response = client.messages.create(
@@ -836,7 +955,7 @@ def ask_chart(chart: Chart, when: datetime, question: str, *,
             system=[{"type": "text", "text": SYSTEM_PROMPT,
                      "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user",
-                       "content": build_user_message(payload, question)}],
+                       "content": user_blocks(payload, question)}],
             output_config={
                 "effort": "low",
                 "format": {"type": "json_schema",

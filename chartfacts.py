@@ -35,13 +35,19 @@ from rulelib import (
 )
 from transits import (
     CONJUNCTION_ORB,
+    drishti_offsets as _drishti_offsets,
     TransitSnapshot,
     angular_distance,
+    aspects_on_house,
+    aspected_signs,
     natal_aspect_table,
+    next_sign_ingress,
+    sign_entry_before,
     transit_snapshot,
 )
 from vargas import dasamsa, navamsa
-from yogas import detect_all, dignity_grade, house_lords, houses_owned_by
+from yogas import (detect_all, dignity, dignity_grade, house_lords,
+                   houses_owned_by, sign_lord)
 
 
 @dataclass(frozen=True)
@@ -154,6 +160,51 @@ def transit_contacts_summary(chart: Chart, when: datetime,
             })
     out.sort(key=lambda c: (c["orb"], c["id"]))
     return out
+
+
+def transit_aspects(chart: Chart, when: datetime,
+                    snapshot: TransitSnapshot | None = None) -> dict:
+    """{planet: [natal houses it aspects]} for today's sky.
+
+    WHY THE LEDGER NEEDS THIS SEPARATELY FROM OCCUPATION
+    Occupation says where a graha *is*; drishti says everything else it is
+    doing. Saturn in the 4th is also working the 10th, and a reading that
+    only reports occupancy silently drops two-thirds of what the classical
+    method looks at.
+
+    The offsets come from `transits.drishti_offsets`, which follows the
+    reader's answer to "How far does the influence of Rahu and Ketu reach?"
+    — so the nodes' rows here are the selected school's, not a constant.
+    Shared with the validator, so a claim can be checked against exactly the
+    table the ledger published.
+    """
+    snapshot = snapshot or transit_snapshot(chart, when)
+    lagna = chart.lagna.sign_index
+    return {
+        name: sorted((s - lagna) % 12 + 1
+                     for s in aspected_signs(
+                         name, snapshot.planets[name].position.sign_index))
+        for name in PLANETS
+    }
+
+
+def _window(planet: str, when: datetime) -> dict:
+    """When this transit began and when it ends, as dated strings.
+
+    Timing may only be quoted as a window the ledger produced. Without the
+    entry date the agent has half a window and tends to invent the other
+    half — which `find_invented_dates` then withholds the whole answer for.
+    """
+    # sign_entry_before returns a datetime; next_sign_ingress an Ingress.
+    entered = sign_entry_before(planet, when)
+    leaves = next_sign_ingress(planet, when)
+    leaves_at = leaves.when if leaves else None
+    return {
+        "entered": entered.strftime("%b %Y") if entered else None,
+        "until": leaves_at.strftime("%b %Y") if leaves_at else None,
+        "entered_iso": entered.date().isoformat() if entered else None,
+        "until_iso": leaves_at.date().isoformat() if leaves_at else None,
+    }
 
 
 def _contact_statement(c: dict) -> str:
@@ -271,6 +322,70 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
                    "occupants": here},
         ))
 
+    # --- house lords, as their own facts ------------------------------------
+    # Step 1 of the reading checklist asks where each domain house's LORD
+    # sits and how well it is placed. That was derivable from two other
+    # facts and therefore, in practice, skipped: the agent would name the
+    # 7th house and stop. One fact per lord, `natal.7L`, makes the step
+    # answerable in a single citation — and its absence visible.
+    for house in range(1, 13):
+        lord = lords[house]
+        lp = chart.planets[lord]
+        grade = dignity_grade(chart, lord) or dignity(chart, lord)
+        onto = aspects_on_house(chart, house)
+        also = [h for h in houses_owned_by(chart, lord) if h != house]
+        facts.append(Fact(
+            id=f"natal.{house}L",
+            kind="lord",
+            statement=(
+                f"The lord of the {ordinal(house)} house is {lord}, which "
+                f"sits in {lp.sign} in the {ordinal(lp.house)} house"
+                + (f" — dignity: {grade}" if grade else "")
+                + (f". {lord} also rules the "
+                   + _and_list([ordinal(h) for h in also]) + " house"
+                   + ("s" if len(also) > 1 else "") + "."
+                   if also else ".")
+                + (f" The {ordinal(house)} house receives drishti from "
+                   + _and_list(onto) + "." if onto else
+                   f" No graha aspects the {ordinal(house)} house.")),
+            value={"house": house, "lord": lord, "lord_sign": lp.sign,
+                   "lord_house": lp.house, "lord_dignity": grade or None,
+                   "lord_retrograde": lp.retrograde,
+                   "also_rules": also, "aspected_by": onto,
+                   "occupants": occupants[house]},
+        ))
+
+    # --- karakas ------------------------------------------------------------
+    # Step 2. A graha's natural significations are constant, but its
+    # CONDITION is not, and that condition is what the step asks for.
+    for name in PLANETS:
+        p = chart.planets[name]
+        grade = dignity_grade(chart, name) or dignity(chart, name)
+        onto = [a.aspecting for a in natal_aspect_table(chart)
+                if a.aspected == name]
+        owns = houses_owned_by(chart, name)
+        facts.append(Fact(
+            id=f"karaka.{name.lower()}",
+            kind="karaka",
+            statement=(
+                f"As a natural significator, {name} carries "
+                f"{KARAKATVAS[name]}. In this chart it is in {p.sign}, "
+                f"{ordinal(p.house)} house"
+                + (f", dignity {grade}" if grade else "")
+                + (", retrograde" if p.retrograde else "")
+                + (", ruling the " + _and_list([ordinal(h) for h in owns])
+                   + " house" + ("s" if len(owns) > 1 else "")
+                   if owns else ", ruling no sign")
+                + (", and aspected by " + _and_list(onto) if onto
+                   else ", unaspected")
+                + "."),
+            value={"planet": name, "karakatvas": KARAKATVAS[name],
+                   "sign": p.sign, "house": p.house,
+                   "dignity": grade or None, "retrograde": p.retrograde,
+                   "rules": list(owns), "aspected_by": onto,
+                   "benefic": name in NATURAL_BENEFICS},
+        ))
+
     # --- natal aspects -----------------------------------------------------
     # An aspect involving a node depends on an answer the reader gave, so it
     # carries that answer. The agent then cannot state a nodal aspect
@@ -340,6 +455,34 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
                 value={"planets": vargottama},
             ))
 
+        # Step 3 asks what is IN the domain house of the divisional chart.
+        # The per-planet varga facts held that, scattered across nine
+        # entries the agent had to assemble itself — and did not. One fact
+        # per divisional house, `d9.7th`, makes the step a single citation.
+        from engine import SIGNS as _SIGNS
+        vlagna = _SIGNS.index(varga.lagna_sign)
+        for house in range(1, 13):
+            sign = _SIGNS[(vlagna + house - 1) % 12]
+            here = [n for n in PLANETS if varga.planets[n].house == house]
+            lord = sign_lord(_SIGNS.index(sign))
+            lord_in = varga.planets[lord].house
+            facts.append(Fact(
+                id=f"{label}.{ordinal(house)}",
+                kind="varga",
+                statement=(
+                    f"In the {label.upper()}, the {ordinal(house)} house is "
+                    f"{sign}, ruled by {lord} (which sits in the "
+                    f"{ordinal(lord_in)} house of the {label.upper()})"
+                    + (", occupied by " + _and_list(here) + "."
+                       if here else ", with no graha in it.")
+                    + " (Sign-level only: this build computes no degree "
+                      "within a divisional sign, so there is no dignity by "
+                      "degree here.)"),
+                value={"varga": label.upper(), "house": house, "sign": sign,
+                       "lord": lord, "lord_house": lord_in,
+                       "occupants": here, "degree": None},
+            ))
+
     # --- yogas -------------------------------------------------------------
     for yoga in detect_all(chart):
         facts.append(Fact(
@@ -386,6 +529,7 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
     snapshot = transit_snapshot(chart, when)
     weather = {c["planet"]: c for c in transit_weather(chart, snapshot)}
     contacts = transit_contacts_summary(chart, when, snapshot)
+    aspects = transit_aspects(chart, when, snapshot)
     by_transit: dict[str, list[dict]] = {}
     for c in contacts:
         by_transit.setdefault(c["transit"], []).append(c)
@@ -428,8 +572,74 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
                    "until": card["until"] if card else None,
                    "demanding": card["demanding"] if card else None,
                    "slow_mover": card is not None,
+                   "aspects": aspects[name],
                    "governing_contacts": [c["id"] for c in touching]},
         ))
+
+    # --- what each transit ASPECTS, not only what it occupies --------------
+    # A reading built on occupancy alone drops most of what a transit does.
+    # Saturn in the 4th is also disciplining the 10th, and the career
+    # question turns on that. One fact per graha, with the window, so the
+    # synthesis can say "…and it holds until <date>" without inventing one.
+    for name in PLANETS:
+        tp = snapshot.planets[name]
+        window = _window(name, when)
+        houses = aspects[name]
+        slow = name in ("Saturn", "Jupiter", "Rahu", "Ketu")
+        nodal = school_note("node_reach") if name in NODES else ""
+        if houses:
+            reach = ("its own drishti reaches your "
+                     + _and_list([ordinal(h) for h in houses]) + " house"
+                     + ("s" if len(houses) > 1 else ""))
+        else:
+            reach = "it casts no drishti at all under the selected school"
+        facts.append(Fact(
+            id=f"transit.{name.lower()}.aspects",
+            kind="transit",
+            statement=(
+                f"TRANSIT DRISHTI (today, not birth): from {tp.sign} — your "
+                f"{ordinal(tp.natal_house)} house — transiting {name}, "
+                f"{reach}."
+                + (f" It entered {tp.sign} in {window['entered']}."
+                   if window["entered"] else "")
+                + (f" It leaves in {window['until']}."
+                   if window["until"] else "")
+                + ("" if slow else " It is a fast mover: this is texture "
+                   "over the slow transits, not the main current.")
+                + nodal),
+            value={"planet": name, "sign": tp.sign,
+                   "natal_house": tp.natal_house,
+                   "aspects": houses,
+                   "offsets": list(_drishti_offsets(name)),
+                   "entered": window["entered"],
+                   "until": window["until"],
+                   "entered_iso": window["entered_iso"],
+                   "until_iso": window["until_iso"],
+                   "slow_mover": slow,
+                   "school": (schools.chosen("node_reach").school
+                              if name in NODES else None)},
+        ))
+        # (d) stations and retrogrades — the sensitive part of a window.
+        if tp.retrograde or name in ("Rahu", "Ketu"):
+            facts.append(Fact(
+                id=f"transit.{name.lower()}.station",
+                kind="transit",
+                statement=(
+                    f"TRANSIT MOTION (today): {name} is retrograde"
+                    + (" — the nodes are always so, which is their nature "
+                       "rather than a condition of this moment."
+                       if name in NODES else
+                       ", so the ground it has already covered is being "
+                       "gone over again. Classically a retrograde graha "
+                       "revisits rather than advances; the house it "
+                       "occupies and the houses it aspects are reworked, "
+                       "not opened.")),
+                value={"planet": name, "retrograde": True,
+                       "always_retrograde": name in NODES,
+                       "speed": round(tp.position.speed, 6),
+                       "natal_house": tp.natal_house,
+                       "aspects": houses},
+            ))
 
     # --- transit-to-natal contacts ----------------------------------------
     # A separate fact per contact, so it has an id the answer can cite and
@@ -486,15 +696,56 @@ def active_rules(chart: Chart, when: datetime) -> list:
                      contacts=sorted(contacts))
 
 
-def facts_payload(chart: Chart, when: datetime) -> dict:
+def domain_brief(chart: Chart, question: str) -> dict | None:
+    """The checklist for the domain a question is about, with its fact ids.
+
+    The agent used to be told "read the chart" and given 140 facts. That
+    produced an answer built on whichever fact it happened to look at
+    first. This hands it the named steps AND the exact ids each step is
+    answerable from, so a skipped step is visible rather than plausible.
+    """
+    from domains import CHECKLIST, detect
+    domain = detect(question)
+    if domain is None:
+        return None
+    lords = house_lords(chart)
+    varga = domain.varga.lower()
+    return {
+        **domain.as_dict(),
+        "checklist": [{"step": name, "do": what}
+                      for name, what in CHECKLIST],
+        "fact_ids": {
+            "NATAL": ([f"house.{h}" for h in domain.houses]
+                      + [f"natal.{h}L" for h in domain.houses]
+                      + sorted({f"planet.{lords[h].lower()}"
+                                for h in domain.houses})),
+            "KARAKA": [f"karaka.{k.lower()}" for k in domain.karakas],
+            "VARGA": ([f"{varga}.lagna" if False else f"varga.{varga}.lagna"]
+                      + [f"{varga}.{ordinal(h)}" for h in domain.houses]),
+            "DASHA": ["dasha.current"] + [f"dasha.md.{p.lower()}"
+                                          for p in PLANETS],
+            "TRANSIT": ([f"transit.{p.lower()}" for p in
+                         ("Saturn", "Jupiter", "Rahu", "Ketu")]
+                        + [f"transit.{p.lower()}.aspects" for p in
+                           ("Saturn", "Jupiter", "Rahu", "Ketu")]),
+        },
+    }
+
+
+def facts_payload(chart: Chart, when: datetime,
+                  question: str = "") -> dict:
     """The ledger as the JSON the agent is given. Sorted, so it caches."""
     facts = build_facts(chart, when)
-    return {
+    payload = {
         "as_of": when.date().isoformat(),
         "system": "sidereal, Lahiri ayanamsa, Whole Sign houses",
         "facts": [f.as_dict() for f in facts],
         "rules": [r.as_dict() for r in active_rules(chart, when)],
     }
+    brief = domain_brief(chart, question)
+    if brief:
+        payload["domain"] = brief
+    return payload
 
 
 def fact_index(chart: Chart, when: datetime) -> dict[str, Fact]:

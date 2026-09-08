@@ -145,6 +145,15 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
     # answer) plus the two that give the feature its integrity: no live
     # option may be a control that changes nothing, and every school-
     # dependent statement carries its school.
+    # /ask as a method rather than a lookup. Product rules about the reading
+    # procedure — every checklist step must be answerable from the ledger,
+    # the prompt must require the steps in order, and the new class of claim
+    # (transit drishti) must be as checkable as the old ones.
+    "TestDueDiligenceReading": (
+        "invariant", "product rule: a domain question is read across all "
+                     "five frames, every step is answerable from the "
+                     "ledger, and a transit-aspect claim is checked "
+                     "against the table the selected school produced"),
     "TestComputationOptions": (
         "invariant", "product rules: the question must be answerable "
                      "without the vocabulary, every live option must move a "

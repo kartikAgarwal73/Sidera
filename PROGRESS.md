@@ -1,5 +1,80 @@
 # PROGRESS
 
+## /ask becomes a reading method, not a lookup ✅ (2026-09-08)
+
+**The failure.** Asked *"will I marry?"*, the agent found the 7th house, said
+something about it, and stopped. That is fact retrieval wearing a reading's
+clothes. An astrologer doing the work reads the 7th **and** the houses that
+support it, each house's **lord**, the **karaka's** condition, the
+**divisional** chart that tests whether the promise holds, the **period**
+actually running, and what the slow **transits** are doing to those houses —
+by drishti as well as by occupancy — and only then says anything.
+
+### The method, encoded
+
+`domains.py` writes it down: which houses each domain owns and **why each one
+is in the list** (marriage: 7th, plus the 2nd because a marriage adds to the
+household, the 5th for the courtship that precedes it, the 8th as the 2nd from
+the 7th, the 11th for a desire fulfilled), the natural significators, and the
+divisional chart that tests it. Five domains ship: marriage, career, vitality,
+home, learning.
+
+The question selects the domain, and the ledger then carries a `domain` block
+with the checklist **and the exact fact ids each step is answerable from** —
+so a skipped step is visible rather than plausible. The prompt requires
+`NATAL → KARAKA → VARGA → DASHA → TRANSIT → SYNTHESIS`, in order, and the
+synthesis is two to four paragraphs weaving all five rather than five labelled
+sections.
+
+### The ledger had to grow to make the checklist answerable
+
+Steps 1–3 were asking for things that were *derivable* from other facts and
+therefore, in practice, skipped. 81 → **140 facts** (66 KB):
+
+| New | What it carries |
+|---|---|
+| `natal.1L` … `natal.12L` | each house's lord, where it sits, its dignity, what else it rules, and the drishti falling on that house |
+| `karaka.venus` … (×9) | the significator's **condition** — sign, house, dignity, retrogression, lordships, what aspects it — not just its meanings |
+| `d9.7th`, `d10.10th` … (×24) | the domain house of a divisional chart in one citation, instead of nine per-planet facts the agent had to assemble |
+| `transit.saturn.aspects` (×9) | **the natal houses each transit aspects**, with the dates it entered and leaves |
+| `transit.rahu.station` | retrogrades, and the note that the nodes are always so |
+
+### Step 5 is the substantive one
+
+A transit reading built on occupancy alone drops most of what the classical
+method looks at. *"Transiting Saturn in your 4th also aspects your 10th, so
+the career house is under its discipline until Jun 2027"* is the sentence the
+step exists to produce, and it needs three things the ledger did not have: the
+aspect list, the entry date, and the exit date. Without the **entry** date the
+agent has half a window and invents the other half — which
+`find_invented_dates` then withholds the whole answer for.
+
+The offsets come from `transits.drishti_offsets`, so the nodes' rows follow
+the reader's answer to *"How far does the influence of Rahu and Ketu reach?"*.
+
+### The validator gained a class of claim, not a loophole
+
+`find_bad_transit_aspects` checks drishti claims against the table the ledger
+published **for the selected school**. Under *"they do not reach out at all"*
+any nodal aspect claim is a violation. Natal drishti claims are deliberately
+not checked here — a different table — because checking them against the
+transit one would withhold true sentences, which is the exact bug class that
+made transits unusable before frames existed.
+
+The scope guard is unchanged: *"will she marry me?"*, *"does Priya love me?"*
+still refuse, and a refusal is still not a way to smuggle placement claims
+past the checks.
+
+### One cost, and what was done about it
+
+The ledger doubled, and a session may ask ten questions of the same chart. The
+user message is now two content blocks — the ledger marked `ephemeral`, the
+question outside it — so questions two through ten read the ledger from cache
+instead of paying for it again. A session that switches domains pays one cache
+miss, which is the right trade.
+
+346 passing (external 70 / invariant 186 / characterization 80).
+
 ## Computation options, asked in plain English ✅ (2026-09-08)
 
 Jyotisha is not one method, and on a handful of points the sources genuinely

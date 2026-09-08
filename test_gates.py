@@ -15,6 +15,7 @@ import fixtures
 
 from dashas import DASHA_SEQUENCE, nakshatra_of, nakshatra_table, vimshottari
 from engine import PLANETS, SIGNS, BirthData, compute_chart
+from explain import ordinal
 from transits import (
     DRISHTI_OFFSETS,
     angular_distance,
@@ -2892,7 +2893,8 @@ class TestGroundedAgent:
         # Interpretation is REQUIRED, and the prose comes first.
         assert "Lead with the reading" in SYSTEM_PROMPT
         assert "at least three interpretive" in SYSTEM_PROMPT
-        assert "HOW TO READ A PERIOD" in SYSTEM_PROMPT
+        # Renamed when the period walkthrough became the five-frame method.
+        assert "WORK ALL FIVE FRAMES BEFORE YOU ANSWER" in SYSTEM_PROMPT
         # The one hard line: outcomes, not interpretation.
         assert "THE ONE HARD LINE" in SYSTEM_PROMPT
         assert "You may not say what WILL happen." in SYSTEM_PROMPT
@@ -2984,7 +2986,16 @@ class TestGroundedAgent:
         ask_chart(chart, AGENT_WHEN, "Anything?", client=client,
                   model="test-model")
         sent = client.messages.calls[0]
-        body = sent["messages"][0]["content"]
+        # The ledger and the question are separate content blocks so the
+        # ledger can be cached across a session's ten questions; the
+        # privacy check runs over every block, not just the first.
+        blocks = sent["messages"][0]["content"]
+        assert isinstance(blocks, list) and len(blocks) == 2
+        assert blocks[0]["cache_control"] == {"type": "ephemeral"}
+        assert "cache_control" not in blocks[1], (
+            "the question changes every time and must stay out of the "
+            "cached prefix")
+        body = "".join(b["text"] for b in blocks)
         # Facts, yes. The BIRTH RECORD — from which a chart could be
         # recomputed, and which is the one thing that must never leave the
         # server — no.
@@ -4350,3 +4361,365 @@ class TestComputationOptions:
         html = client.get("/").get_data(as_text=True)
         marker = 'name="school_node_reach" value="classical"'
         assert "checked" in html[html.index(marker):html.index(marker) + 260]
+
+
+class TestDueDiligenceReading:
+    """/ask as a method, not a lookup.
+
+    The failure this replaces: asked "will I marry?", the agent found the
+    7th house, said something about it, and stopped. An astrologer doing
+    the work reads the 7th AND the houses that support it, each house's
+    LORD, the karaka's condition, the divisional chart that tests the
+    promise, the period actually running, and what the slow transits are
+    doing to those houses — by aspect as well as by occupancy — and only
+    then says anything.
+
+    These assert that every step is ANSWERABLE from the ledger, that the
+    prompt requires them in order, and that a synthesis built across the
+    frames survives the validator unchanged in strictness.
+    """
+
+    WHEN = datetime(2026, 9, 3, tzinfo=timezone.utc)
+
+    @pytest.fixture(scope="class")
+    @classmethod
+    def ledger(cls, chart):
+        from chartfacts import build_facts
+        return {f.id: f for f in build_facts(chart, cls.WHEN)}
+
+    # --- the checklist is answerable ------------------------------------
+
+    def test_every_domain_step_has_the_facts_it_needs(self, chart, ledger):
+        """A checklist step with no fact behind it is an instruction to
+        invent. Each domain's ids must all resolve."""
+        from chartfacts import domain_brief
+        import domains
+        for domain in domains.DOMAINS.values():
+            brief = domain_brief(chart, domain.triggers[0])
+            assert brief is not None, domain.id
+            for step, ids in brief["fact_ids"].items():
+                assert ids, f"{domain.id}/{step} lists no facts"
+                for fid in ids:
+                    assert fid in ledger, f"{domain.id}/{step}: {fid}"
+
+    def test_house_lord_facts_exist_for_all_twelve(self, chart, ledger):
+        from yogas import house_lords
+        lords = house_lords(chart)
+        for house in range(1, 13):
+            fact = ledger[f"natal.{house}L"]
+            assert fact.value["lord"] == lords[house]
+            assert fact.value["lord_house"] == \
+                chart.planets[lords[house]].house
+            assert fact.value["lord_sign"] == \
+                chart.planets[lords[house]].sign
+            # The step also asks what falls ON the house.
+            assert "aspected_by" in fact.value
+            assert ordinal(house) in fact.statement
+
+    def test_karaka_facts_carry_condition_not_just_significations(
+            self, chart, ledger):
+        from yogas import houses_owned_by
+        for planet in PLANETS:
+            fact = ledger[f"karaka.{planet.lower()}"]
+            assert fact.value["sign"] == chart.planets[planet].sign
+            assert fact.value["house"] == chart.planets[planet].house
+            assert fact.value["rules"] == list(houses_owned_by(chart, planet))
+            assert fact.value["karakatvas"]
+            # Condition, not just meaning — this is what step 2 asks for.
+            assert "dignity" in fact.value and "aspected_by" in fact.value
+
+    def test_varga_domain_houses_are_addressable(self, chart, ledger):
+        """`d9.7th` in one citation, rather than nine per-planet facts the
+        agent has to assemble and did not."""
+        from engine import SIGNS
+        from vargas import dasamsa, navamsa
+        for label, varga in (("d9", navamsa(chart)), ("d10", dasamsa(chart))):
+            lagna = SIGNS.index(varga.lagna_sign)
+            for house in range(1, 13):
+                fact = ledger[f"{label}.{ordinal(house)}"]
+                assert fact.value["sign"] == SIGNS[(lagna + house - 1) % 12]
+                assert fact.value["occupants"] == [
+                    p for p in PLANETS if varga.planets[p].house == house]
+                # The build's own limit is restated so the agent does not
+                # reach for a varga degree that does not exist.
+                assert "no degree" in fact.statement
+
+    # --- step 5: drishti, not just occupancy ----------------------------
+
+    def test_every_transit_publishes_the_houses_it_aspects(self, chart,
+                                                           ledger):
+        from chartfacts import transit_aspects
+        from transits import drishti_offsets, transit_snapshot
+        expected = transit_aspects(chart, self.WHEN)
+        snap = transit_snapshot(chart, self.WHEN)
+        for planet in PLANETS:
+            fact = ledger[f"transit.{planet.lower()}.aspects"]
+            assert fact.value["aspects"] == expected[planet]
+            assert fact.value["offsets"] == list(drishti_offsets(planet))
+            assert fact.value["natal_house"] == \
+                snap.planets[planet].natal_house
+            # Occupancy is a different fact and must agree with this one.
+            assert ledger[f"transit.{planet.lower()}"].value["aspects"] == \
+                expected[planet]
+
+    def test_transit_aspect_facts_carry_entry_and_exit_dates(self, ledger):
+        """Timing may only be quoted from the ledger, so the ledger has to
+        supply both ends of the window — not just the exit."""
+        for planet in ("Saturn", "Jupiter", "Rahu", "Ketu"):
+            value = ledger[f"transit.{planet.lower()}.aspects"].value
+            assert value["entered"] and value["until"], planet
+            assert re.match(r"^[A-Z][a-z]{2} \d{4}$", value["entered"])
+            assert value["entered_iso"] < value["until_iso"], planet
+            statement = ledger[f"transit.{planet.lower()}.aspects"].statement
+            assert value["entered"] in statement
+            assert value["until"] in statement
+
+    def test_the_nodes_aspect_table_follows_the_selected_school(self, chart):
+        """The ledger must publish the reader's answer, not a constant —
+        otherwise the validator would check claims against a table the
+        reader never chose."""
+        import schools
+        from chartfacts import build_facts
+        for choice, expect_any in (("classical", True), ("opposition", True),
+                                   ("none", False)):
+            with schools.use({"node_reach": choice}):
+                facts = {f.id: f for f in build_facts(chart, self.WHEN)}
+                for node in ("rahu", "ketu"):
+                    value = facts[f"transit.{node}.aspects"].value
+                    assert bool(value["aspects"]) is expect_any, choice
+                    assert value["school"] == \
+                        schools.chosen("node_reach").school
+                    assert value["school"] in \
+                        facts[f"transit.{node}.aspects"].statement
+
+    def test_retrogrades_and_stations_are_in_the_ledger(self, chart, ledger):
+        from transits import transit_snapshot
+        snap = transit_snapshot(chart, self.WHEN)
+        for planet in PLANETS:
+            fid = f"transit.{planet.lower()}.station"
+            retro = snap.planets[planet].retrograde
+            assert (fid in ledger) is bool(retro), planet
+            if retro:
+                assert ledger[fid].value["retrograde"] is True
+                assert ledger[fid].value["always_retrograde"] is (
+                    planet in ("Rahu", "Ketu"))
+
+    # --- the validator gained a class of claim, not a loophole ----------
+
+    def test_a_wrong_transit_aspect_is_a_violation(self, chart):
+        """The most useful sentence in the new method — 'Saturn in your 4th
+        also aspects your 10th' — must be the most checked, not the least."""
+        from agent import validate_payload
+        from chartfacts import transit_aspects
+        aspects = transit_aspects(chart, self.WHEN)
+        wrong = next(h for h in range(1, 13) if h not in aspects["Saturn"])
+        right = aspects["Saturn"][0]
+        bad = (f"Transiting Saturn also aspects your {ordinal(wrong)} "
+               f"house, so that department is under its discipline.")
+        good = (f"Transiting Saturn also aspects your {ordinal(right)} "
+                f"house, so that department is under its discipline.")
+        for text, expect in ((bad, True), (good, False)):
+            payload = {"answer": text, "answer_statements": [],
+                       "facts_used": [], "rules_applied": [],
+                       "confidence": "Interpretive", "refused": False,
+                       "refusal_reason": ""}
+            kinds = {v.kind for v in
+                     validate_payload(payload, chart, self.WHEN)}
+            assert ("wrong-transit-aspect" in kinds) is expect, text
+
+    def test_a_nodal_aspect_claim_is_checked_against_the_chosen_school(
+            self, chart):
+        """Under 'they do not reach out at all' the nodes aspect nothing,
+        so any nodal drishti claim is a violation — the setting is not
+        cosmetic."""
+        import schools
+        from agent import find_bad_transit_aspects
+        from chartfacts import transit_aspects
+        with schools.use({"node_reach": "classical"}):
+            aspects = transit_aspects(chart, self.WHEN)
+            house = aspects["Rahu"][0]
+            claim = (f"Transiting Rahu currently aspects your "
+                     f"{ordinal(house)} house.")
+            assert find_bad_transit_aspects(claim, aspects) == []
+        with schools.use({"node_reach": "none"}):
+            aspects = transit_aspects(chart, self.WHEN)
+            assert aspects["Rahu"] == []
+            bad = find_bad_transit_aspects(claim, aspects)
+            assert bad and bad[0].kind == "wrong-transit-aspect"
+            assert "no house at all" in bad[0].detail
+
+    def test_a_natal_drishti_claim_is_not_checked_as_a_transit_one(self,
+                                                                   chart):
+        """Two different tables. A natal claim checked against the transit
+        table would withhold true sentences — the exact bug class that made
+        transits unusable before frames existed."""
+        from agent import find_bad_transit_aspects
+        from chartfacts import transit_aspects
+        aspects = transit_aspects(chart, self.WHEN)
+        natal = "In your birth chart, natal Jupiter aspects the 5th house."
+        assert find_bad_transit_aspects(natal, aspects) == []
+
+    # --- the whole path, through the fake transport ---------------------
+
+    def _multi_frame_reply(self, chart, when, domain_id):
+        """A synthesis of the kind the method is meant to produce, built
+        from THIS chart's real facts so it is a fair test of the
+        validator rather than of the fixture."""
+        from chartfacts import build_facts, domain_brief
+        import domains
+        facts = {f.id: f for f in build_facts(chart, when)}
+        domain = domains.DOMAINS[domain_id]
+        brief = domain_brief(chart, domain.triggers[0])
+        main = domain.main_house
+        lord = facts[f"natal.{main}L"].value
+        karaka = facts[f"karaka.{domain.karakas[0].lower()}"].value
+        varga = facts[f"{domain.varga.lower()}.{ordinal(main)}"].value
+        dasha = facts["dasha.current"].value
+        saturn = facts["transit.saturn.aspects"].value
+        statements = [
+            (f"Your {ordinal(main)} house is ruled by {lord['lord']}, "
+             f"which sits in the {ordinal(lord['lord_house'])} house.",
+             ["rule.dasha.lordship", f"rule.house.{main}"],
+             [f"natal.{main}L", f"house.{main}"]),
+            (f"{karaka['planet']}, the natural significator here, is in "
+             f"the {ordinal(karaka['house'])} house.",
+             ["rule.graha.karakatva"],
+             [f"karaka.{karaka['planet'].lower()}"]),
+            (f"In the {varga['varga']}, that house is {varga['sign']}.",
+             ["rule.varga.confirms", "rule.varga.purpose"],
+             [f"{domain.varga.lower()}.{ordinal(main)}"]),
+            (f"The running period is the {dasha['mahadasha']} mahadasha "
+             f"with the {dasha['antardasha']} antardasha.",
+             ["rule.dasha.antara", "rule.dasha.placement"],
+             ["dasha.current"]),
+            (f"Transiting Saturn aspects your "
+             f"{ordinal(saturn['aspects'][0])} house until "
+             f"{saturn['until']}.",
+             ["rule.transit.aspect", "rule.transit.window"],
+             ["transit.saturn.aspects"]),
+        ]
+        answer = " ".join(s[0] for s in statements)
+        return brief, {
+            "answer": answer,
+            "answer_statements": [
+                {"text": text, "label": "INTERPRETIVE", "fact_ids": fids,
+                 "rule_ids": rids, "rule": "classical reading"}
+                for text, rids, fids in statements],
+            "facts_used": sorted({f for s in statements for f in s[2]}),
+            "rules_applied": sorted({r for s in statements for r in s[1]}),
+            "confidence": "Interpretive", "refused": False,
+            "refusal_reason": "",
+        }
+
+    def test_a_marriage_question_produces_a_multi_frame_synthesis(self,
+                                                                  chart):
+        """'Will I get into a relationship or marry directly?' — at least
+        four frames cited, and nothing withheld."""
+        from agent import ask_chart
+        question = "will I get into a relationship or marry directly?"
+        brief, reply = self._multi_frame_reply(chart, AGENT_WHEN, "marriage")
+        client = FakeClient([reply])
+        result = ask_chart(chart, AGENT_WHEN, question, client=client,
+                           model="test-model")
+        assert result.violations == [], result.violations
+        assert result.ok and not result.refused
+
+        # The question reached the right domain, with all five steps.
+        blocks = client.messages.calls[0]["messages"][0]["content"]
+        sent = json.loads(blocks[0]["text"].split(
+            "Fact ledger for this chart (your only source):\n", 1)[1])
+        assert sent["domain"]["id"] == "marriage"
+        assert sent["domain"]["houses"][0] == 7
+        assert [s["step"] for s in sent["domain"]["checklist"]] == [
+            "NATAL", "KARAKA", "VARGA", "DASHA", "TRANSIT", "SYNTHESIS"]
+
+        # …and the reply spans at least four of the five frames.
+        cited = set(result.facts_used)
+        frames = {
+            "natal": any(f.startswith(("natal.", "house.")) for f in cited),
+            "karaka": any(f.startswith("karaka.") for f in cited),
+            "varga": any(f.startswith(("d9.", "d10.", "varga."))
+                         for f in cited),
+            "dasha": any(f.startswith("dasha.") for f in cited),
+            "transit": any(f.startswith("transit.") for f in cited),
+        }
+        assert sum(frames.values()) >= 4, frames
+        assert len(result.statements) >= 4
+
+    def test_a_career_question_times_only_from_ledger_windows(self, chart):
+        """'When will I find a job?' — dasha and transit dates, and only
+        those. An invented month withholds the answer."""
+        from agent import ask_chart, validate_payload
+        from chartfacts import build_facts
+        _brief, reply = self._multi_frame_reply(chart, AGENT_WHEN, "career")
+        facts = {f.id: f for f in build_facts(chart, AGENT_WHEN)}
+        window = facts["dasha.current"].statement
+        reply["answer"] += " " + window
+        reply["answer_statements"].append(
+            {"text": window, "label": "COMPUTED",
+             "fact_ids": ["dasha.current"], "rule_ids": [], "rule": ""})
+        reply["facts_used"].append("dasha.current")
+        result = ask_chart(chart, AGENT_WHEN, "when will I find a job?",
+                           client=FakeClient([reply]), model="test-model")
+        assert result.violations == [], result.violations
+
+        # The same answer with one invented month is withheld.
+        bad = json.loads(json.dumps(reply))
+        bad["answer"] += " Expect the opening around March 2031."
+        kinds = {v.kind for v in validate_payload(bad, chart, AGENT_WHEN)}
+        assert "invented-date" in kinds
+
+    def test_the_domain_of_a_question_is_detected_from_plain_words(self):
+        import domains
+        cases = {
+            "will I get into a relationship or marry directly?": "marriage",
+            "when will I find a job?": "career",
+            "how is my health this year": "vitality",
+            "should we buy property": "home",
+            "will I pass my exam": "learning",
+            "what does my chart say in general": None,
+        }
+        for question, expected in cases.items():
+            found = domains.detect(question)
+            assert (found.id if found else None) == expected, question
+
+    def test_the_scope_guard_still_refuses_another_persons_chart(self,
+                                                                 chart):
+        """A domain question is answerable; a question about someone else
+        is not, and adding the method must not have blurred that."""
+        from agent import ask_chart, validate_payload
+        refusal = {
+            "answer": "That turns on another person's chart, which this "
+                      "reading does not have. What your own chart can "
+                      "speak to is what you bring to a partnership.",
+            "answer_statements": [], "facts_used": [], "rules_applied": [],
+            "confidence": "Interpretive", "refused": True,
+            "refusal_reason": "needs another person's chart",
+        }
+        for question in ("will she marry me?", "does Priya love me?",
+                         "is my boss going to promote me?"):
+            result = ask_chart(chart, AGENT_WHEN, question,
+                               client=FakeClient([json.loads(
+                                   json.dumps(refusal))]),
+                               model="test-model")
+            assert result.refused and result.violations == []
+        # The refusal path is not a way to smuggle claims past the checks.
+        sneaky = json.loads(json.dumps(refusal))
+        sneaky["answer"] += " Your Mars is in Leo in the 1st house."
+        assert validate_payload(sneaky, chart, AGENT_WHEN)
+
+    def test_the_prompt_requires_the_steps_in_order(self):
+        from agent import SYSTEM_PROMPT
+        import domains
+        positions = []
+        for name, _what in domains.CHECKLIST:
+            marker = f". {name}."
+            assert marker in SYSTEM_PROMPT or f" {name}." in SYSTEM_PROMPT, \
+                name
+            positions.append(SYSTEM_PROMPT.index(name))
+        assert positions == sorted(positions), "steps are out of order"
+        # And the aspect instruction is explicit, because occupancy-only
+        # readings are the failure this step exists to fix.
+        assert "USE THE ASPECTS" in SYSTEM_PROMPT
+        assert "transit.saturn.aspects" in SYSTEM_PROMPT
+        assert "by BOTH what they occupy AND what they" in SYSTEM_PROMPT

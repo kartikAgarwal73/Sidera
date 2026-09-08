@@ -31,11 +31,21 @@ checked instead:
   person on the same day gets the same sentence forever.
 - **The one LLM feature is fenced in code, not by prompt.** "Ask about this
   chart" reads free-text questions against two things it may not depart from:
-  a **fact ledger** (the computed chart, ~63 statements with stable IDs) and a
+  a **fact ledger** (the computed chart, ~140 statements with stable IDs) and a
   **rule library** (`rulelib.py` — classical daśā-phala and gocara rules, each
   with its named source). It never computes. It is *required* to interpret —
   a fact-list is not a reading — and every interpretive statement must cite a
   rule ID that exists.
+
+  For a life-domain question it must also work a **method**, not find a fact.
+  `domains.py` names the houses each domain owns and why each is in the list,
+  its natural significators, and the divisional chart that tests it; the
+  prompt then requires **NATAL → KARAKA → VARGA → DASHA → TRANSIT →
+  SYNTHESIS** in order, with the exact fact ids each step is answerable from.
+  Step 5 uses drishti, not just occupancy — *"transiting Saturn in your 4th
+  also aspects your 10th, so the career house is under its discipline until
+  Jun 2027"* — and a claimed transit aspect that the ledger does not support
+  **for the selected school** is a violation like any other.
 
   The line it works to is narrow and specific: **it may say what a period
   favours, asks for or classically tends toward; it may not say what will
@@ -271,6 +281,7 @@ gunamilan.py      aṣṭakūṭa compatibility
 ask.py            question → weighted lenses → verdict (deterministic)
 chartfacts.py     the computed fact ledger, with stable citation IDs
 schools.py        the computation options, asked in plain English
+domains.py        life domains: their houses, karakas, varga and checklist
 rulelib.py        classical rules the agent interprets through, each sourced
 agent.py          grounded 'Ask about this chart' + its answer validator
 reading/          the daily reading: detect · select · compose · fragments
