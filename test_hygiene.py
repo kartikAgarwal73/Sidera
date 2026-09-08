@@ -25,6 +25,7 @@ import conftest as prov
 HERE = Path(__file__).parent
 AUDIT = HERE / "ui-design" / "FRAMEWORK-AUDIT.md"
 REQUIREMENTS = HERE / "requirements.txt"
+REQUIREMENTS_DEV = HERE / "requirements-dev.txt"
 
 COUNTS_BLOCK = re.compile(
     r"<!-- HYGIENE-COUNTS.*?-->(.*?)<!-- /HYGIENE-COUNTS -->", re.S)
@@ -112,12 +113,21 @@ def test_audit_counts_match_reality(tally):
 @pytest.mark.hygiene
 def test_dependencies_are_pinned():
     """An unpinned environment lets a dependency change look like a code
-    regression. Every runtime requirement carries an exact version."""
-    lines = [ln.strip() for ln in REQUIREMENTS.read_text().splitlines()
-             if ln.strip() and not ln.strip().startswith("#")]
-    assert lines, "requirements.txt is empty"
-    unpinned = [ln for ln in lines if "==" not in ln]
-    assert not unpinned, f"unpinned requirements: {unpinned}"
+    regression. Every requirement carries an exact version — test-only ones
+    too, since a test dependency that drifts fails the same way."""
+    for path in (REQUIREMENTS, REQUIREMENTS_DEV):
+        lines = [ln.strip() for ln in path.read_text().splitlines()
+                 if ln.strip() and not ln.strip().startswith("#")]
+        assert lines, f"{path.name} is empty"
+        unpinned = [ln for ln in lines if "==" not in ln]
+        assert not unpinned, f"unpinned in {path.name}: {unpinned}"
+    # The server install must not carry the browser gate's 140 MB. Comments
+    # may name it — the point is that pip must not be asked to install it.
+    installed = [ln.strip() for ln in REQUIREMENTS.read_text().splitlines()
+                 if ln.strip() and not ln.strip().startswith("#")]
+    assert not any("playwright" in ln for ln in installed), (
+        "playwright belongs in requirements-dev.txt; the running app never "
+        "imports it and a deploy should not download it")
 
 
 @pytest.mark.hygiene

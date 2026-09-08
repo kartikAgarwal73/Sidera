@@ -62,7 +62,12 @@ fails **7** tests, including the browser reproducing the original bug — typing
 
 A skipping test guards nothing, so the fixture falls back to any chromium on
 the box (`SIDERA_CHROMIUM`, `PLAYWRIGHT_BROWSERS_PATH`, the usual system paths)
-before it skips, and `playwright==1.62.0` is pinned as a test-only dependency.
+before it skips.
+
+Playwright went into `requirements.txt` first — and that would have added
+**142 MB to every Render build** for a package the app never imports. It now
+lives in `requirements-dev.txt`, `test_hygiene` pins both files, and a new
+assertion fails if playwright ever reappears in the production install.
 
 ### Two existing guards caught me mid-fix
 

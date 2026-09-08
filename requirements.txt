@@ -15,11 +15,10 @@ anthropic==1.3.0
 #
 # Test
 pytest==9.1.1
-# The birth date/time fields are masked text, because the native pickers
-# follow the viewer's SYSTEM locale — a bug no HTML assertion can see. That
-# gate drives a real browser. Test-only; the app imports nothing from it, and
-# the suite reports a skip (never a silent pass) if no chromium is present.
-playwright==1.62.0
+#
+# The browser gate needs playwright, which is 140 MB the running app never
+# imports. It lives in requirements-dev.txt so a deploy does not carry it;
+# test_hygiene pins BOTH files.
 #
 # Build-time only (data/build_cities.py; not imported at runtime):
 #   geonamescache==2.0.0

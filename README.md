@@ -142,6 +142,20 @@ pytest                            # gates + hygiene
 pytest -m external                # only externally anchored tests
 ```
 
+One gate drives a real browser: the birth date and time are **masked text
+fields**, because `<input type="date">` and `<input type="time">` render in the
+viewer's *system* locale — `03/04/1990` meant two different dates to two
+visitors, and a 12-hour system clock rejected a typed `13`. No assertion on an
+HTML string can see that, so `TestMaskedBirthFieldsInARealBrowser` types into
+the rendered form instead. It needs playwright, which is **not** in
+`requirements.txt` (140 MB the running app never imports):
+
+```bash
+pip install -r requirements-dev.txt && playwright install chromium
+```
+
+Without it that class skips and says so; every other gate still runs.
+
 Serve it the way production does:
 
 ```bash

@@ -1,0 +1,8 @@
+# Test-only. NOT installed on the server — see requirements.txt.
+# Pinned exactly, and test_hygiene checks this file too.
+#
+# The birth date and time are masked text fields because the native pickers
+# follow the viewer's SYSTEM locale, which no assertion on an HTML string can
+# see. TestMaskedBirthFieldsInARealBrowser drives a real browser instead.
+# Install with:  pip install -r requirements-dev.txt && playwright install chromium
+playwright==1.62.0
