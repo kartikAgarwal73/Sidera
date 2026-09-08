@@ -4723,3 +4723,271 @@ class TestDueDiligenceReading:
         assert "USE THE ASPECTS" in SYSTEM_PROMPT
         assert "transit.saturn.aspects" in SYSTEM_PROMPT
         assert "by BOTH what they occupy AND what they" in SYSTEM_PROMPT
+
+
+class TestDomainRestructure:
+    """The domains-not-techniques IA. Spec: ui-design/RESTRUCTURE.md.
+
+    The restructure's promise is that nothing was lost: every technical
+    section that existed before still exists, re-homed under "Explore the
+    full chart". That is the assertion that would catch a botched move, and
+    it is the first one here.
+    """
+
+    # Every section id the flat dashboard had, before the restructure.
+    TECHNICAL = ("dashas", "lifeline", "weather", "doshas", "myths",
+                 "yogas", "ask", "agent", "patha", "grahas", "learnpath")
+
+    @pytest.fixture(scope="class")
+    @classmethod
+    def page(cls, client):
+        return client.post("/", data=GATE_FORM).get_data(as_text=True)
+
+    @pytest.fixture(scope="class")
+    @classmethod
+    def ledger(cls, chart):
+        from chartfacts import build_facts
+        return {f.id: f for f in build_facts(chart, datetime.now(timezone.utc))}
+
+    # --- nothing deleted -------------------------------------------------
+
+    def test_every_technical_section_survives_the_move(self, page):
+        for section in self.TECHNICAL:
+            assert f'id="{section}"' in page, f"lost section: {section}"
+        assert 'id="plate"' in page
+        assert 'id="secnav"' in page, "the sticky nav went with them"
+
+    def test_the_technical_sections_live_under_explore(self, page):
+        """…and not scattered: everything from the sticky nav is inside the
+        explore view, and the domain views are not."""
+        explore = page[page.index('id="view-explore"'):
+                       page.index("<!-- /view-explore -->")]
+        for section in self.TECHNICAL:
+            assert f'id="{section}"' in explore, section
+        assert 'id="secnav"' in explore
+        assert "view-domain-" not in explore
+
+    def test_the_match_section_is_re_homed_too(self, client):
+        """It only renders when a partner is supplied, so it needs its own
+        request rather than riding on the shared one."""
+        html = client.post("/", data=MATCH_FORM).get_data(as_text=True)
+        explore = html[html.index('id="view-explore"'):
+                       html.index("<!-- /view-explore -->")]
+        assert 'id="match"' in explore
+
+    # --- arrival ---------------------------------------------------------
+
+    def test_arrival_leads_with_the_wheel_then_identity_then_verdict(
+            self, page):
+        arrival = page[page.index('id="view-arrival"'):
+                       page.index("<!-- /view-arrival -->")]
+        order = [arrival.index(marker) for marker in
+                 ('id="plate"', 'class="identity"', 'class="statement"',
+                  'class="domaingrid"')]
+        assert order == sorted(order), (
+            "arrival must read wheel → identity → verdict → domains")
+
+    def test_the_identity_strip_is_exactly_three_lines(self, chart, client):
+        html = client.post("/", data=GATE_FORM).get_data(as_text=True)
+        block = html[html.index('class="identity"'):]
+        block = block[:block.index("</ul>")]
+        assert block.count("<li>") == 3
+        # lagna · Moon and its nakshatra · the running period, in that order
+        assert chart.lagna.sign in block
+        assert chart.planets["Moon"].sign in block
+        assert "mahādaśā" in block
+
+    def test_the_grid_offers_five_domains_plus_ask_and_explore(self, page):
+        import domains
+        grid = page[page.index('class="domaingrid"'):
+                    page.index("<!-- /view-arrival -->")]
+        assert grid.count('<a class="dcard') == len(domains.DOMAINS) + 2
+        for title in ("Love &amp; Marriage", "Work &amp; Money",
+                      "Home &amp; Family", "Body &amp; Vitality",
+                      "Learning &amp; Path"):
+            assert title in grid, title
+        assert "Ask about this chart" in grid
+        assert "Explore the full chart" in grid
+
+    def test_every_card_carries_a_teaser_from_its_own_checklist(
+            self, chart, client):
+        """A card with no teaser is a menu item; the teaser is what makes it
+        an answer. It must be composed, not canned."""
+        import domainread
+        html = client.post("/", data=GATE_FORM).get_data(as_text=True)
+        readings = {r.domain.id: r for r in
+                    domainread.read_all(chart, datetime.now(timezone.utc))}
+        assert len(readings) == 5
+        for reading in readings.values():
+            assert reading.teaser.strip()
+            assert reading.signals, reading.domain.id
+            # Condition, never prediction.
+            for banned in ("you will", "guarantee", "definitely", "certain"):
+                assert banned not in reading.teaser.lower()
+
+    # --- domain view -----------------------------------------------------
+
+    def test_a_domain_view_is_verdict_first_then_the_working(self, page):
+        start = page.index('id="view-domain-marriage"')
+        nxt = page.find('id="view-domain-', start + 10)
+        view = page[start:nxt if nxt > 0 else len(page)]
+        order = [view.index(m) for m in
+                 ('class="dsynth"', 'class="conf"', 'class="fold dstep"')]
+        assert order == sorted(order), (
+            "a domain view reads synthesis → confidence → the working")
+
+    def test_the_working_follows_the_checklist_order(self, chart):
+        from app import domain_cards
+        from domains import CHECKLIST
+        cards = {c["id"]: c for c in
+                 domain_cards(chart, datetime.now(timezone.utc))}
+        expected = [name.title() for name, _ in CHECKLIST
+                    if name != "SYNTHESIS"]
+        for card in cards.values():
+            titles = [s["title"] for s in card["steps"]]
+            assert titles == [t for t in expected if t in titles], card["id"]
+            assert titles, card["id"]
+
+    def test_every_step_row_names_the_facts_behind_it(self, chart, ledger):
+        """The restructure must not cost the one-tap-from-computation
+        property. Every row in every expander cites real fact ids."""
+        from app import domain_cards
+        cards = domain_cards(chart, datetime.now(timezone.utc))
+        seen = 0
+        for card in cards:
+            for step in card["steps"]:
+                for row in step["rows"]:
+                    assert row["ids"].strip(), (card["id"], step["title"])
+                    for fid in row["ids"].split(" · "):
+                        assert fid in ledger, fid
+                        seen += 1
+        assert seen > 60, "suspiciously few citations"
+
+    def test_the_natal_step_explains_why_each_house_is_in_the_list(
+            self, chart):
+        """A reader should never have to take 'the 8th matters for marriage'
+        on faith."""
+        from app import domain_cards
+        from domains import DOMAINS
+        cards = {c["id"]: c for c in
+                 domain_cards(chart, datetime.now(timezone.utc))}
+        natal = [s for s in cards["marriage"]["steps"]
+                 if s["title"] == "Natal"][0]
+        text = " ".join(r["text"] for r in natal["rows"])
+        assert "the durability of the marriage" in text
+        for house in DOMAINS["marriage"].houses:
+            assert f"rule.house.{house}" not in text   # ids go in `ids`
+
+    def test_a_domain_view_offers_the_agent_without_depending_on_it(
+            self, page, chart):
+        """The deterministic reading stands alone; the agent is additive.
+        The page must render fully with no API key, which is how the test
+        suite runs."""
+        import agent as agent_mod
+        assert not agent_mod.is_configured()
+        assert "dsynth" in page
+        assert "Open the chart agent" in page
+
+    # --- the reading itself ----------------------------------------------
+
+    def test_the_domain_reading_is_deterministic(self, chart):
+        import domainread
+        when = datetime(2026, 9, 3, tzinfo=timezone.utc)
+        first = domainread.read_all(chart, when)
+        second = domainread.read_all(chart, when)
+        assert [r.as_dict() for r in first] == [r.as_dict() for r in second]
+
+    def test_the_reading_reports_condition_and_never_outcome(self, chart):
+        """No language model writes readings here, and this one cannot
+        express a prediction — there is no template for it."""
+        import domainread
+        when = datetime(2026, 9, 3, tzinfo=timezone.utc)
+        blob = " ".join(p for r in domainread.read_all(chart, when)
+                        for p in (r.paragraphs + (r.teaser,))).lower()
+        for banned in ("you will", "will be", "guarantee", "is assured",
+                       "definitely", "expect to", "going to"):
+            assert banned not in blob, banned
+        # …and it does say what it IS for: support, strain, what is live.
+        assert "what supports" in blob and "what asks more of you" in blob
+
+    def test_the_reading_spans_all_five_frames(self, chart):
+        import domainread
+        when = datetime(2026, 9, 3, tzinfo=timezone.utc)
+        for reading in domainread.read_all(chart, when):
+            prefixes = {fid.split(".")[0] for s in reading.signals
+                        for fid in s.fact_ids}
+            assert {"natal", "house"} & prefixes, reading.domain.id
+            assert "karaka" in prefixes, reading.domain.id
+            assert {"d9", "d10", "varga"} & prefixes, reading.domain.id
+            assert "transit" in prefixes, reading.domain.id
+
+    def test_every_cited_rule_exists(self, chart):
+        import domainread
+        from rulelib import is_known
+        when = datetime(2026, 9, 3, tzinfo=timezone.utc)
+        for reading in domainread.read_all(chart, when):
+            for signal in reading.signals:
+                for rid in signal.rule_ids:
+                    assert is_known(rid), rid
+
+    # --- mobile and the view machinery -----------------------------------
+
+    def test_the_card_grid_is_one_column_on_a_phone(self):
+        css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
+        block = css[css.index(".cards {"):]
+        assert "grid-template-columns: 1fr;" in block[:block.index("}")]
+        # …and two only once there is room for two.
+        media = css[css.index("@media (min-width: 560px) { .cards"):]
+        assert "1fr 1fr" in media[:120]
+        # Square corners survive the new components.
+        new = css[css.index("Domains-not-techniques restructure"):]
+        for radius in re.findall(r"border-radius:\s*([^;]+);", new):
+            assert radius.strip() in ("0", "50%"), radius
+
+    def test_views_are_switched_client_side_not_by_routing(self, page):
+        """Server routes per domain would mean re-posting the birth record
+        on every tap; nothing is stored between requests."""
+        assert 'data-view="view-domain-marriage"' in page
+        assert 'href="/domain' not in page
+        assert page.count('class="view"') >= 7      # arrival + 5 + explore
+        # Deep-linkable and back-button-able.
+        assert "history.pushState" in page
+        assert 'window.addEventListener("popstate"' in page
+
+    def test_the_view_switcher_does_not_capture_the_plates_own_panes(
+            self, page):
+        """A bug this restructure actually shipped and had to undo.
+
+        The chart plate has used `class="pane"` for its D1/D9/D10 tabs since
+        Phase 6. Naming the view containers `.pane` as well made the view
+        switcher hide `#pane-d1` — so the wheel, the first thing on the
+        arrival screen and the whole point of it, rendered blank. The two
+        must stay different classes.
+        """
+        assert 'class="view"' in page
+        assert 'id="pane-d1"' in page          # the plate's own, untouched
+        for vid in ("view-arrival", "view-explore"):
+            at = page.index(f'id="{vid}"')
+            assert 'class="pane"' not in page[at - 40:at], vid
+        js = page[page.index("const views = Array.from"):]
+        assert 'querySelectorAll(".view")' in js[:120]
+        # …and the wheel really is rendered inside the arrival view.
+        arrival = page[page.index('id="view-arrival"'):
+                       page.index("<!-- /view-arrival -->")]
+        assert 'class="kundli"' in arrival
+        assert 'id="pane-d1"' in arrival
+
+    def test_only_the_arrival_view_is_visible_on_load(self, page):
+        for view in ("view-explore", "view-domain-marriage",
+                     "view-domain-career"):
+            marker = f'id="{view}"'
+            assert "hidden" in page[page.index(marker):
+                                    page.index(marker) + 120], view
+        arrival = page.index('id="view-arrival"')
+        assert "hidden" not in page[arrival:arrival + 60]
+
+    def test_the_spec_is_on_record(self):
+        spec = (HERE / "ui-design" / "RESTRUCTURE.md").read_text("utf-8")
+        for required in ("ARRIVAL", "DOMAIN VIEW", "EXPLORE THE FULL CHART",
+                         "Mobile-first", "nothing is deleted"):
+            assert required.lower() in spec.lower(), required

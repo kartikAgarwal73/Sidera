@@ -149,6 +149,16 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
     # procedure — every checklist step must be answerable from the ledger,
     # the prompt must require the steps in order, and the new class of claim
     # (transit drishti) must be as checkable as the old ones.
+    # The domains-not-techniques restructure. Product rules from
+    # ui-design/RESTRUCTURE.md — the load-bearing one is that nothing was
+    # lost in the move: every technical section that existed before must
+    # still exist, re-homed under "Explore the full chart".
+    "TestDomainRestructure": (
+        "invariant", "product rules from ui-design/RESTRUCTURE.md: nothing "
+                     "deleted, arrival reads wheel → identity → verdict → "
+                     "domains, a domain view is verdict-first, every step "
+                     "row cites real fact ids, and the reading reports "
+                     "condition rather than outcome"),
     "TestDueDiligenceReading": (
         "invariant", "product rule: a domain question is read across all "
                      "five frames, every step is answerable from the "

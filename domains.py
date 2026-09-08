@@ -52,7 +52,7 @@ DOMAINS: dict[str, Domain] = {
         label="love, partnership and marriage",
         houses=(7, 2, 5, 8, 11),
         why={
-            7: "the house of marriage and of dealings with any one other "
+            7: "the house of marriage, and of dealings with any one other "
                "person",
             2: "the house of family — a marriage adds to the household, "
                "which is why it is read for it",
@@ -60,8 +60,8 @@ DOMAINS: dict[str, Domain] = {
                "precedes a commitment",
             8: "the 2nd from the 7th: the durability of the marriage and "
                "what is shared in it",
-            11: "the house of gain and of desires fulfilled, read for "
-                "whether a wish of this kind lands",
+            11: "the house of gains, and of desires that land through "
+                "other people",
         },
         karakas=("Venus", "Jupiter"),
         varga="D9",
@@ -80,8 +80,8 @@ DOMAINS: dict[str, Domain] = {
                 "action",
             11: "the house of gains, income and what arrives through "
                 "networks",
-            6: "the house of service and of work done for others — "
-                "employment, in the plain sense, as against vocation",
+            6: "the house of service and work done for others — "
+               "employment, in the plain sense, as against vocation",
             2: "the house of held resources and accumulated wealth",
             1: "the house of the self: what one is willing and able to do",
         },
@@ -98,10 +98,10 @@ DOMAINS: dict[str, Domain] = {
         label="constitution, energy and the body's routines",
         houses=(1, 6, 8),
         why={
-            1: "the house of the body and of vitality itself",
+            1: "the house of the body and vitality itself",
             6: "the house of the routines, disciplines and ailments that "
                "wear on it",
-            8: "the house of longevity and of what transforms",
+            8: "the house of longevity and of what transforms it",
         },
         karakas=("Sun", "Moon", "Saturn"),
         varga="D9",
@@ -117,7 +117,7 @@ DOMAINS: dict[str, Domain] = {
         why={
             4: "the house of home, land, the mother and inner ground",
             2: "the house of the family one belongs to",
-            12: "the house of foreign places and of leaving",
+            12: "the house of foreign places and departures",
         },
         karakas=("Moon", "Mars", "Venus"),
         varga="D9",
@@ -133,7 +133,7 @@ DOMAINS: dict[str, Domain] = {
         why={
             5: "the house of intelligence, creativity and children",
             9: "the house of higher learning, teachers and fortune",
-            4: "the house of formal schooling and of the ground one "
+            4: "the house of formal schooling and the ground one "
                "studies from",
         },
         karakas=("Jupiter", "Mercury"),

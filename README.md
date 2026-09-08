@@ -7,6 +7,21 @@ classical rule applied, and how confident that rule is.
 
 ![Sidera landing](docs/landing.png)
 
+The dashboard is organised by **what people ask about**, not by technique:
+the wheel, a three-line identity strip and the day's verdict, then a card per
+life domain — Love & Marriage, Work & Money, Home & Family, Body & Vitality,
+Learning & Path — each carrying a one-line condition drawn from its own
+checklist. Tapping one opens the reading verdict-first, with the six-step
+working (natal houses and their lords · karaka · varga · daśā · transits by
+drishti · synthesis) underneath as expanders. Every technical section lives
+behind **Explore the full chart**. See
+[`ui-design/RESTRUCTURE.md`](ui-design/RESTRUCTURE.md) for the decision and
+its constraints.
+
+| Arrival | A domain reading |
+|---|---|
+| ![arrival](docs/dashboard-readme.png) | ![domain](docs/domain-readme.png) |
+
 ## The accuracy thesis
 
 Most astrology software asks to be trusted. Sidera is built so it can be
@@ -282,6 +297,7 @@ ask.py            question → weighted lenses → verdict (deterministic)
 chartfacts.py     the computed fact ledger, with stable citation IDs
 schools.py        the computation options, asked in plain English
 domains.py        life domains: their houses, karakas, varga and checklist
+domainread.py     the domain reading, composed deterministically (no LLM)
 rulelib.py        classical rules the agent interprets through, each sourced
 agent.py          grounded 'Ask about this chart' + its answer validator
 reading/          the daily reading: detect · select · compose · fragments

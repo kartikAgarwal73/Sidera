@@ -161,15 +161,83 @@
 </form>
 
 {% else %}
-<!-- ============ Dashboard ============ -->
+<div id="views">
 
-<nav class="secnav" id="secnav">
-  <a href="#glance">Glance</a><a href="#plate">Chart</a><a href="#dashas">Daśās</a><a href="#lifeline">Timeline</a><a href="#weather">Transits</a><a href="#doshas">Doshas</a><a href="#myths">Myths</a><a href="#yogas">Yogas</a>{% if data.match %}<a href="#match">Match</a>{% endif %}<a href="#ask">Ask</a><a href="#agent">Agent</a><a href="#patha">Paṭha</a><a href="#grahas">Grahas</a><a href="#learnpath">Learn</a>
-</nav>
+<!-- ============ ARRIVAL ============
+     The chart, who it belongs to, one verdict, and a grid of the things
+     people actually ask about. Techniques live under "Explore the full
+     chart" — nothing is deleted, everything is re-homed. Spec:
+     ui-design/RESTRUCTURE.md -->
+<div class="view" id="view-arrival">
+<!-- Chart plate with D1/D9/D10 switcher -->
+<section class="plate showdeg" id="plate">
+  <div class="switcher" role="tablist">
+    <button class="tab active" role="tab" data-tab="d1">Rāśi · D1</button>
+    <button class="tab" role="tab" data-tab="d9">Navāṃśa · D9</button>
+    <button class="tab" role="tab" data-tab="d10">Daśāṃśa · D10</button>
+  </div>
+  <div style="text-align:right;margin-top:8px"><button class="learn" data-lesson="plate">ⓘ how to read this plate</button> <button class="learn" data-lesson="d9">ⓘ read your D9</button></div>
+  <label class="degtoggle"><input type="checkbox" id="degToggle" checked>
+    Show degrees <span class="opt">· D1</span></label>
+
+  {% for key, houses, sub in [("d1", data.kundli_d1, data.lagna_sign ~ " rising"),
+                              ("d9", data.kundli_d9, "D9 lagna " ~ data.d9_lagna),
+                              ("d10", data.kundli_d10, "D10 lagna " ~ data.d10_lagna)] %}
+  <div class="pane {% if key != 'd1' %}hidden{% endif %}" id="pane-{{ key }}">
+    <svg viewBox="0 0 300 300" class="kundli" aria-label="North-Indian chart {{ key }}">
+      <g fill="none" stroke="var(--accent-400)" stroke-width="1.6">
+        <rect x="3" y="3" width="294" height="294"/>
+        <path d="M3 3 L297 297 M297 3 L3 297"/>
+        <path d="M150 3 L297 150 L150 297 L3 150 Z"/>
+      </g>
+      <g class="signnum" text-anchor="middle">
+        {% for h in houses %}<text x="{{ h.num_pos[0] }}" y="{{ h.num_pos[1] }}"{% if h.crowded %} class="crowded"{% endif %}>{{ h.sign_num }}</text>{% endfor %}
+      </g>
+      <g class="grahas grahas-compact" text-anchor="middle">
+        {% for h in houses %}{% if h.line1 %}
+        <text x="{{ h.pl_pos[0] }}" y="{{ h.pl_pos[1] }}">{{ h.line1 }}{% if h.line2 %}<tspan x="{{ h.pl_pos[0] }}" dy="14">{{ h.line2 }}</tspan>{% endif %}</text>
+        {% endif %}{% endfor %}
+      </g>
+      {% if key == 'd1' %}
+      <g class="grahas grahas-deg" text-anchor="middle">
+        {% for h in houses %}{% if h.detail_lines %}
+        <text x="{{ h.deg_pos[0] }}" y="{{ h.deg_pos[1] - 6 * (h.detail_lines | length - 1) }}"{% if h.crowded %} class="crowded"{% endif %}>
+          {%- for line in h.detail_lines -%}
+          <tspan x="{{ h.deg_pos[0] }}" {% if not loop.first %}dy="12.5"{% endif %}>{{ line }}</tspan>
+          {%- endfor -%}
+        </text>
+        {% endif %}{% endfor %}
+      </g>
+      {% endif %}
+    </svg>
+    <div class="platecaption">{{ sub }}{% if key == 'd9' and data.vargottama %} · Vargottama: {{ data.vargottama | join(", ") }}{% endif %}</div>
+  </div>
+  {% endfor %}
+
+  <!-- Phase 8: tap a graha to see its working -->
+  <div class="chips" id="chips">
+    {% for name, px in data.explorer.items() %}
+    <button class="chip-planet" data-planet="{{ name }}">{{ px.abbr }} · {{ name }}</button>
+    {% endfor %}
+  </div>
+  <div class="xcard" id="xcard" hidden>
+    <div class="xcard-head">
+      <span class="xcard-title" id="xcard-title"></span>
+      <button class="xcard-close" id="xcard-close" aria-label="close">×</button>
+    </div>
+    <div class="xcard-body" id="xcard-body"></div>
+  </div>
+</section>
 
 <section class="chartof" id="glance">
   <h1 class="chartof-name">{{ data.headline }}</h1>
   <div class="chartof-sub">{{ data.subline }}</div>
+  {# The three-line identity strip: lagna, Moon and nakshatra, the running
+     period. Enough for someone who knows charts to recognise theirs at a
+     glance, and short enough not to reflow on a phone. #}
+  <ul class="identity">
+    {% for line in data.identity %}<li>{{ line }}</li>{% endfor %}
+  </ul>
   {# The reader chose how this chart is computed; the choice belongs with
      the chart, not only on the form they have already left. #}
   <div class="chartof-sub schoolsum {% if schools.changed %}moved{% endif %}">
@@ -213,7 +281,6 @@
     </form>
   </details>
 </section>
-
 <!-- Glance — design 4b: one statement, three chips, single swap panel -->
 <section class="glance">
   <div class="ghost glance-ghost" aria-hidden="true">☾</div>
@@ -295,66 +362,78 @@
   </div>
 </section>
 
-<!-- Chart plate with D1/D9/D10 switcher -->
-<section class="plate showdeg" id="plate">
-  <div class="switcher" role="tablist">
-    <button class="tab active" role="tab" data-tab="d1">Rāśi · D1</button>
-    <button class="tab" role="tab" data-tab="d9">Navāṃśa · D9</button>
-    <button class="tab" role="tab" data-tab="d10">Daśāṃśa · D10</button>
-  </div>
-  <div style="text-align:right;margin-top:8px"><button class="learn" data-lesson="plate">ⓘ how to read this plate</button> <button class="learn" data-lesson="d9">ⓘ read your D9</button></div>
-  <label class="degtoggle"><input type="checkbox" id="degToggle" checked>
-    Show degrees <span class="opt">· D1</span></label>
-
-  {% for key, houses, sub in [("d1", data.kundli_d1, data.lagna_sign ~ " rising"),
-                              ("d9", data.kundli_d9, "D9 lagna " ~ data.d9_lagna),
-                              ("d10", data.kundli_d10, "D10 lagna " ~ data.d10_lagna)] %}
-  <div class="pane {% if key != 'd1' %}hidden{% endif %}" id="pane-{{ key }}">
-    <svg viewBox="0 0 300 300" class="kundli" aria-label="North-Indian chart {{ key }}">
-      <g fill="none" stroke="var(--accent-400)" stroke-width="1.6">
-        <rect x="3" y="3" width="294" height="294"/>
-        <path d="M3 3 L297 297 M297 3 L3 297"/>
-        <path d="M150 3 L297 150 L150 297 L3 150 Z"/>
-      </g>
-      <g class="signnum" text-anchor="middle">
-        {% for h in houses %}<text x="{{ h.num_pos[0] }}" y="{{ h.num_pos[1] }}"{% if h.crowded %} class="crowded"{% endif %}>{{ h.sign_num }}</text>{% endfor %}
-      </g>
-      <g class="grahas grahas-compact" text-anchor="middle">
-        {% for h in houses %}{% if h.line1 %}
-        <text x="{{ h.pl_pos[0] }}" y="{{ h.pl_pos[1] }}">{{ h.line1 }}{% if h.line2 %}<tspan x="{{ h.pl_pos[0] }}" dy="14">{{ h.line2 }}</tspan>{% endif %}</text>
-        {% endif %}{% endfor %}
-      </g>
-      {% if key == 'd1' %}
-      <g class="grahas grahas-deg" text-anchor="middle">
-        {% for h in houses %}{% if h.detail_lines %}
-        <text x="{{ h.deg_pos[0] }}" y="{{ h.deg_pos[1] - 6 * (h.detail_lines | length - 1) }}"{% if h.crowded %} class="crowded"{% endif %}>
-          {%- for line in h.detail_lines -%}
-          <tspan x="{{ h.deg_pos[0] }}" {% if not loop.first %}dy="12.5"{% endif %}>{{ line }}</tspan>
-          {%- endfor -%}
-        </text>
-        {% endif %}{% endfor %}
-      </g>
-      {% endif %}
-    </svg>
-    <div class="platecaption">{{ sub }}{% if key == 'd9' and data.vargottama %} · Vargottama: {{ data.vargottama | join(", ") }}{% endif %}</div>
-  </div>
-  {% endfor %}
-
-  <!-- Phase 8: tap a graha to see its working -->
-  <div class="chips" id="chips">
-    {% for name, px in data.explorer.items() %}
-    <button class="chip-planet" data-planet="{{ name }}">{{ px.abbr }} · {{ name }}</button>
+<!-- The domain grid. Each card carries a one-line teaser composed
+     deterministically from that domain's own checklist (domainread.py) —
+     a CONDITION, never a prediction, and never written by a model. -->
+<section class="domaingrid" id="domains">
+  <div class="kicker">What would you like to look at?</div>
+  <div class="cards">
+    {% for d in data.domains %}
+    <a class="dcard" href="#{{ d.id }}" data-view="view-domain-{{ d.id }}">
+      <span class="dcard-title">{{ d.title }}</span>
+      <span class="dcard-teaser">{{ d.teaser }}</span>
+      <span class="dcard-more">Read it →</span>
+    </a>
     {% endfor %}
-  </div>
-  <div class="xcard" id="xcard" hidden>
-    <div class="xcard-head">
-      <span class="xcard-title" id="xcard-title"></span>
-      <button class="xcard-close" id="xcard-close" aria-label="close">×</button>
-    </div>
-    <div class="xcard-body" id="xcard-body"></div>
+    <a class="dcard dcard-alt" href="#ask" data-view="view-explore" data-scroll="ask">
+      <span class="dcard-title">Ask about this chart</span>
+      <span class="dcard-teaser">Put a question in your own words and get it
+        answered from the computed chart, with its working shown.</span>
+      <span class="dcard-more">Ask →</span>
+    </a>
+    <a class="dcard dcard-alt dcard-wide" href="#explore" data-view="view-explore">
+      <span class="dcard-title">Explore the full chart</span>
+      <span class="dcard-teaser">Grahas, daśās, the timeline, transits,
+        yogas, doshas, compatibility and the 20-card learning path.</span>
+      <span class="dcard-more">Open →</span>
+    </a>
   </div>
 </section>
+</div><!-- /view-arrival -->
 
+<!-- ============ DOMAIN VIEWS ============
+     Verdict first: the synthesis on top, then the checklist steps as
+     expanders, each naming the facts it was composed from. -->
+{% for d in data.domains %}
+<div class="view" id="view-domain-{{ d.id }}" hidden>
+  <a class="backlink" href="#top" data-view="view-arrival">← All of your chart</a>
+  <section class="domainread">
+    <h1 class="chartof-name">{{ d.title }}</h1>
+    <div class="chartof-sub">{{ d.label }} · read through {{ d.houses_label }}</div>
+    {% for para in d.paragraphs %}<p class="dsynth">{{ para }}</p>{% endfor %}
+    <p class="conf">Confidence: {{ d.confidence }} — this describes the
+      chart's condition, not what will happen.</p>
+
+    <div class="kicker" style="margin-top:26px">The working, step by step</div>
+    {% for step in d.steps %}
+    <details class="fold dstep">
+      <summary>{{ step.title }}<span class="dstep-n">{{ step.count }}</span></summary>
+      <p class="dstep-do">{{ step.do }}</p>
+      <div class="rows">
+        {% for row in step.rows %}
+        <div class="row"><span>{{ row.text }}</span><span class="num mut">{{ row.ids }}</span></div>
+        {% endfor %}
+      </div>
+    </details>
+    {% endfor %}
+
+    <details class="fold dstep">
+      <summary>Ask about this in your own words</summary>
+      <p class="dstep-do">{{ d.ask_hint }}</p>
+      <p><a class="again" href="#ask" data-view="view-explore" data-scroll="agent">Open the chart agent →</a></p>
+    </details>
+  </section>
+</div>
+{% endfor %}
+
+<!-- ============ EXPLORE THE FULL CHART ============
+     Every technical section, unchanged, behind the sticky nav it always
+     had. Re-homed, not rewritten. -->
+<div class="view" id="view-explore" hidden>
+<a class="backlink" href="#top" data-view="view-arrival">← All of your chart</a>
+<nav class="secnav" id="secnav">
+  <a href="#glance">Glance</a><a href="#plate">Chart</a><a href="#dashas">Daśās</a><a href="#lifeline">Timeline</a><a href="#weather">Transits</a><a href="#doshas">Doshas</a><a href="#myths">Myths</a><a href="#yogas">Yogas</a>{% if data.match %}<a href="#match">Match</a>{% endif %}<a href="#ask">Ask</a><a href="#agent">Agent</a><a href="#patha">Paṭha</a><a href="#grahas">Grahas</a><a href="#learnpath">Learn</a>
+</nav>
 <!-- Current dasha standing note -->
 <div class="note">
   <div class="notekicker">Viṃśottarī · now</div>
@@ -725,6 +804,8 @@
   </details>
   {% endfor %}
 </section>
+</div><!-- /view-explore -->
+</div><!-- /views -->
 
 <!-- Phase 11: contextual micro-lesson modal -->
 <div class="lmodal" id="lmodal" hidden>
@@ -753,6 +834,59 @@ Sidereal · Lahiri ayanāṃśa · Whole Sign · North-Indian<br>
 <span class="credit"><a href="https://github.com/kartikAgarwal73/Sidera">Source</a> — AGPL-3.0, as required by <a href="https://github.com/astrorigin/pyswisseph">pyswisseph</a></span></footer>
 
 <script>
+// ---- View switching ------------------------------------------------------
+// Three views on one page: arrival, a view per domain, and "explore the full
+// chart". Client-side rather than server routes because Sidera holds no
+// birth record between requests — a route per domain would mean re-posting
+// the birth details on every tap. See ui-design/RESTRUCTURE.md.
+//
+// The hash is the address, so a domain view can be linked, bookmarked and
+// reached with the back button.
+(function () {
+  const views = Array.from(document.querySelectorAll(".view"));
+  if (!views.length) return;
+  const byId = new Map(views.map(v => [v.id, v]));
+
+  function show(viewId, scrollTo) {
+    const target = byId.get(viewId) || byId.get("view-arrival");
+    views.forEach(v => { v.hidden = (v !== target); });
+    // Focus moves with the view, so a screen reader and a thumb agree about
+    // where they now are. -1 keeps it out of the tab order afterwards.
+    target.setAttribute("tabindex", "-1");
+    if (scrollTo) {
+      const el = document.getElementById(scrollTo);
+      if (el) { el.scrollIntoView({ block: "start" }); target.focus({ preventScroll: true }); return; }
+    }
+    window.scrollTo(0, 0);
+    target.focus({ preventScroll: true });
+  }
+
+  // #marriage → the marriage view; #ask / #agent / a section id → explore,
+  // scrolled to it; anything else → arrival.
+  function fromHash() {
+    const h = (location.hash || "").replace(/^#/, "");
+    if (!h || h === "top") return show("view-arrival");
+    if (byId.has("view-domain-" + h)) return show("view-domain-" + h);
+    if (h === "explore") return show("view-explore");
+    const el = document.getElementById(h);
+    if (el && el.closest("#view-explore")) return show("view-explore", h);
+    if (el && el.closest(".view")) return show(el.closest(".view").id, h);
+    show("view-arrival");
+  }
+
+  document.addEventListener("click", ev => {
+    const link = ev.target.closest("[data-view]");
+    if (!link) return;
+    ev.preventDefault();
+    const scroll = link.getAttribute("data-scroll");
+    show(link.getAttribute("data-view"), scroll);
+    const hash = link.getAttribute("href") || "#top";
+    if (location.hash !== hash) history.pushState(null, "", hash);
+  });
+  window.addEventListener("popstate", fromHash);
+  fromHash();
+})();
+
 // Palette: six token sets, switched by a data attribute on the root — never
 // by conditional colour in markup (build framework, SIX · TOKENS).
 const PAL_KEY = "sidera:palette";

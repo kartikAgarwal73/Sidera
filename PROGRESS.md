@@ -1,5 +1,90 @@
 # PROGRESS
 
+## Domains, not techniques — the dashboard restructure ✅ (2026-09-08)
+
+**The problem.** Seventeen sections in a flat scroll behind a sticky bar of
+fourteen links: Glance · Chart · Daśās · Timeline · Transits · Doshas · Myths ·
+Yogas · Match · Ask · Agent · Paṭha · Grahas · Learn. Every one of those is a
+*technique*. Someone arrives asking about their marriage and is handed a filing
+cabinet organised by method — all the information present, none of it addressed
+to them.
+
+The spec was written first, as
+[`ui-design/RESTRUCTURE.md`](ui-design/RESTRUCTURE.md), so the decision is on
+record independently of what got built.
+
+### Three views on one page
+
+**Client-side panes, not routes.** Sidera stores no birth record between
+requests — it is posted, the chart is cast, nothing persists. A server route
+for `/domain/marriage` would mean re-posting birth details on every tap. So all
+three views render once and the browser switches, with `#hash` deep links,
+`history.pushState`, `popstate`, scroll-to-top and focus movement.
+
+| View | What it holds |
+|---|---|
+| **Arrival** | the wheel · a three-line identity strip (lagna · Moon and nakṣatra · running MD/AD) · the Glance verdict · seven cards |
+| **Domain** ×5 | the synthesis first, then the six-step working as expanders, each row naming its fact ids |
+| **Explore** | all nineteen technical sections, unchanged, behind the existing sticky nav |
+
+Nothing was deleted. Everything was re-homed.
+
+### The card teasers had to be real
+
+A card that says "Love & Marriage →" and nothing else is a menu, not a reading.
+Each card carries a **one-line condition drawn from the domain's own checklist**
+— the same checklist `/ask` works through. On the fixture chart the marriage
+card reads *"Mixed — a strong 5th lord and a debilitated 7th lord. Live now:
+Saturn on it until Jun 2027."*
+
+### No language model writes readings — including these
+
+The core dashboard must work with no API key, and the domain synthesis **is** a
+reading, so it could not be handed to the agent. `domainread.py` (378 lines)
+composes it deterministically from the same ledger facts the agent cites:
+support and strain weighted per house from the lord's dignity and placement,
+the drishti falling on the house, occupants, the karaka's condition, the varga's
+confirmation or contradiction, whether the running MD/AD lord touches the
+domain, and which slow transits occupy **or aspect** it, with dates. It reports
+condition, never outcome. The agent stays optional and additive: where
+configured, "Ask about this" runs the full six-step synthesis; where not, the
+deterministic reading stands alone and the panel says so.
+
+### A collision worth recording
+
+The chart plate has used `class="pane"` for its D1/D9/D10 tabs since Phase 6.
+Naming the three new view containers `.pane` made the view switcher hide
+`#pane-d1` — the wheel, the first thing anyone sees. Renamed to
+`.view` / `#view-*` / `data-view`, and
+`test_the_view_switcher_does_not_capture_the_plates_own_panes` now pins it. The
+test was verified red under the restored collision before being kept.
+
+Separately: a downscaled screenshot led me to conclude briefly that the wheel
+was not rendering at all. It was. `getBoundingClientRect` in the browser
+(`#pane-d1` at 353px, SVG at 304px) settled it, and a tightly-clipped
+screenshot confirmed. Measure, do not squint.
+
+### Measured, at 390px and 1280px
+
+| | 390px | 1280px |
+|---|---|---|
+| horizontal overflow | none | none |
+| identity strip | 3 lines (65.6px = 3 × 21.875) | 3 lines |
+| cards | 7, one column, 342 × 122px | 7, two columns, 291 × 162px |
+| smallest tap target | 122px — well over the 44px floor | — |
+
+The grid is one column then **two**, not three: the body is capped at 640px by
+the existing layout, so a third column would only narrow the cards. The spec
+said three; the measurement said two, and the spec now carries the correction
+rather than hiding it.
+
+**Tests:** `TestDomainRestructure` — 21 tests, declared `invariant`.
+`pytest` → **367 passed** (external 70 · invariant 207 · characterization 80).
+
+**What this unblocks:** Milestone 2 (Ashtakavarga) was queued behind this
+restructure. Its verdict-first presentation — strongest and weakest houses named
+up front, the 12 × 8 grid folded under — now has an obvious home.
+
 ## /ask becomes a reading method, not a lookup ✅ (2026-09-08)
 
 **The failure.** Asked *"will I marry?"*, the agent found the 7th house, said

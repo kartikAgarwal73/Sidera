@@ -505,9 +505,98 @@ def build_dashboard(profile: Profile) -> dict:
         # The school behind any section whose numbers depend on one. Printed
         # on the verdict itself, not only on the settings panel the reader
         # has already scrolled past.
+        # Three lines, in this order, and they must not wrap to four at
+        # 390px — the spec is explicit because an identity strip that
+        # reflows is the first thing that makes a phone feel unfinished.
+        "identity": [
+            f"{chart.lagna.sign} lagna {chart.lagna.dms}",
+            f"Moon in {chart.planets['Moon'].sign} · "
+            f"{timeline.moon_nakshatra.name} pada "
+            f"{timeline.moon_nakshatra.pada}",
+            (f"{current[0].lord} mahādaśā · {current[1].lord} antara "
+             f"to {_fmt(current[1].end)}" if current else "—"),
+        ],
+        "domains": domain_cards(chart, now),
         "school_node_reach": schools.chosen("node_reach").school,
         "school_node_position": schools.chosen("node_position").school,
     }
+
+
+# The five domain cards and their views. Card titles are the reader's
+# words; `domains.py` holds the astrology, `domainread.py` the composition.
+DOMAIN_TITLES = {
+    "marriage": "Love & Marriage",
+    "career": "Work & Money",
+    "home": "Home & Family",
+    "vitality": "Body & Vitality",
+    "learning": "Learning & Path",
+}
+# The order they appear in the grid — what people ask about most, first.
+DOMAIN_ORDER = ("marriage", "career", "home", "vitality", "learning")
+
+# Which checklist steps each kind of signal belongs under, so the expanders
+# follow the method's own order rather than the order signals happened to be
+# composed in.
+_STEP_OF_ID = (
+    ("NATAL", ("natal.", "house.")),
+    ("KARAKA", ("karaka.",)),
+    ("VARGA", ("d9.", "d10.", "varga.")),
+    ("DASHA", ("dasha.",)),
+    ("TRANSIT", ("transit.", "contact.")),
+)
+
+
+def _step_for(fact_ids) -> str:
+    """The earliest checklist step any of these facts belongs to."""
+    for step, prefixes in _STEP_OF_ID:
+        if any(fid.startswith(prefixes) for fid in fact_ids):
+            return step
+    return "NATAL"
+
+
+def domain_cards(chart, now: datetime) -> list[dict]:
+    """Everything the arrival grid and the five domain views need.
+
+    Composed once from one build of the ledger — five domains sharing a
+    single pass rather than five.
+    """
+    import domainread
+    from chartfacts import build_facts
+    from domains import CHECKLIST, DOMAINS
+    facts = {f.id: f for f in build_facts(chart, now)}
+    steps = dict(CHECKLIST)
+    out = []
+    for did in DOMAIN_ORDER:
+        reading = domainread.read(chart, now, did, facts)
+        domain = DOMAINS[did]
+        grouped: dict[str, list] = {name: [] for name, _ in CHECKLIST}
+        for signal in reading.signals:
+            grouped[_step_for(signal.fact_ids)].append(
+                {"text": signal.text[0].upper() + signal.text[1:],
+                 "ids": " · ".join(signal.fact_ids)})
+        out.append({
+            "id": did,
+            "title": DOMAIN_TITLES[did],
+            "label": domain.label,
+            "teaser": reading.teaser,
+            "paragraphs": list(reading.paragraphs),
+            "confidence": reading.confidence,
+            "houses_label": ", ".join(
+                f"the {ordinal(h)}" for h in domain.houses),
+            "ask_hint": (
+                f"The agent works the same five frames this page just "
+                f"showed you — {domain.label} is read from "
+                + ", ".join(f"the {ordinal(h)}" for h in domain.houses)
+                + f", with {domain.karakas[0]} as its natural significator "
+                f"and the {domain.varga} as its test."),
+            "steps": [
+                {"title": name.title(), "do": steps[name],
+                 "count": len(grouped[name]), "rows": grouped[name]}
+                for name, _ in CHECKLIST
+                if name != "SYNTHESIS" and grouped[name]
+            ],
+        })
+    return out
 
 
 def life_timeline(chart, timeline, now: datetime) -> dict:

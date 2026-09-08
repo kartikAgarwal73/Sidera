@@ -637,3 +637,85 @@ fieldset.school .notyet { color: var(--accent); font-size: 12.5px;
 .schoolform { margin-top: 14px; }
 .schoolbox.onboard { border-top: none; padding-top: 0; margin-top: 14px; }
 button.cast.recast { margin-top: 4px; }
+
+/* --- Domains-not-techniques restructure ---------------------------------
+   Three views on one page (ui-design/RESTRUCTURE.md). This is IA, not a
+   reskin: no new colours, no new type, square corners throughout. */
+
+/* The VIEW containers. Named `.view`, not `.pane`: the chart plate
+   already uses `.pane` for its D1/D9/D10 tabs, and sharing the class made
+   the view switcher hide the wheel. */
+.view:focus { outline: none; }
+.view[hidden] { display: none; }
+
+/* The three-line identity strip. Sized so it does not reflow to four lines
+   at 390px, which is the first thing that makes a phone feel unfinished. */
+.identity {
+  list-style: none; margin: 10px 0 0; padding: 0;
+  font-size: 12.5px; line-height: 1.75; color: var(--cream-70);
+}
+.identity li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.identity li:first-child { color: var(--cream); }
+
+/* The card grid. One column on a phone, two once there is room — the body
+   is capped at 640px, so two is the honest maximum. */
+.domaingrid { margin: 34px 0 8px; }
+.cards { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 14px; }
+@media (min-width: 560px) { .cards { grid-template-columns: 1fr 1fr; } }
+
+.dcard {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 16px 18px 14px; min-height: 44px;
+  border: 1px solid var(--divider); background: var(--raised);
+  text-decoration: none; color: inherit;
+  transition: border-color .15s ease, transform .15s ease;
+}
+.dcard:hover, .dcard:focus-visible { border-color: var(--accent); }
+.dcard:active { transform: translateY(1px); }
+.dcard-title {
+  font-family: var(--font-heading); font-size: 19px; font-weight: 600;
+  color: var(--cream); letter-spacing: .01em;
+}
+.dcard-teaser { font-size: 12.5px; line-height: 1.6; color: var(--cream-70); }
+.dcard-more {
+  font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--accent); margin-top: 2px;
+}
+.dcard-alt { background: transparent; }
+@media (min-width: 560px) { .dcard-wide { grid-column: 1 / -1; } }
+
+.backlink {
+  display: inline-block; margin: 14px 0 4px; padding: 6px 0;
+  font-size: 12.5px; color: var(--accent); text-decoration: none;
+}
+.backlink:hover { text-decoration: underline; }
+
+/* Domain view: the synthesis first, the working underneath. */
+.domainread { padding-top: 6px; }
+.dsynth {
+  font-family: var(--font-body); font-size: 15px; line-height: 1.75;
+  color: var(--cream-70); margin: 16px 0 0; max-width: 62ch;
+}
+.dsynth:first-of-type { color: var(--cream); }
+.conf {
+  font-size: 11.5px; color: var(--cream-50); margin: 16px 0 0;
+  letter-spacing: .01em;
+}
+.dstep { margin-top: 10px; }
+.dstep > summary {
+  font-family: var(--font-heading); font-size: 16px; color: var(--cream);
+  cursor: pointer; display: flex; align-items: baseline; gap: 8px;
+}
+.dstep-n {
+  font-family: var(--font-body); font-size: 11px; color: var(--accent);
+  border: 1px solid var(--hairline); padding: 0 6px;
+}
+.dstep-do {
+  font-size: 12.5px; line-height: 1.6; color: var(--cream-50);
+  margin: 8px 0 10px; max-width: 62ch;
+}
+.dstep .row { align-items: flex-start; gap: 14px; }
+.dstep .row .num {
+  font-size: 10.5px; letter-spacing: 0; text-align: right;
+  flex: none; max-width: 42%; word-break: break-word;
+}
