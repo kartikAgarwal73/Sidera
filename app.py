@@ -126,9 +126,10 @@ def cities_api():
 
 _TIME_RE = re.compile(
     r"^\s*(\d{1,2})[:.](\d{2})\s*(am|pm|a\.m\.|p\.m\.)?\s*$", re.IGNORECASE)
-# Separator-free fallback: '1312' or '812'. The field is <input type="time">,
-# which submits 'HH:MM', but a browser that does not support it degrades to a
-# plain text box — and on a phone that box may only offer digits.
+# Separator-free: '1312' or '812'. Not a fallback — the primary mobile path.
+# The field is masked text with inputmode="numeric", so the keypad offers no
+# colon key; the mask types the colon, and digits alone must also parse here
+# in case the script has not run.
 _TIME_BARE_RE = re.compile(r"^\s*(\d{1,2})(\d{2})\s*(am|pm)?\s*$",
                            re.IGNORECASE)
 
@@ -662,11 +663,47 @@ def life_timeline(chart, timeline, now: datetime) -> dict:
     }
 
 
+_DATE_DAY_FIRST_RE = re.compile(r"^\s*(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})\s*$")
+_DATE_BARE_RE = re.compile(r"^\s*(\d{2})(\d{2})(\d{4})\s*$")
+_DATE_ISO_RE = re.compile(r"^\s*(\d{4})-(\d{2})-(\d{2})\s*$")
+
+
 def _parse_date(text: str) -> datetime:
+    """Day-first ('25/03/1994'), separator-free ('25031994') or ISO.
+
+    DAY-FIRST IS NOT A PREFERENCE, IT IS THE WHOLE POINT. `<input type="date">`
+    renders in the *system* locale, so 03/04/1990 meant 3 April in one
+    visitor's browser and 4 March in another's — two different charts, from
+    the same keystrokes, with no error shown either time. A wrong date is a
+    wrong chart, silently. One order, stated on the field, parsed the same way
+    for everyone.
+
+    ISO stays accepted because the agent panel re-posts the birth details as
+    'YYYY-MM-DD' on every question (no birth record is held server-side), and
+    because it is unambiguous. The two shapes cannot collide: ISO leads with
+    four digits, day-first with at most two.
+    """
+    raw = (text or "").strip()
+    m = _DATE_ISO_RE.match(raw)
+    if m:
+        year, month, day = (int(g) for g in m.groups())
+    else:
+        m = _DATE_DAY_FIRST_RE.match(raw) or _DATE_BARE_RE.match(raw)
+        if not m:
+            raise ValueError(
+                "Date must be day first — e.g. 25/03/1994 for 25 March 1994.")
+        day, month, year = (int(g) for g in m.groups())
+    if not 1 <= day <= 31:
+        raise ValueError("The day runs 01–31.")
+    if not 1 <= month <= 12:
+        raise ValueError(
+            "The month runs 01–12. Dates here are day first, so 03/04/1990 "
+            "is 3 April 1990 — not 4 March.")
     try:
-        return datetime.strptime(text.strip(), "%Y-%m-%d")
+        return datetime(year, month, day)
     except ValueError:
-        raise ValueError("Date must be a real calendar date (YYYY-MM-DD).")
+        raise ValueError(
+            f"{day:02d}/{month:02d}/{year} is not a real calendar date.")
 
 
 def birth_from_fields(fields, prefix: str = "") -> BirthData:

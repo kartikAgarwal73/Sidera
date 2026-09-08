@@ -3,6 +3,7 @@
 Run with: pytest test_gates.py -v
 """
 import json
+import os
 import re
 import sys
 from datetime import date, datetime, timedelta, timezone
@@ -811,42 +812,80 @@ class TestPhase6FlaskUI:
             with pytest.raises(ValueError):
                 parse_time(bad)
 
-    def test_birth_time_field_is_a_native_time_input(self, client):
-        """Mobile regression: the field was type=text inputmode=numeric.
+    def test_birth_date_and_time_are_masked_text_not_native_pickers(
+            self, client):
+        """The native pickers render in the SYSTEM locale, not the page's.
 
-        That combination hands a phone a digits-only keypad with no colon
-        key, so a birth time could not be entered on mobile at all — found
-        in a live smoke-test on Render. `type="time"` gives the native
-        picker and submits 24-hour "HH:MM", which parse_time already reads.
-        """
-        html = client.get("/").get_data(as_text=True)
-        form = html[html.index('<form method="post"'):html.index("</form>")]
-        for field in ("time", "p_time"):
-            tag = re.search(rf'<input id="{field}"[^>]*>', form, re.S)
-            assert tag, f"{field} input missing"
-            assert 'type="time"' in tag.group(0), (
-                f"{field} must be a native time input: {tag.group(0)}")
-            assert 'step="60"' in tag.group(0), (
-                f"{field} needs minute granularity, not seconds")
-            assert 'inputmode="numeric"' not in tag.group(0), (
-                f"{field} must not force a digits-only keypad")
+        Reported live on sidera.onrender.com: macOS Safari with a 12-hour
+        system clock showed am/pm segments and answered a typed "13" with
+        "Invalid value". `type="date"` has the worse form of it — MM/DD in a
+        US locale, DD/MM elsewhere — so the same keystrokes cast two
+        different charts with no error shown either time.
 
-    def test_no_birth_field_traps_a_mobile_keyboard(self, client):
-        """Sweep: no field may demand characters its keyboard cannot type.
-
-        `inputmode="numeric"` is a digits-only keypad — no colon, no minus,
-        no decimal point on several mobile browsers. Any field whose valid
-        values need one of those must not declare it.
+        The earlier text field (commit eb03cc6) failed for the opposite
+        reason: `inputmode="numeric"` with no mask hands a phone a
+        digits-only keypad and there is no colon key, so a birth time could
+        not be typed at all. Both constraints are satisfiable at once only
+        by masking — the field types the separator itself — so this pins the
+        mask and the numeric keypad TOGETHER. Dropping either resurrects one
+        of the two bugs.
         """
         html = client.get("/").get_data(as_text=True)
         form = html[html.index('<form method="post"'):html.index("</form>")]
         tags = {m.group(1): m.group(0) for m in
                 re.finditer(r'<input id="(\w+)"[^>]*>', form, re.S)}
-        # Dates and times get native pickers — no free typing to trap.
-        for field in ("date", "p_date"):
-            assert 'type="date"' in tags[field], field
-        for field in ("time", "p_time"):
-            assert 'type="time"' in tags[field], field
+        for field, mask, length in (("date", "date", "10"),
+                                    ("time", "time", "5"),
+                                    ("p_date", "date", "10"),
+                                    ("p_time", "time", "5")):
+            tag = tags.get(field)
+            assert tag, f"{field} input missing"
+            assert 'type="text"' in tag, (
+                f"{field} must be a masked text field, not a native picker "
+                f"that follows the system locale: {tag}")
+            assert f'data-mask="{mask}"' in tag, (
+                f"{field} must carry the mask; without it inputmode=numeric "
+                f"is the un-typeable mobile field again: {tag}")
+            assert 'inputmode="numeric"' in tag, f"{field}: {tag}"
+            assert f'maxlength="{length}"' in tag, f"{field}: {tag}"
+        # No native date/time input may exist anywhere on the page — not
+        # just in the birth form — or the locale bug returns by another door.
+        for tag in re.findall(r"<input\b[^>]*>", html, re.S):
+            assert 'type="date"' not in tag and 'type="time"' not in tag, (
+                f"a native date/time picker is back on the page: {tag}")
+
+    def test_the_field_hints_state_the_order_and_the_clock(self, client):
+        """A masked field is only unambiguous if it says which order it is.
+
+        Day-first is a decision, not a default: 03/04/1990 is 3 April here
+        and 4 March to half the world. The hint carries it, so nobody has to
+        guess which chart they are casting.
+        """
+        html = client.get("/").get_data(as_text=True)
+        assert "Time of birth · 24-hour · e.g. 13:12" in html
+        assert "Date of birth · day first · e.g. 25/03/1994" in html
+        assert 'placeholder="HH:MM"' in html
+        assert 'placeholder="DD/MM/YYYY"' in html
+
+    def test_no_birth_field_traps_a_mobile_keyboard(self, client):
+        """Sweep: no field may demand characters its keyboard cannot type.
+
+        `inputmode="numeric"` is a digits-only keypad — no colon, no minus,
+        no decimal point on several mobile browsers. A field may declare it
+        only if digits ALONE are a complete answer: the date and time masks
+        insert their own separators, so "1312" and "16081998" are typeable
+        on a bare keypad. Anything else must not declare it.
+        """
+        from app import parse_time, _parse_date
+        html = client.get("/").get_data(as_text=True)
+        form = html[html.index('<form method="post"'):html.index("</form>")]
+        tags = {m.group(1): m.group(0) for m in
+                re.finditer(r'<input id="(\w+)"[^>]*>', form, re.S)}
+        # Digits alone must reach the engine, or the keypad is a trap.
+        assert parse_time("1312") == (13, 12)
+        assert _parse_date("16081998") == datetime(1998, 8, 16)
+        for field in ("date", "time", "p_date", "p_time"):
+            assert 'inputmode="numeric"' in tags[field], field
         # Coordinates are signed decimals; a numeric keypad may offer no
         # minus key, which would make the southern and western hemispheres
         # unreachable. They take a full keyboard, and the parser also
@@ -875,8 +914,44 @@ class TestPhase6FlaskUI:
             with pytest.raises(ValueError):
                 parse_coord(bad, axis)
 
+    def test_date_parsing_is_day_first_and_never_ambiguous(self):
+        """A wrong date is a wrong chart, silently. Order is pinned here.
+
+        `<input type="date">` read the SYSTEM locale, so 03/04/1990 was
+        3 April to one visitor and 4 March to another with no error either
+        time. One order now, stated on the field and enforced here.
+        """
+        from app import _parse_date
+        assert _parse_date("16/08/1998") == datetime(1998, 8, 16)
+        assert _parse_date("16081998") == datetime(1998, 8, 16)   # bare keypad
+        assert _parse_date("16-08-1998") == datetime(1998, 8, 16)
+        assert _parse_date("16.08.1998") == datetime(1998, 8, 16)
+        assert _parse_date("3/4/1990") == datetime(1990, 4, 3), (
+            "3/4/1990 must be 3 April — day first, not month first")
+        # ISO stays accepted: the agent panel re-posts 'YYYY-MM-DD' with
+        # every question, since no birth record is held server-side. The two
+        # shapes cannot collide — ISO leads with four digits.
+        assert _parse_date("1998-08-16") == datetime(1998, 8, 16)
+        for bad in ("08/16/1998",        # month-first: 16 is not a month
+                    "31/02/1998",        # not a real calendar date
+                    "16/08/98",          # two-digit year
+                    "", "yesterday", "16/08"):
+            with pytest.raises(ValueError):
+                _parse_date(bad)
+
+    def test_month_first_is_refused_with_the_order_spelled_out(self, client):
+        """The one input error that would otherwise cast a plausible chart.
+
+        A visitor typing US order gets told the order, not just 'invalid'.
+        """
+        resp = client.post("/", data={**GATE_FORM, "date": "12/25/1994"})
+        assert resp.status_code == 400
+        html = resp.get_data(as_text=True)
+        assert "day first" in html
+        assert "The month runs 01–12" in html
+
     def test_native_time_value_casts_the_same_chart(self, client):
-        """The <input type="time"> wire format must reach the engine intact.
+        """The masked field's wire format must reach the engine intact.
 
         A shifted hour would move the Lagna by ~15° and could move the Moon
         across a pada boundary, changing the whole Vimśottarī timeline — so
@@ -989,7 +1064,12 @@ class TestPhase6FlaskUI:
     def test_bad_input_returns_form_error(self, client):
         resp = client.post("/", data={**GATE_FORM, "date": "not-a-date"})
         assert resp.status_code == 400
-        assert "a real calendar date" in resp.get_data(as_text=True)
+        # Unparseable input is told the shape it should have had...
+        assert "day first" in resp.get_data(as_text=True)
+        # ...and a well-shaped date that does not exist is told that instead.
+        resp = client.post("/", data={**GATE_FORM, "date": "31/02/1998"})
+        assert resp.status_code == 400
+        assert "not a real calendar date" in resp.get_data(as_text=True)
 
 
 @pytest.fixture(scope="module")
@@ -4991,3 +5071,171 @@ class TestDomainRestructure:
         for required in ("ARRIVAL", "DOMAIN VIEW", "EXPLORE THE FULL CHART",
                          "Mobile-first", "nothing is deleted"):
             assert required.lower() in spec.lower(), required
+
+
+class TestMaskedBirthFieldsInARealBrowser:
+    """The bug was a browser behaviour, so the guard has to be a browser.
+
+    Server-side assertions on the markup (`TestPhase6FlaskUI`) prove the
+    attributes are right. They cannot prove that typing "13" is accepted,
+    because the thing that rejected it was Safari's native control reading
+    the system's 12-hour clock — an HTML string cannot show that. This class
+    drives the rendered form: types digits, reads back what the field holds,
+    and submits.
+    """
+
+    @staticmethod
+    def _launch(p, pytest_mod):
+        """Playwright's bundled build, or any chromium already on the box.
+
+        A test that quietly skips guards nothing, and this one exists
+        precisely so a template swap cannot go unnoticed. So when the pinned
+        build is absent — a common state in a container that ships one
+        chromium for every tool — fall back to the installed binary before
+        giving up. SIDERA_CHROMIUM overrides for an unusual host.
+        """
+        try:
+            return p.chromium.launch()
+        except Exception:
+            pass
+        candidates = [os.environ.get("SIDERA_CHROMIUM")]
+        root = Path(os.environ.get("PLAYWRIGHT_BROWSERS_PATH", "/opt/pw-browsers"))
+        candidates.append(str(root / "chromium"))
+        candidates += [str(p_) for p_ in sorted(root.glob("chromium-*/chrome-linux/chrome"))]
+        candidates += ["/usr/bin/chromium", "/usr/bin/chromium-browser",
+                       "/usr/bin/google-chrome"]
+        for path in candidates:
+            if not path or not Path(path).exists():
+                continue
+            try:
+                return p.chromium.launch(executable_path=path)
+            except Exception:
+                continue
+        pytest_mod.skip(
+            "no chromium available for the browser gate; the markup gates in "
+            "TestPhase6FlaskUI still ran. Set SIDERA_CHROMIUM or run "
+            "'playwright install chromium'.")
+
+    @classmethod
+    @pytest.fixture(scope="class")
+    def form_page(cls):
+        pw = pytest.importorskip(
+            "playwright.sync_api",
+            reason="playwright not installed; the markup gates still run")
+        from app import app
+
+        import threading
+        from werkzeug.serving import make_server
+        srv = make_server("127.0.0.1", 0, app, threaded=True)
+        port = srv.socket.getsockname()[1]
+        t = threading.Thread(target=srv.serve_forever, daemon=True)
+        t.start()
+        try:
+            with pw.sync_playwright() as p:
+                browser = cls._launch(p, pytest)
+                # A US locale with a 12-hour clock is exactly the environment that
+                # produced 'Invalid value' on the native control. If the mask
+                # is right, the locale is irrelevant — which is the claim.
+                ctx = browser.new_context(locale="en-US",
+                                          timezone_id="America/Los_Angeles")
+                page = ctx.new_page()
+                page.goto(f"http://127.0.0.1:{port}/")
+                yield page
+                browser.close()
+        finally:
+            srv.shutdown()
+
+    def test_the_time_field_is_text_with_the_mask_not_a_native_picker(
+            self, form_page):
+        """The regression this exists to prevent: a template swap that
+        silently restores <input type="time">."""
+        for field in ("time", "p_time", "date", "p_date"):
+            el = form_page.locator(f"#{field}")
+            assert el.get_attribute("type") == "text", (
+                f"#{field} is a native picker again — it follows the "
+                f"viewer's system locale, which is the reported bug")
+            assert el.get_attribute("data-mask") in ("time", "date")
+            assert el.get_attribute("inputmode") == "numeric"
+        # Nothing on the page may be one, either.
+        assert form_page.locator('input[type="time"]').count() == 0
+        assert form_page.locator('input[type="date"]').count() == 0
+
+    def test_typing_thirteen_is_accepted_in_a_twelve_hour_locale(
+            self, form_page):
+        """'13' typed into the old control popped 'Invalid value'."""
+        field = form_page.locator("#time")
+        field.fill("")
+        field.type("13")
+        assert field.input_value() == "13"
+        assert field.get_attribute("aria-invalid") is None
+
+    def test_the_mask_types_the_colon_so_a_digit_keypad_suffices(
+            self, form_page):
+        """A phone's numeric keypad has no colon key. It must not need one."""
+        field = form_page.locator("#time")
+        field.fill("")
+        field.type("1312")
+        assert field.input_value() == "13:12"
+
+    def test_an_explicit_colon_is_also_accepted(self, form_page):
+        field = form_page.locator("#time")
+        field.fill("")
+        field.type("13:12")
+        assert field.input_value() == "13:12"
+
+    def test_the_date_mask_types_its_own_slashes_day_first(self, form_page):
+        field = form_page.locator("#date")
+        field.fill("")
+        field.type("16081998")
+        assert field.input_value() == "16/08/1998"
+
+    def test_out_of_range_is_the_only_error_and_it_names_the_range(
+            self, form_page):
+        """Error for hour > 23 or minute > 59 — nothing else."""
+        field = form_page.locator("#time")
+        for good in ("0000", "2359", "1312", "0845"):
+            field.fill("")
+            field.type(good)
+            form_page.locator("#place").focus()          # blur
+            assert field.get_attribute("aria-invalid") is None, good
+        for bad, message in (("2400", "hour runs 00–23"),
+                             ("1275", "Minutes run 00–59")):
+            field.fill("")
+            field.type(bad)
+            form_page.locator("#place").focus()
+            assert field.get_attribute("aria-invalid") == "true", bad
+            assert message in form_page.locator("#time-hint").inner_text()
+
+    def test_the_hint_is_visible_before_anything_is_typed(self, form_page):
+        form_page.reload()
+        assert (form_page.locator("#time-hint").inner_text().strip()
+                == "Time of birth · 24-hour · e.g. 13:12")
+        assert (form_page.locator("#date-hint").inner_text().strip()
+                == "Date of birth · day first · e.g. 25/03/1994")
+
+    def test_a_masked_chart_casts_end_to_end_from_the_browser(self, form_page):
+        """Typed as digits alone, submitted, and the chart comes back.
+
+        The full path — mask, POST, parse, cast — because the previous two
+        attempts at this field each passed their own unit tests and failed
+        in a browser.
+        """
+        form_page.reload()
+        form_page.locator("#date").type("16081998")
+        form_page.locator("#time").type("0657")
+        # Place first: typing into it clears lat/lon/tz, since a coordinate
+        # left over from a previous city would cast a chart for the wrong
+        # spot. Then the manual-entry disclosure, which the autocomplete
+        # would otherwise fill from a suggestion.
+        form_page.locator("#place").fill(GATE_BIRTH.place)
+        form_page.locator("#manual").evaluate("d => d.open = true")
+        form_page.locator("#lat").fill(str(GATE_BIRTH.latitude))
+        form_page.locator("#lon").fill(str(GATE_BIRTH.longitude))
+        form_page.locator("#tz").fill(GATE_BIRTH.tz)
+        with form_page.expect_navigation():
+            form_page.locator("#cast").evaluate("f => f.submit()")
+        form_page.wait_for_load_state("load")
+        html = form_page.content()
+        error = re.search(r'<p class="error">(.*?)</p>', html, re.S)
+        assert not error, f"form refused a valid masked entry: {error.group(1)}"
+        assert "Leo 11°05′08″" in html

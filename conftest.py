@@ -159,6 +159,13 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
                      "domains, a domain view is verdict-first, every step "
                      "row cites real fact ids, and the reading reports "
                      "condition rather than outcome"),
+    # The bug was a browser behaviour — a native picker following the
+    # viewer's SYSTEM locale — so the guard has to be a browser. Markup
+    # assertions cannot show that Safari rejects a typed "13".
+    "TestMaskedBirthFieldsInARealBrowser": (
+        "invariant", "product rule: the birth date and time are entered "
+                     "identically on every browser and every system locale, "
+                     "and digits alone suffice on a numeric keypad"),
     "TestDueDiligenceReading": (
         "invariant", "product rule: a domain question is read across all "
                      "five frames, every step is answerable from the "
@@ -251,9 +258,18 @@ OVERRIDE: dict[str, tuple[str, str]] = {
         ("invariant", "clock arithmetic"),
     "TestPhase6FlaskUI::test_twelve_hour_input_casts_identical_chart":
         ("invariant", "06:57 and 6:57 AM are the same instant"),
-    "TestPhase6FlaskUI::test_birth_time_field_is_a_native_time_input":
-        ("invariant", "product rule: a birth time must be enterable on a "
-                      "phone — regression from a live Render smoke-test"),
+    "TestPhase6FlaskUI::test_birth_date_and_time_are_masked_text_not_native_pickers":
+        ("invariant", "product rule: identical entry on every browser "
+                      "regardless of system locale — regression from a live "
+                      "Render report, macOS Safari 12-hour clock"),
+    "TestPhase6FlaskUI::test_the_field_hints_state_the_order_and_the_clock":
+        ("invariant", "product rule: a masked field must state its order, "
+                      "or the visitor cannot know which chart they cast"),
+    "TestPhase6FlaskUI::test_date_parsing_is_day_first_and_never_ambiguous":
+        ("invariant", "calendar arithmetic and one stated date order"),
+    "TestPhase6FlaskUI::test_month_first_is_refused_with_the_order_spelled_out":
+        ("invariant", "product rule: the one wrong entry that would "
+                      "otherwise cast a plausible chart must be refused"),
     "TestPhase6FlaskUI::test_no_birth_field_traps_a_mobile_keyboard":
         ("invariant", "product rule: no field may demand characters its "
                       "declared keyboard cannot produce"),

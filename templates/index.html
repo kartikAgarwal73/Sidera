@@ -47,12 +47,21 @@
   <div class="fieldrow">
     <div class="field grow">
       <label for="date">Date of birth</label>
-      <input id="date" name="date" type="date" value="{{ form.get('date', '') }}" required>
+      <input id="date" name="date" type="text" data-mask="date"
+             inputmode="numeric" autocomplete="off" spellcheck="false"
+             maxlength="10" placeholder="DD/MM/YYYY"
+             aria-describedby="date-hint"
+             value="{{ form.get('date', '') }}" required>
+      <p class="fieldhint" id="date-hint">Date of birth · day first · e.g. 25/03/1994</p>
     </div>
     <div class="field grow">
       <label for="time">Time of birth <span class="opt">· as exact as you have it</span></label>
-      <input id="time" name="time" type="time" step="60"
-             placeholder="e.g. 08:45 or 8:45 AM" value="{{ form.get('time', '') }}" required>
+      <input id="time" name="time" type="text" data-mask="time"
+             inputmode="numeric" autocomplete="off" spellcheck="false"
+             maxlength="5" placeholder="HH:MM"
+             aria-describedby="time-hint"
+             value="{{ form.get('time', '') }}" required>
+      <p class="fieldhint" id="time-hint">Time of birth · 24-hour · e.g. 13:12</p>
     </div>
   </div>
   <div class="field placewrap">
@@ -94,12 +103,21 @@
     <div class="fieldrow" style="margin-top:16px">
       <div class="field grow">
         <label for="p_date">Date of birth</label>
-        <input id="p_date" name="p_date" type="date" value="{{ form.get('p_date', '') }}">
+        <input id="p_date" name="p_date" type="text" data-mask="date"
+               inputmode="numeric" autocomplete="off" spellcheck="false"
+               maxlength="10" placeholder="DD/MM/YYYY"
+               aria-describedby="p_date-hint"
+               value="{{ form.get('p_date', '') }}">
+        <p class="fieldhint" id="p_date-hint">Date of birth · day first · e.g. 25/03/1994</p>
       </div>
       <div class="field grow">
         <label for="p_time">Time of birth</label>
-        <input id="p_time" name="p_time" type="time" step="60"
-               placeholder="e.g. 14:20 or 2:20 PM" value="{{ form.get('p_time', '') }}">
+        <input id="p_time" name="p_time" type="text" data-mask="time"
+               inputmode="numeric" autocomplete="off" spellcheck="false"
+               maxlength="5" placeholder="HH:MM"
+               aria-describedby="p_time-hint"
+               value="{{ form.get('p_time', '') }}">
+        <p class="fieldhint" id="p_time-hint">Time of birth · 24-hour · e.g. 13:12</p>
       </div>
     </div>
     <div class="field placewrap" style="margin-top:16px">
@@ -834,6 +852,99 @@ Sidereal · Lahiri ayanāṃśa · Whole Sign · North-Indian<br>
 <span class="credit"><a href="https://github.com/kartikAgarwal73/Sidera">Source</a> — AGPL-3.0, as required by <a href="https://github.com/astrorigin/pyswisseph">pyswisseph</a></span></footer>
 
 <script>
+// ---- Masked date and time fields -----------------------------------------
+// WHY NOT type="date" / type="time".
+// The native pickers render in the SYSTEM locale, not the page's. On macOS
+// Safari with a 12-hour system clock the time field shows am/pm segments and
+// rejects a typed "13" with "Invalid value" — the user is forced through a
+// picker to enter a birth time they already know as 24-hour. The date field
+// has the worse version of the same problem: it renders MM/DD in a US locale
+// and DD/MM elsewhere, so the SAME keystrokes cast two different charts.
+//
+// WHY THIS IS SAFE NOW AND WAS NOT BEFORE.
+// A previous text field used inputmode="numeric" with NO mask. That hands a
+// phone a digits-only keypad with no colon or slash key, so a birth time
+// could not be typed on mobile at all (found in a live smoke-test; commit
+// eb03cc6 reverted to the native picker). The separator is what broke it —
+// so the mask now types the separator FOR the user. "1312" becomes "13:12"
+// and "25031994" becomes "25/03/1994" without the keypad ever needing a
+// colon or a slash. Digits alone are sufficient input.
+(function () {
+  const SPEC = {
+    time: { sep: ":", cuts: [2],    max: 4, limits: [23, 59] },
+    date: { sep: "/", cuts: [2, 4], max: 8, limits: [31, 12, 9999] },
+  };
+
+  // Digits in, separated string out. The single source of truth for the
+  // shape, used by input handling, blur and submit alike.
+  function format(digits, spec) {
+    digits = digits.replace(/\D/g, "").slice(0, spec.max);
+    let out = "";
+    for (let i = 0; i < digits.length; i++) {
+      if (spec.cuts.includes(i)) out += spec.sep;
+      out += digits[i];
+    }
+    return out;
+  }
+
+  // Ranges only — never "is this a real date". Whether 31/02 exists is the
+  // server's call, in one place, for every client.
+  function problem(value, spec, kind) {
+    if (!value) return "";
+    const parts = value.split(spec.sep);
+    for (let i = 0; i < parts.length; i++) {
+      if (parts[i] === "") continue;
+      if (Number(parts[i]) > spec.limits[i]) {
+        if (kind === "time") {
+          return i === 0 ? "The hour runs 00–23." : "Minutes run 00–59.";
+        }
+        return i === 0 ? "The day runs 01–31." : "The month runs 01–12.";
+      }
+    }
+    return "";
+  }
+
+  document.querySelectorAll("input[data-mask]").forEach(input => {
+    const kind = input.getAttribute("data-mask");
+    const spec = SPEC[kind];
+    if (!spec) return;
+    const hint = document.getElementById(input.id + "-hint");
+    const hintText = hint ? hint.textContent : "";
+
+    // A value posted back after a server-side error arrives in whatever
+    // shape it was typed; normalise it so the field always reads the same.
+    if (input.value) input.value = format(input.value, spec);
+
+    input.addEventListener("input", () => {
+      // Typing at the end is the overwhelmingly common case and keeping the
+      // caret there is what makes auto-separation feel native. An edit in
+      // the middle is left alone rather than yanking the caret to the end.
+      const atEnd = input.selectionStart === input.value.length;
+      const formatted = format(input.value, spec);
+      if (formatted !== input.value) {
+        input.value = formatted;
+        if (!atEnd) {
+          const p = Math.min(input.selectionStart || 0, formatted.length);
+          input.setSelectionRange(p, p);
+        }
+      }
+      if (hint) { hint.textContent = hintText; hint.classList.remove("bad"); }
+      input.removeAttribute("aria-invalid");
+    });
+
+    // Report only on leaving the field: a half-typed "1" is not an error.
+    input.addEventListener("blur", () => {
+      const bad = problem(input.value, spec, kind);
+      if (hint) {
+        hint.textContent = bad || hintText;
+        hint.classList.toggle("bad", Boolean(bad));
+      }
+      if (bad) input.setAttribute("aria-invalid", "true");
+      else input.removeAttribute("aria-invalid");
+    });
+  });
+})();
+
 // ---- View switching ------------------------------------------------------
 // Three views on one page: arrival, a view per domain, and "explore the full
 // chart". Client-side rather than server routes because Sidera holds no

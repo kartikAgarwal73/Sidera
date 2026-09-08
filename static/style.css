@@ -99,8 +99,15 @@ body {
 }
 .field input:focus { border-bottom-color: var(--accent-300); }
 .field input::placeholder { color: var(--cream-50); }
-input[type="date"]::-webkit-calendar-picker-indicator,
-input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(.85); }
+/* Date and time are masked text fields, not native pickers — the native
+   ones render in the system locale, so the same keystrokes meant different
+   dates to different visitors. See the mask in index.html. */
+.fieldhint {
+  font-size: 9px; letter-spacing: .08em; color: rgba(236, 229, 216, .38);
+  margin: 5px 0 0;
+}
+.fieldhint.bad { color: var(--accent-300); }
+.field input[aria-invalid="true"] { border-bottom-color: var(--accent-300); }
 
 .opt { font-size: 8px; letter-spacing: .1em; color: rgba(236, 229, 216, .35); }
 .placewrap { position: relative; }

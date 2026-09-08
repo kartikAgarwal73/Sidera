@@ -1,5 +1,79 @@
 # PROGRESS
 
+## The birth fields stop following the viewer's system locale ✅ (2026-09-08)
+
+**Reported live.** On sidera.onrender.com, macOS Safari with a 12-hour system
+clock rendered the birth-time field with am/pm segments and answered a typed
+`13` with *"Invalid value"*.
+
+### The diagnosis, and a wrong guess corrected
+
+The suspicion was that the restructure had created a second form template and
+the fix was landing in the wrong one. It had not: `templates/index.html` is the
+only template in the repo, and the restructure re-homed sections *inside* it.
+
+The truth was simpler and worse — **the masked field had never existed here**.
+Every commit since `eb03cc6` served `<input type="time">`, checked one by one.
+The diagnosis was made against the *rendered* page, not the source: the app was
+run from the public repo at the deployed commit and `/` fetched.
+
+### Why the previous fix was the opposite of this one
+
+`eb03cc6` deliberately *chose* the native picker, and for a real reason. The
+field before it was `type="text" inputmode="numeric"` with **no mask**, which
+hands a phone a digits-only keypad with no colon key — a required field no
+mobile user could fill. That was found in a live smoke-test too.
+
+So the two failures pull in opposite directions:
+
+| | native picker | text + numeric keypad |
+|---|---|---|
+| macOS Safari, 12-hour clock | `13` rejected | fine |
+| any phone | fine | **no colon key — untypeable** |
+
+**Masking satisfies both, and nothing else does.** The field types the
+separator itself: `1312` becomes `13:12`, `25031994` becomes `25/03/1994`.
+Digits alone are now a complete answer, so the numeric keypad is safe *because*
+of the mask. The replacement test pins the two together, since dropping either
+one resurrects one of the two bugs.
+
+### The date field had the worse version of the same bug
+
+`<input type="date">` renders MM/DD in a US locale and DD/MM elsewhere. Nobody
+saw an error: **the same keystrokes cast two different charts.** `03/04/1990`
+was 3 April to one visitor and 4 March to another. Now one stated order —
+day-first — parsed identically for everyone, with the order on the field and a
+refusal that names it when a month-first date arrives.
+
+ISO stays accepted: the agent panel re-posts `YYYY-MM-DD` with every question,
+since no birth record is held server-side. The shapes cannot collide — ISO
+leads with four digits, day-first with at most two.
+
+### The guard is a browser, because the bug was a browser
+
+Markup assertions prove the attributes are right. They cannot prove Safari
+rejects a typed `13`. `TestMaskedBirthFieldsInARealBrowser` drives the rendered
+form in Chromium under `en-US` / `America/Los_Angeles` — the locale that
+produced the report — and types, reads back, and submits.
+
+**Verified red before being kept:** restoring `type="time"` on `#time` alone
+fails **7** tests, including the browser reproducing the original bug — typing
+`13` into the native control does not yield `13`.
+
+A skipping test guards nothing, so the fixture falls back to any chromium on
+the box (`SIDERA_CHROMIUM`, `PLAYWRIGHT_BROWSERS_PATH`, the usual system paths)
+before it skips, and `playwright==1.62.0` is pinned as a test-only dependency.
+
+### Two existing guards caught me mid-fix
+
+The hint example was first `16/08/1998` — which is the fixture chart's own
+birth date. `test_birth_form_renders_blank_and_universal` failed twice over it,
+once for the hint and once for the same date inside a JS comment that ships to
+the browser. The example is now `25/03/1994`, where the day is over 12 and so
+shows the order at a glance.
+
+`pytest` → **378 passed** (external 70 · invariant 218 · characterization 80).
+
 ## Domains, not techniques — the dashboard restructure ✅ (2026-09-08)
 
 **The problem.** Seventeen sections in a flat scroll behind a sticky bar of
