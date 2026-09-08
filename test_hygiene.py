@@ -133,3 +133,102 @@ def test_characterization_share_is_declared_honestly(tally):
         "guarantees is continuity, not correctness. Add externally anchored "
         "cases, or update the audit to state the ratio plainly."
     )
+
+
+# --- the oracle stays an oracle ---------------------------------------------
+
+ORACLE_JSON = HERE / "fixtures_pyjhora.json"
+APP_MODULES = (
+    "app.py", "agent.py", "ask.py", "chartfacts.py", "dashas.py",
+    "doshas.py", "engine.py", "explain.py", "fixtures.py", "gunamilan.py",
+    "lessons.py", "pancanga.py", "rulelib.py", "transits.py", "vargas.py",
+    "yogas.py",
+)
+
+
+@pytest.mark.hygiene
+def test_no_app_module_imports_the_oracle():
+    """PyJHora is a second opinion, not a dependency.
+
+    The value of `fixtures_pyjhora.json` is that PyJHora shares no line of
+    interpretation code with Sidera. If the app imported `jhora`, an
+    agreement would prove only that a function agrees with itself — and the
+    deploy would grow a GUI toolkit. Neither is acceptable, so it is checked
+    rather than remembered.
+    """
+    offenders = []
+    for name in APP_MODULES + ("reading", "tools/refresh_audit_counts.py"):
+        path = HERE / name
+        files = sorted(path.rglob("*.py")) if path.is_dir() else [path]
+        for f in files:
+            if not f.exists():
+                continue
+            text = f.read_text(encoding="utf-8")
+            if re.search(r"^\s*(?:import|from)\s+jhora\b", text, re.M):
+                offenders.append(str(f.relative_to(HERE)))
+    assert not offenders, (
+        f"{offenders} import the oracle package. PyJHora must stay outside "
+        "the app: see tools/oracle/README.md.")
+
+
+@pytest.mark.hygiene
+def test_oracle_is_not_installed_in_the_app_environment():
+    """The suite must be able to run without PyJHora present.
+
+    If it ever became importable here, a test could start depending on it
+    silently and the fence above would be the only thing left holding.
+    """
+    import importlib.util
+    assert importlib.util.find_spec("jhora") is None, (
+        "PyJHora is installed in the app environment. It belongs in the "
+        "scratch venv built by tools/oracle/make_oracle.sh, outside the "
+        "repo.")
+
+
+@pytest.mark.hygiene
+def test_oracle_fixture_is_committed_and_declares_its_settings():
+    """The two settings that make the file trustworthy are recorded IN it.
+
+    PyJHora defaults to the True Pushya ayanamsa and the true node; Sidera
+    uses Lahiri and the mean node. A file that does not say which it used is
+    not evidence of anything.
+    """
+    import json
+    assert ORACLE_JSON.exists(), (
+        "fixtures_pyjhora.json is missing — regenerate with "
+        "tools/oracle/make_oracle.sh")
+    data = json.loads(ORACLE_JSON.read_text(encoding="utf-8"))
+    assert data["settings"]["ayanamsa_mode"] == "LAHIRI"
+    assert data["settings"]["node_mode"] == "mean"
+    assert data["oracle"]["package"] == "PyJHora"
+    assert data["oracle"]["licence"] == "AGPL-3.0"
+    assert data["oracle"]["version"] != "unknown"
+    for name, chart in data["charts"].items():
+        ayanamsa = chart["ayanamsa"]
+        assert ayanamsa["mode"] == "LAHIRI", name
+        # The proof that the default was overridden: the file carries the
+        # value it was NOT computed with, and the two are far apart.
+        assert ayanamsa["pyjhora_default_mode"] == "TRUE_PUSHYA", name
+        assert abs(ayanamsa["difference_arcsec"]) > 3000, name
+        assert chart["nodes"]["used"] == "mean", name
+
+
+@pytest.mark.hygiene
+def test_licence_is_agpl_because_pyswisseph_is():
+    """AGPL is inherited, not chosen. Pinning it here means a future session
+    cannot quietly relicense while still linking pyswisseph."""
+    licence = (HERE / "LICENSE").read_text(encoding="utf-8")
+    assert "GNU AFFERO GENERAL PUBLIC LICENSE" in licence
+    assert "Version 3, 19 November 2007" in licence
+    # Section 13 is the reason this licence is not interchangeable with GPL
+    # for a web app, and the reason the footer carries a Source link.
+    assert "13. Remote Network Interaction" in licence
+    readme = (HERE / "README.md").read_text(encoding="utf-8")
+    assert "AGPL-3.0" in readme and "pyswisseph" in readme
+    # §13 in practice: a network user must be able to REACH the source from
+    # the running app. A public repo the page never points at does not do it.
+    page = (HERE / "templates" / "index.html").read_text(encoding="utf-8")
+    footer = page[page.index("<footer"):page.index("</footer>")]
+    assert "AGPL-3.0" in footer, "the footer must name the licence"
+    assert re.search(r'href="https://github\.com/\S+"[^>]*>\s*Source\s*<',
+                     footer), "the footer must carry a Source link (AGPL §13)"

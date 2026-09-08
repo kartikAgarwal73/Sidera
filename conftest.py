@@ -125,6 +125,21 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
         "invariant", "product rule: a specific transit-to-natal contact "
                      "governs the generic gocara-from-Moon verdict, and a "
                      "conflict between rules must be named, not flattened"),
+    # PyJHora — a second, independently written implementation that this app
+    # does not link or import (test_hygiene.py enforces it). Same standing as
+    # the ERFA cross-check: a source outside this build. If one goes red, the
+    # presumption is that Sidera is wrong.
+    "TestOracleCrossCheck": (
+        "external", "PyJHora (AGPL) via fixtures_pyjhora.json — a second "
+                    "implementation, sharing no interpretation code with "
+                    "this build (see tools/oracle/README.md)"),
+    # These assert the SHAPE of the oracle file, not Sidera's behaviour —
+    # nothing they describe is implemented yet. They are invariants of the
+    # fixture format, so that regenerating the oracle into something the
+    # planned gates cannot rest on fails now rather than mid-feature.
+    "TestOracleGatesTheNextMilestones": (
+        "invariant", "the fixture shape milestones 2 and 3 are gated "
+                     "against, asserted before the features exist"),
 }
 
 # Per-test overrides, keyed "Class::test_name" (parametrisation stripped).
@@ -355,6 +370,12 @@ OVERRIDE: dict[str, tuple[str, str]] = {
     "TestContactPrecedence::test_the_fixture_is_the_configuration_under_test":
         ("external", "transit Ketu at Leo 14°03′58″ on 2026-03-15 — "
                      "checkable in any ephemeris"),
+
+    # The 337 checksum is a classical figure the oracle reproduces, not a
+    # property of our file format like the rest of its class.
+    "TestOracleGatesTheNextMilestones::test_ashtakavarga_is_raw_per_sign_and_sums_to_337":
+        ("external", "BPHS per-planet bindu totals 48/49/39/54/56/52/39 "
+                     "summing to 337, reproduced by PyJHora"),
 
     # --- deployability
     "TestDeployability::test_ephemeris_backend_is_explicit":

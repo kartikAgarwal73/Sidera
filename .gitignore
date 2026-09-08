@@ -17,6 +17,11 @@ venv/
 .venv/
 env/
 
+# The oracle venv belongs OUTSIDE the repo (make_oracle.sh refuses to build
+# it inside). Ignored anyway, so a stray --venv path cannot commit PyQt6.
+oracle-venv/
+*-oracle-venv/
+
 # Local fixture overrides (see fixtures.py)
 fixtures.local.json
 

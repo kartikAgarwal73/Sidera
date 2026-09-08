@@ -4,6 +4,18 @@ Implements the "Colophon" direction from ui-design/Astrology App.dc.html:
 ink ground, cream text, gold hairlines, Cormorant Garamond / Lora,
 North-Indian kundli plate with D1/D9/D10 tabs, dasha ledger, gocara
 (transits), yogas and nakshatra table.
+
+Copyright (C) 2026 Kartik Agarwal.
+
+This program is free software: you can redistribute it and/or modify it
+under the terms of the GNU Affero General Public License as published by the
+Free Software Foundation, either version 3 of the License, or (at your
+option) any later version. See LICENSE.
+
+The licence is inherited, not chosen: every position comes from pyswisseph,
+which is AGPL-3.0. Section 13 is why the page footer carries a Source link —
+a network user must be offered the Corresponding Source, and a public
+repository only does that if the running app points at it.
 """
 from __future__ import annotations
 

@@ -3422,3 +3422,316 @@ class TestContactPrecedence:
         assert "contact.*" in SYSTEM_PROMPT
         assert "karakatvas" in SYSTEM_PROMPT
         assert "Name BOTH" in SYSTEM_PROMPT
+
+
+# --- the oracle: a second implementation's answers --------------------------
+#
+# `fixtures_pyjhora.json` was produced by PyJHora, an independently written
+# AGPL Vedic astrology library that this app does not link or import (see
+# tools/oracle/README.md and the hygiene test that enforces it). Its answers
+# are EXTERNAL: if one of these goes red, the presumption is that Sidera is
+# wrong.
+#
+# What it buys today: the D1 positions and the D9/D10 SIGNS stop being
+# characterization. What it buys next: it is the gate milestones 2 and 3 are
+# built against, so those tests are written before the features exist rather
+# than after, and the shape assertions below fail loudly if the file is
+# regenerated into something they can no longer be built on.
+ORACLE_PATH = HERE / "fixtures_pyjhora.json"
+
+# The seven visible grahas plus the two nodes and the Lagna. 60″ is a full
+# arcminute; the observed worst disagreement is 48.68″ (Mercury, partner
+# chart), and the same bodies agree with ERFA to 41″. Two independent
+# implementations landing inside an arcminute is the claim.
+ORACLE_TOLERANCE_ARCSEC = 60.0
+
+
+@pytest.fixture(scope="module")
+def oracle():
+    if not ORACLE_PATH.exists():
+        pytest.skip("fixtures_pyjhora.json absent — "
+                    "run tools/oracle/make_oracle.sh")
+    return json.loads(ORACLE_PATH.read_text(encoding="utf-8"))
+
+
+def _arcsec(a: float, b: float) -> float:
+    return abs((a - b + 180.0) % 360.0 - 180.0) * 3600.0
+
+
+class TestOracleCrossCheck:
+    """Sidera against a second implementation, on the fictional charts."""
+
+    def test_the_oracle_used_lahiri_and_not_its_own_default(self, oracle):
+        """PyJHora's default is True Pushya. The gap is 1.14° — larger than
+        anything this comparison is meant to detect, so a file computed with
+        the default would fail everything below for the wrong reason."""
+        assert oracle["settings"]["ayanamsa_mode"] == "LAHIRI"
+        for name, chart in oracle["charts"].items():
+            ayan = chart["ayanamsa"]
+            assert ayan["mode"] == "LAHIRI", name
+            assert ayan["pyjhora_default_mode"] == "TRUE_PUSHYA", name
+            # …and the file proves the override took, by carrying both.
+            assert abs(ayan["difference_arcsec"]) > 3000, name
+
+    def test_ayanamsa_agrees_with_ours(self, oracle):
+        from engine import compute_chart
+        for name in ("reference", "partner"):
+            if not fixtures.is_built_in(name):
+                pytest.skip("fixtures substituted")
+            ours = compute_chart(fixtures.birth(name)).ayanamsa
+            theirs = oracle["charts"][name]["ayanamsa"]["value_deg"]
+            assert abs(ours - theirs) * 3600 < 1.0, (
+                f"{name}: ayanamsa {ours} vs {theirs}")
+
+    @pytest.mark.parametrize("name", ["reference", "partner"])
+    def test_d1_positions_agree_within_an_arcminute(self, oracle, name):
+        from engine import compute_chart
+        if not fixtures.is_built_in(name):
+            pytest.skip("fixtures substituted")
+        chart = compute_chart(fixtures.birth(name))
+        theirs = oracle["charts"][name]["rasi"]
+        ours = {"Lagna": chart.lagna.longitude,
+                **{p: chart.planets[p].longitude for p in PLANETS}}
+        worst = []
+        for body, longitude in ours.items():
+            gap = _arcsec(longitude, theirs[body]["longitude"])
+            worst.append((gap, body))
+            assert gap < ORACLE_TOLERANCE_ARCSEC, (
+                f"{name} {body}: {longitude:.6f} vs "
+                f"{theirs[body]['longitude']:.6f} — {gap:.2f}″ apart")
+        assert max(worst)[0] > 0.0, "identical to the digit — suspicious"
+
+    @pytest.mark.parametrize("name", ["reference", "partner"])
+    def test_d1_signs_and_whole_sign_houses_agree(self, oracle, name):
+        """Longitude agreement is not the same as agreeing about the chart:
+        a body 40″ away can still sit on the far side of a sign boundary."""
+        from engine import compute_chart
+        if not fixtures.is_built_in(name):
+            pytest.skip("fixtures substituted")
+        chart = compute_chart(fixtures.birth(name))
+        theirs = oracle["charts"][name]["rasi"]
+        assert chart.lagna.sign == theirs["Lagna"]["sign"]
+        lagna_index = theirs["Lagna"]["sign_index"]
+        for planet in PLANETS:
+            p = chart.planets[planet]
+            assert p.sign == theirs[planet]["sign"], planet
+            expected = (theirs[planet]["sign_index"] - lagna_index) % 12 + 1
+            assert p.house == expected, planet
+
+    @pytest.mark.parametrize("name", ["reference", "partner"])
+    def test_navamsa_and_dasamsa_signs_agree(self, oracle, name):
+        """The varga gate that was missing.
+
+        `vargas.py` was characterization only — its expected signs came from
+        this build. PyJHora implements the Parasari counting independently,
+        and agrees on every body in both charts. This is what upgrades the
+        D9/D10 claim from 'unchanged' to 'checked'.
+        """
+        from engine import compute_chart
+        from vargas import dasamsa, navamsa
+        if not fixtures.is_built_in(name):
+            pytest.skip("fixtures substituted")
+        chart = compute_chart(fixtures.birth(name))
+        for label, ours in (("D9", navamsa(chart)), ("D10", dasamsa(chart))):
+            theirs = oracle["charts"][name]["divisional_charts"][label]
+            assert ours.lagna_sign == theirs["Lagna"]["sign"], \
+                f"{name} {label} lagna"
+            for planet in PLANETS:
+                assert ours.planets[planet].sign == theirs[planet]["sign"], \
+                    f"{name} {label} {planet}"
+
+    def test_the_node_convention_is_matched_and_the_gap_recorded(self,
+                                                                 oracle):
+        """PyJHora defaults to the TRUE node; Sidera uses the MEAN node.
+
+        Unpinned, that alone would put Rahu 1.48° out on the partner chart —
+        enough to cross a sign boundary and invalidate every arudha and
+        karaka comparison downstream. The oracle is run with mean nodes; the
+        true-node positions ride along so the divergence stays visible.
+        """
+        assert oracle["settings"]["node_mode"] == "mean"
+        for name, chart in oracle["charts"].items():
+            nodes = chart["nodes"]
+            assert nodes["used"] == "mean", name
+            assert set(nodes["true_node_positions"]) == {"Rahu", "Ketu"}
+            # Rahu and Ketu are 180° apart under either convention, so the
+            # two conventions must disagree about them by the same amount.
+            gap = nodes["mean_minus_true_arcsec"]
+            assert gap["Rahu"] == gap["Ketu"], name
+            assert gap["Rahu"] > 0, f"{name}: no difference at all?"
+
+
+class TestOracleGatesTheNextMilestones:
+    """The shape milestones 2 and 3 will be built against.
+
+    These assert the FIXTURE, not Sidera — nothing here is implemented yet.
+    They exist so that regenerating the oracle into something the planned
+    gates cannot rest on fails now, loudly, rather than in the middle of
+    building the feature.
+    """
+
+    # --- milestone 2: Ashtakavarga ------------------------------------
+    @pytest.mark.parametrize("name", ["reference", "partner"])
+    def test_ashtakavarga_is_raw_per_sign_and_sums_to_337(self, oracle,
+                                                          name):
+        av = oracle["charts"][name]["ashtakavarga"]
+        seven = ("Sun", "Moon", "Mars", "Mercury", "Jupiter", "Venus",
+                 "Saturn")
+        assert set(av["bav_by_sign"]) == set(seven)
+        for planet in seven:
+            row = av["bav_by_sign"][planet]
+            assert len(row) == 12, planet
+            assert all(0 <= b <= 8 for b in row), planet
+        # The BPHS per-planet totals, confirmed by an implementation that
+        # did not get them from us.
+        assert av["bav_totals"] == {"Sun": 48, "Moon": 49, "Mars": 39,
+                                    "Mercury": 54, "Jupiter": 56,
+                                    "Venus": 52, "Saturn": 39}
+        assert sum(av["bav_totals"].values()) == 337
+        # SAV is the seven planetary rows summed — the Lagna row is carried
+        # separately and is NOT part of it.
+        assert len(av["sav_by_sign"]) == 12
+        assert av["sav_total"] == 337
+        for sign in range(12):
+            assert av["sav_by_sign"][sign] == sum(
+                av["bav_by_sign"][p][sign] for p in seven), sign
+        assert len(av["lagna_bav_by_sign"]) == 12
+        assert av["lagna_bav_total"] not in (0,)
+        assert "RAW" in av["note"] and "sodhana" in av["note"]
+
+    def test_the_337_checksum_is_chart_invariant_and_says_so(self, oracle):
+        """A caveat that has to survive, or milestone 2 will over-claim.
+
+        The per-planet totals count rows in the classical benefic-point
+        tables and depend on no birth moment — both fictional charts return
+        the identical numbers. They gate the TABLES. The per-sign arrays are
+        what actually vary, and they are what a real comparison must use.
+        """
+        totals = [oracle["charts"][n]["ashtakavarga"]["bav_totals"]
+                  for n in ("reference", "partner")]
+        assert totals[0] == totals[1]
+        by_sign = [oracle["charts"][n]["ashtakavarga"]["sav_by_sign"]
+                   for n in ("reference", "partner")]
+        assert by_sign[0] != by_sign[1], (
+            "two different charts produced the same SAV distribution — "
+            "the oracle is not chart-dependent, which would make it useless")
+        note = oracle["charts"]["reference"]["ashtakavarga"]["note"]
+        assert "chart-invariant" in note or "SAME for every chart" in note
+
+    # --- milestone 3: degree-level vargas, arudhas, Upapada -----------
+    def test_every_standard_varga_is_present_with_degrees(self, oracle):
+        """Sidera computes D9 and D10 to the SIGN only. The degree inside
+        the divisional sign is exactly what milestone 3 adds, so the oracle
+        has to carry it."""
+        for name in ("reference", "partner"):
+            charts_ = oracle["charts"][name]["divisional_charts"]
+            assert len(charts_) >= 20
+            for dvf in (1, 2, 3, 7, 9, 10, 12, 16, 30, 60):
+                key = f"D{dvf}"
+                assert key in charts_, key
+                for body in ("Lagna",) + tuple(PLANETS):
+                    entry = charts_[key][body]
+                    assert entry["sign"] in SIGNS
+                    assert 0.0 <= entry["degree_in_sign"] < 30.0, \
+                        f"{name} {key} {body}"
+                    assert abs(entry["longitude"]
+                               - (entry["sign_index"] * 30
+                                  + entry["degree_in_sign"])) < 1e-6
+
+    def test_both_upapada_schools_are_exported(self, oracle):
+        """THE TWO SCHOOLS, AND WHY BOTH SHIP.
+
+        An arudha is counted from the lord of the house. Scorpio and
+        Aquarius have two lords each, and the tradition does not agree which
+        carries the count:
+
+          Parashari  the sole classical lord — Mars, Saturn.
+          Jaimini    the STRONGER of the two co-lords, so Ketu or Rahu can
+                     carry it.
+
+        Upapada Lagna is the arudha of the 12th and is read for marriage, so
+        Sidera will name the school rather than pick one silently — the same
+        way gunamilan.py handles the yoni and vasya splits.
+        """
+        for name in ("reference", "partner"):
+            block = oracle["charts"][name]["bhava_arudhas"]
+            for school in ("parashari", "jaimini"):
+                side = block[school]
+                assert len(side["arudhas"]) == 12, (name, school)
+                assert all(0 <= a <= 11 for a in side["arudhas"])
+                assert side["arudha_signs"] == [
+                    SIGNS[a] for a in side["arudhas"]]
+                # A12 is the Upapada, and it is named as such.
+                assert side["upapada_sign_index"] == side["arudhas"][11]
+                assert side["upapada_sign"] == side["arudha_signs"][11]
+                assert side["rule"].strip()
+            assert isinstance(block["schools_agree"], bool)
+            differ = {d["house"] for d in block["houses_where_schools_differ"]}
+            assert differ == {h + 1 for h in range(12)
+                              if block["parashari"]["arudhas"][h]
+                              != block["jaimini"]["arudhas"][h]}
+            assert block["schools_agree"] == (not differ)
+
+    def test_the_schools_actually_diverge_somewhere_in_the_fixtures(
+            self, oracle):
+        """A two-school export nobody can test is decoration. The reference
+        chart disagrees at A7 — Gemini under Parashari, Scorpio under
+        Jaimini — so milestone 3 has a live case to gate on."""
+        ref = oracle["charts"]["reference"]["bhava_arudhas"]
+        assert ref["schools_agree"] is False
+        differ = ref["houses_where_schools_differ"]
+        assert differ == [{"house": 7, "parashari": "Gemini",
+                           "jaimini": "Scorpio"}]
+        # …and the honest converse: on THESE charts the Upapada itself is
+        # not contested, because neither 12th house is Scorpio or Aquarius.
+        # Milestone 3 must not read that as "the schools always agree on UL".
+        for name in ("reference", "partner"):
+            block = oracle["charts"][name]["bhava_arudhas"]
+            assert block["upapada_contested_in_this_chart"] is False
+            assert 12 not in block["houses_that_are_scorpio_or_aquarius"]
+
+    def test_chara_karakas_carry_both_schemes_and_label_the_derived_one(
+            self, oracle):
+        for name in ("reference", "partner"):
+            ck = oracle["charts"][name]["chara_karakas"]
+            eight = ck["eight_karaka"]
+            seven = ck["seven_karaka"]
+            assert len(eight["order"]) == 8 and "Rahu" in eight["order"]
+            assert len(seven["order"]) == 7 and "Rahu" not in seven["order"]
+            assert set(eight["assignment"]) == {
+                "Atma", "Amatya", "Bhratri", "Matri", "Pitri", "Putra",
+                "Jnati", "Dara"}
+            assert set(seven["assignment"]) == {
+                "Atma", "Amatya", "Bhratri", "Matri", "Putra", "Jnati",
+                "Dara"}
+            # The 7-karaka list is derived here, not shipped by PyJHora, and
+            # the file says so — it is a weaker gate and must not be quoted
+            # as oracle output.
+            assert "DERIVED" in seven["source"]
+            assert "PyJHora" in eight["source"]
+
+    def test_sphutas_and_shadbala_are_present_for_later_milestones(self,
+                                                                   oracle):
+        for name in ("reference", "partner"):
+            sphutas = oracle["charts"][name]["sphutas"]
+            for key in ("tri_sphuta", "chatur_sphuta", "prana_sphuta",
+                        "deha_sphuta", "mrityu_sphuta", "beeja_sphuta",
+                        "kshetra_sphuta", "yogi_sphuta"):
+                assert key in sphutas, (name, key)
+                assert 0.0 <= sphutas[key]["degree_in_sign"] < 30.0
+            sb = oracle["charts"][name]["shadbala"]["components"]
+            for row in ("sthana_bala", "kaala_bala", "dig_bala",
+                        "cheshta_bala", "naisargika_bala", "drik_bala",
+                        "total_shashtiamsas", "total_rupas",
+                        "strength_ratio"):
+                assert row in sb, (name, row)
+                # Sun..Saturn only — the nodes have no shadbala.
+                assert set(sb[row]) == {"Sun", "Moon", "Mars", "Mercury",
+                                        "Jupiter", "Venus", "Saturn"}
+            # The six components must actually sum to the reported total.
+            for planet in sb["total_shashtiamsas"]:
+                parts = sum(sb[r][planet] for r in
+                            ("sthana_bala", "kaala_bala", "dig_bala",
+                             "cheshta_bala", "naisargika_bala", "drik_bala"))
+                assert abs(parts - sb["total_shashtiamsas"][planet]) < 0.05, \
+                    (name, planet)

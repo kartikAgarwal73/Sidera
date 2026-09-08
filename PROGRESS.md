@@ -1,5 +1,100 @@
 # PROGRESS
 
+## AGPL licence, and a PyJHora oracle for milestones 2 and 3 ✅ (2026-09-08)
+
+### The licence was always AGPL; only the file was missing
+
+`pip show pyswisseph` reports no `License` field, which is why this went
+unnoticed. The wheel's metadata is unambiguous:
+`License :: OSI Approved :: GNU Affero General Public License v3`, with the
+full AGPL-3.0 text in `LICENSE.txt`. Every position in Sidera comes from that
+library, so a conveyed work linking it must itself be AGPL. `LICENSE` is now
+that text, byte-identical to the copy pyswisseph ships (sha256 verified).
+
+Nothing changes in practice, as expected: the repository is already public, no
+`.se1` files are shipped (swisseph falls back to its built-in Moshier model,
+AGPL under the same terms), and nothing proprietary is vendored.
+
+**One thing was not already true.** AGPL **§13** requires that anyone
+interacting with the app *over a network* be offered the Corresponding
+Source, and a public repository only satisfies that if the running app points
+at it. The footer had no such link. It does now — one line, and it is part of
+the licence rather than a courtesy. A hygiene test pins the licence to
+pyswisseph's so a future session cannot quietly relicense while still linking
+it.
+
+### The oracle: a second implementation, fenced off
+
+`fixtures_pyjhora.json` (83 KB) holds
+[PyJHora](https://github.com/naturalstupid/PyJHora)'s answers for both
+fictional charts: all 23 standard divisional charts **with degrees**, bhava
+arudhas A1–A12 under both schools, chara karakas, raw BAV/SAV, 14 sphutas and
+Shadbala. Built by `tools/oracle/make_oracle.sh` into a scratch venv
+**outside** the repo; only the JSON is committed.
+
+PyJHora is AGPL too, so linking it would raise no licence question. It stays
+outside for a different reason: *an oracle that shares code with the thing it
+checks is not an oracle.* `test_no_app_module_imports_the_oracle` and
+`test_oracle_is_not_installed_in_the_app_environment` enforce that, so the
+fence is checked rather than remembered.
+
+**Two defaults that would each have produced a fake bug.**
+
+| | PyJHora default | Pinned to | Difference |
+|---|---|---|---|
+| Ayanāṃśa | `TRUE_PUSHYA` | `LAHIRI` | 4106″ (1.14°) |
+| Nodes | true node | mean node | up to ~1.8°; **1.48° on the partner fixture** |
+
+The ayanāṃśa needed pinning in *two* places (`drik.set_ayanamsa_mode()` and
+`const._DEFAULT_AYANAMSA_MODE` — internal call sites read the latter and put
+True Pushya back). The node switch needed a third: `const.set_node_mode()`
+updates the constants, but `drik`'s planet tables were built from them at
+import time and keep the old swisseph body id until those dicts are rebuilt.
+The node divergence was found by the D1 comparison itself — Rahu was 5314″
+out on the partner chart while every other body was inside 50″, which is the
+signature of a convention difference, not an error. Each chart records the
+values it was **not** computed with, so the file carries its own proof.
+
+**With both pinned, all ten bodies agree to under 49″ on both charts.** That
+is the precondition; nothing downstream means anything without it.
+
+**What it buys immediately.** `vargas.py` was characterization only — its
+expected D9/D10 signs came from this build, so asserting them proved
+continuity, not correctness. PyJHora implements the Parāśarī counting
+independently and agrees on **every body in both charts**. External count
+50 → 63.
+
+**An honest caveat, recorded in the file and pinned by a test.** The BAV
+per-planet totals (48/49/39/54/56/52/39, sum 337) are *identical for both
+charts* — they count rows in the classical benefic-point tables and depend on
+no birth moment. They gate the **tables**, not a chart. The per-sign arrays
+are what vary and what a real comparison must use. Milestone 2 must not
+over-claim on the checksum.
+
+### Both Upapada schools ship
+
+An arudha is counted from the lord of the house, and Scorpio and Aquarius have
+two lords each. **Parashari** counts from the sole classical lord (Mars,
+Saturn); **Jaimini** counts from the *stronger* co-lord, so Ketu or Rahu can
+carry it. Upapada Lagna is the arudha of the 12th and is read for marriage, so
+Sidera will name the school rather than pick a winner silently — the same
+treatment `gunamilan.py` gives the yoni and vaśya splits.
+
+PyJHora exposes exactly that switch
+(`const.scorpio_owner_for_dhasa_calculations` / `..aquarius..`), so both are
+exported. On the reference chart they **diverge at A7 — Gemini under
+Parashari, Scorpio under Jaimini** — a live case for milestone 3 to gate on.
+The honest converse is recorded too: neither fixture's 12th house is Scorpio
+or Aquarius, so the Upapada itself is uncontested *on these charts*, and that
+must not be read as "the schools always agree on UL".
+
+Chara karakas ship both schemes: the 8-karaka list is PyJHora's own, the
+7-karaka list is **derived here** by excluding Rahu (the library does not ship
+it) and is labelled as derived — a weaker gate, and not to be quoted as
+oracle output.
+
+300 passing (external 63 / invariant 147 / characterization 80).
+
 ## Rule precedence: a contact outranks the generic gocara verdict ✅ (2026-09-04)
 
 **The bug.** A live reading called transit Ketu *supportive* because Ketu
@@ -88,49 +183,57 @@ up front, the 12×8 grid folded under. Ledger design agreed as `sav.house.N`
 the 96 that `bav.<planet>.house.N` would need, which would have tripled the
 prompt payload and buried the useful facts.
 
-**TWO EXTERNAL GATES — route (a), agreed 2026-09-03.** This environment
-cannot reach a BPHS text (wisdomlib and archive.org both refused egress,
-HTTP 000), so verification happens off-machine and comes back as fixtures.
-Both gates are `external`; neither is written until its source is confirmed.
+**GATES — SUPERSEDED 2026-09-08. The oracle now carries both.** The original
+plan was route (a): the commissioner verifies the BPHS checksum off-machine
+(this environment cannot reach a BPHS text — wisdomlib and archive.org both
+refused egress, HTTP 000) and separately supplies AstroSage output as a second
+implementation. `fixtures_pyjhora.json` satisfies both, on-machine and
+regenerable:
 
   GATE 1 · the classical checksum. Per-planet BAV totals — Sun 48, Moon 49,
   Mars 39, Mercury 54, Jupiter 56, Venus 52, Saturn 39 — and their sum, 337.
-  Commissioner verifies these AND the 56-row benefic-point table against BPHS
-  text. Until that confirmation lands these figures are RECALLED, not
-  verified, and must not be gated on.
+  **PyJHora reproduces every figure exactly.** These were RECALLED, not
+  verified, when written down; an implementation that did not get them from
+  us now returns them. Gated in
+  `TestOracleGatesTheNextMilestones::test_ashtakavarga_is_raw_per_sign_and_sums_to_337`,
+  provenance `external`.
 
-  GATE 2 · an independent implementation. Commissioner runs the fictional
-  fixture through AstroSage and supplies its BAV/SAV. Same logic as the ERFA
-  cross-check: our own arithmetic agreeing with itself proves nothing.
+  GATE 2 · an independent implementation, per sign. PyJHora's raw BAV rows
+  and SAV distribution for both fictional charts, which our module must
+  reproduce. This is the gate that actually bites — see the caveat below.
 
-The two fail differently, which is why both. A compensating pair of
-transcription errors in the 56-row table can survive the checksum; AstroSage
-catches those. AstroSage cannot catch a shared misreading of the method;
-the checksum can.
+  The commissioner's BPHS confirmation and an AstroSage capture remain
+  **welcome but no longer blocking**. A third source would catch a shared
+  misreading of the method that two agreeing implementations cannot; that is
+  a real gap, not a formality.
 
-**Precondition on gate 2, else the comparison is meaningless:** AstroSage's
-D1 for the fixture must match ours first — Leo lagna 11°05′08″, Moon Taurus
-15°17′26″ (Rohiṇī pada 2), Lahiri ayanāṃśa 23.8378. If its chart differs, its
-Ashtakavarga will differ for reasons that have nothing to do with our BAV
-code.
+**The caveat that decides how much gate 1 is worth.** The per-planet totals
+are the SAME for every chart — they count rows in the benefic-point tables and
+depend on no birth moment, which is why both fictional charts return the
+identical numbers. **They gate the 56-row table, not the computation.** The
+per-sign arrays are what vary between charts, and they are the real gate.
+`test_the_337_checksum_is_chart_invariant_and_says_so` pins this so milestone
+2 cannot quietly over-claim on the checksum.
 
-**Three ways that off-machine effort gets wasted — capture accordingly:**
-  1. **Per SIGN, not per house.** Ashtakavarga is computed per rāśi. Software
-     often displays it rotated to houses-from-lagna. Capture Aries→Pisces, or
-     capture both and label which is which.
-  2. **RAW, before reductions.** Milestone 2 defers trikoṇa and ekādhipatya
-     śodhana. A table already reduced will not match and will look like a bug
-     in our code. If AstroSage only shows reduced figures, we need the raw
-     ones or the gate is unusable.
-  3. **Seven BAVs, not eight.** Some software shows a Lagna BAV row as well.
-     We want the seven grahas; note separately if a Lagna row is present.
+**Precondition, already met:** the oracle's D1 must match ours, or its
+Ashtakavarga differs for reasons unrelated to our BAV code. All ten bodies
+agree to under 49″ on both charts, with the Lahiri ayanāṃśa and the mean-node
+convention pinned to match — see `TestOracleCrossCheck`.
 
-Fixture lands as `fixtures_ashtakavarga.json` at the repo root, loaded by
-`test_gates.py` — a data file, so the numbers are inspectable and diffable
-rather than buried in assertions.
+**The three capture hazards are handled in the export, not left to a reader:**
+  1. **Per SIGN, not per house.** `bav_by_sign` / `sav_by_sign` are indexed
+     Aries→Pisces and named so. The rotation to houses-from-lagna is ours to
+     do in the dashboard, and the fixture must not be assumed rotated.
+  2. **RAW, before reductions.** No trikoṇa or ekādhipatya śodhana applied,
+     stated in the file's own `note`. Comparing raw against reduced is the
+     classic false failure.
+  3. **Seven BAVs, not eight.** `bav_by_sign` holds the seven grahas;
+     `lagna_bav_by_sign` is carried separately and is NOT part of SAV. A test
+     asserts SAV equals the seven summed.
 
 Estimated 1.5–2 days: ~250-line module, ~12 tests, a dashboard domain, the
-ledger entries. The compute is easy; the table transcription is the risk.
+ledger entries. The compute is easy; the table transcription was the risk —
+and the oracle is now what catches a transcription error, per sign.
 
 **Standing rule, restated 2026-09-03 and now enforced by a test:** no real
 person's birth record is ever a fixture. Every verification chart is
@@ -138,7 +241,7 @@ fictional; external cross-checks (ERFA, AstroSage) run against the fictional
 fixture, never against a real one. `test_committed_fixtures_are_all_fictional`
 fails if a third record appears in `fixtures.py`.
 
-### Milestone 3 — QUEUED
+### Milestone 3 — QUEUED. Gated on the oracle (2026-09-08).
 
 Ordering confirmed: **degree-level vargas FIRST**, then the finer divisionals
 (D2, D7, D12, D16, D30, D60), then arudha padas and Upapada. Extending
@@ -146,6 +249,38 @@ Ordering confirmed: **degree-level vargas FIRST**, then the finer divisionals
 varga nakshatras and dignity-by-degree, and shipping D30 or D60 at sign level
 would mean building six charts that cannot be read properly and then
 rebuilding them.
+
+**Every piece of it now has an external gate waiting in
+`fixtures_pyjhora.json`**, asserted in shape by
+`TestOracleGatesTheNextMilestones` before any of it exists — so regenerating
+the oracle into something the gates cannot rest on fails now, not mid-feature.
+
+  * **Degree-level vargas.** All 23 standard Dn, every body, with
+    `degree_in_sign` and the full divisional longitude. Today our D9/D10
+    *signs* already agree with it exactly; the degree is the half we do not
+    compute, and it is the whole point of this step.
+  * **The finer divisionals.** D2, D7, D12, D16, D30, D60 are all present, so
+    each lands with a reference chart rather than only a reading of the rule.
+    One thing to settle when we get there: PyJHora offers several counting
+    methods per varga (`chart_method=`) and the export takes each function's
+    default, the Parāśarī one for the standard vargas. Where Sidera chooses a
+    different method the disagreement is a *decision*, not a defect, and must
+    be recorded as one.
+  * **Arudhas and Upapada — both schools.** A1–A12 under Parashari and
+    Jaimini, with `houses_where_schools_differ` computed. The reference chart
+    diverges at A7 (Gemini vs Scorpio), so the two-school UI has a real case
+    to be tested against instead of a hypothetical one.
+  * **Chara karakas.** The 8-karaka scheme as PyJHora ships it; the 7-karaka
+    list derived by excluding Rahu and labelled as derived.
+
+Beyond milestone 3, the file also carries **14 sphutas** and **Shadbala** (six
+components, totals in shashtiamsas and rupas, and the ratio to the classical
+requirement, with the six asserted to sum to the total) — neither is planned
+work, but when either becomes so the gate already exists.
+
+**Bhrigu Bindu and avasthas are still absent from both sides.** PyJHora does
+not export them here, so those two remain ungated and should not be built
+against this file.
 
 
 ## Personal birth data removed; fictional reference fixture ✅ (2026-08-26)
