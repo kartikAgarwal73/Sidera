@@ -147,22 +147,33 @@ if any app module imports `jhora`. Regenerate with:
 ./tools/oracle/make_oracle.sh     # scratch venv OUTSIDE the repo; only the JSON is committed
 ```
 
-Two settings in that script are the whole reason it can be trusted, and both
-are traps if left at their defaults:
+**Four settings in that script are the whole reason it can be trusted**, and
+every one is a trap at its default. Each would have produced a fixture
+disagreeing with Sidera for a reason that has nothing to do with either being
+wrong:
 
-- **Ayanāṃśa.** PyJHora defaults to `TRUE_PUSHYA`, not Lahiri — a 4106″
-  difference that would look like a Sidera bug. It is pinned to `LAHIRI` in
-  both places the library reads it, and each chart records *both* values so
-  the file proves which was used.
-- **Nodes.** PyJHora defaults to the **true** node; Sidera uses the **mean**
-  node. They differ by up to ~1.8° — 1.48° on the partner fixture, enough to
-  move a node between signs. The oracle is run with mean nodes to match, and
-  the true-node positions are recorded alongside so the divergence stays
-  visible rather than being discovered later as a mystery.
+| | PyJHora default | Pinned to | Size of the difference |
+|---|---|---|---|
+| Ayanāṃśa | `TRUE_PUSHYA` | `LAHIRI` | 4106″ (1.14°) |
+| Nodes | true node | mean node | up to ~1.8°; 1.48° on the partner fixture |
+| Positions | `FLG_TRUEPOS` (geometric) | apparent, light-time corrected | 20.2″ Sun, 0.72″ Moon |
+| Daśā year | `TRUE_SIDEREAL_YEAR` | `MEAN_SIDEREAL_YEAR` | up to a full day — see below |
 
-With both pinned, all ten bodies agree with Sidera's D1 to **under 49
-arcseconds** on both charts. That agreement is the precondition: a comparison
-of arudhas or Ashtakavarga means nothing until the underlying chart matches.
+The ayanāṃśa needed pinning in *two* places (internal call sites re-read
+`const._DEFAULT_AYANAMSA_MODE`); the node switch needed a third (`drik`'s
+planet tables are built from the constants at import time). The last two were
+found by the 300-chart differential run, not by reading the source.
+
+With all four pinned, all ten bodies agree with Sidera's D1 **to JSON rounding
+(~0.002″)**, and every one of the 81 Vimshottari MD/AD boundaries agrees to
+under a minute. That is the precondition: a comparison of arudhas or
+Ashtakavarga means nothing until the underlying chart matches.
+
+Being that exact also changes what the D1 comparison *proves*. With the
+conventions matched, both sides are the same swisseph called the same way, so
+this is a check on conventions and plumbing, not on the ephemeris — the
+ephemeris is anchored by ERFA, and PyJHora's independence is spent where it
+is worth more: nakshatras, vargas, daśās, arudhas, Ashtakavarga.
 
 **Upapada has two schools, and both are exported.** An arudha is counted from
 the lord of the house, and Scorpio and Aquarius have two lords each. *Parashari*
@@ -172,6 +183,34 @@ Lagna is the arudha of the 12th, and it is read for marriage — so Sidera will
 name the school rather than pick a winner silently, the way `gunamilan.py`
 already handles the yoni and vaśya splits. On the reference chart the schools
 diverge at A7 (Gemini vs Scorpio); the file records exactly where.
+
+### The differential run
+
+Two charts cannot exercise a sign boundary, a polar ascendant, a leap day or a
+DST transition. `tools/oracle/differential.py` generates **300 random charts** —
+random date in 1950–2030, random time, random city — and diffs both engines
+across D1 longitudes, signs, nakshatra/pada, D9/D10 signs and every Vimshottari
+MD/AD boundary. The records are synthetic and are **not committed**; the seed
+reproduces them, and `tools/oracle/DIFFERENTIAL.md` is the committed summary.
+
+It has already paid for itself three times:
+
+- **Found a Sidera bug.** Our Vimshottari used the Julian year (365.25 days).
+  That was the *only* thing separating our timeline from PyJHora's — every
+  boundary drifted at 0.0064 days/year and nothing else differed. Fixed to the
+  sidereal year (365.256364), which is also the coherent choice for a system
+  measured against fixed stars. Pinned by `TestVimshottariAgainstTheOracle`,
+  which asserts the old constant would fail.
+- **Diagnosed the arcsecond residual.** Every remaining difference was
+  `FLG_TRUEPOS` — the Sun's 20.2″ is 8.3 light-minutes × 0.986°/day. The
+  Moon's 0.72″ looks negligible and is not: it is 1.5 × 10⁻⁵ of a nakshatra,
+  which moved every daśā boundary in the fixture by hours through the balance
+  at birth.
+- **Found a defect in the oracle.** PyJHora's default daśā year,
+  `drik.true_sidereal_year()`, returns values up to a full day too long on
+  some charts — impossible for a sidereal year, which varies by minutes.
+
+With all conventions matched: **zero disagreements across all 300 charts**.
 
 One honest caveat recorded in the file itself: the BAV per-planet totals
 (48/49/39/54/56/52/39, summing to 337) are **identical for every chart** —

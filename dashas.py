@@ -33,7 +33,25 @@ TOTAL_YEARS = 120  # sum of the nine dasha years
 NAKSHATRA_SPAN = 360.0 / 27.0  # 13°20′
 PADA_SPAN = NAKSHATRA_SPAN / 4.0  # 3°20′
 
-DAYS_PER_YEAR = 365.25
+# The SIDEREAL year — the time the Sun takes to return to the same fixed
+# star. Changed from the Julian year (365.25) on 2026-09-08 after the
+# differential test found it was the ONLY thing separating our Vimshottari
+# from PyJHora's: with this constant the two timelines agree to 0.0000 days
+# across every MD and AD boundary in a 120-year cycle, on every one of 300
+# random charts. With 365.25 they drift 0.0064 days per year.
+#
+# It is also the coherent choice on its own terms. Vimshottari is measured
+# against the Moon's position in a fixed-star nakshatra, so its "year" is the
+# sidereal one; 365.25 is a computing convenience with no jyotisha claim
+# behind it. JHora uses this value, and PyJHora carries it forward with a
+# comment saying where it came from.
+#
+# The shift is small and invisible in the UI: at most 0.73 days at the far
+# end of a 120-year cycle, and no displayed period month changes, because
+# periods are rendered as "Mon YYYY".
+SIDEREAL_YEAR_DAYS = 365.256364
+JULIAN_YEAR_DAYS = 365.25          # what this used to be; kept for the test
+DAYS_PER_YEAR = SIDEREAL_YEAR_DAYS
 
 
 def _years(y: float) -> timedelta:

@@ -1,5 +1,116 @@
 # PROGRESS
 
+## Differential accuracy test — 300 random charts; one Sidera bug fixed ✅ (2026-09-08)
+
+`tools/oracle/differential.py` generates **300 random birth records** — random
+date in 1950–2030, random time, random city from `data/cities.json` — and diffs
+Sidera against PyJHora on D1 longitudes (1′), ascendant, nakshatra/pada, D9/D10
+signs and every Vimshottari MD/AD boundary (1 day). **No record is any person's
+birth data and none is committed**: the generator is seeded, so a run is
+reproducible from the seed alone. The committed artefact is
+`tools/oracle/DIFFERENTIAL.md`.
+
+### Final result: zero disagreements across all 300 charts
+
+…but only after three findings, which is the point of running it.
+
+**1 · A Sidera bug: the daśā year was the wrong year.**
+`dashas.DAYS_PER_YEAR` was 365.25, the **Julian** year. That was the *only*
+thing separating our Vimshottari from PyJHora's — every MD and AD boundary
+drifted at exactly 0.0064 days/year and nothing else differed at all. Setting
+it to the **sidereal** year (365.256364) took the disagreement to **0.0000
+days** on every boundary of every chart.
+
+It is also the coherent choice on its own terms: Vimshottari is measured
+against the Moon's position among fixed stars, so its year is the sidereal one.
+365.25 was a computing convenience with no jyotisha claim behind it. JHora uses
+this value and PyJHora carries it forward citing JHora.
+
+The shift is small and invisible in the UI — at most 0.73 days at the far end
+of a 120-year cycle, and **no displayed period month changes**, because periods
+render as "Mon YYYY". No characterization test needed re-baselining.
+`TestVimshottariAgainstTheOracle` now pins all 81 boundaries for both fictional
+charts, and asserts that restoring the old constant breaks the gate.
+
+**2 · The arcsecond residual was `FLG_TRUEPOS`, all of it.**
+PyJHora sets swisseph's true-geometric-position flag; Sidera computes apparent
+(light-time corrected) positions. Clearing it made the two ephemerides agree to
+the last printed digit. The offsets are the planet's own motion across its
+light-time — the Sun's 20.2″ is 8.3 light-minutes × 0.986°/day, which is why it
+was the same 20.2″ on every chart.
+
+The Moon's 0.72″ looks negligible and is not: it is 1.5 × 10⁻⁵ of a nakshatra,
+and it shifts the **balance at birth**, which moved every daśā boundary in the
+committed fixture by a constant 1.32 h (reference) and 2.40 h (partner). That
+was caught only because the new Vimshottari gate is tolerant to a minute rather
+than a day. `fixtures_pyjhora.json` now pins positions to apparent as well.
+
+**3 · A defect in the oracle, not in us.** PyJHora's default daśā year is
+`TRUE_SIDEREAL_YEAR` — `drik.true_sidereal_year()` measured per chart. A real
+sidereal year oscillates about its mean by *minutes*; that function returns
+values up to a **full day** longer on some (date, place) pairs. Unpinned it
+produced 254 boundary disagreements across 7 records, the worst 112 days. The
+comparison and the fixture both pin `MEAN_SIDEREAL_YEAR`, and the raw value is
+recorded per record so the incidence is counted rather than guessed.
+
+### What the D1 comparison now proves — and does not
+
+With the ayanāṃśa, nodes, position flag and year length all pinned to match,
+both sides are the same swisseph called the same way, and D1 agreement is
+0.002″ — pure JSON rounding. That is a check on **conventions and plumbing**,
+not on the ephemeris. Said plainly in the test rather than left to be assumed:
+the ephemeris is anchored by ERFA, and PyJHora's independence is spent where it
+is worth more — nakshatras, vargas, daśās, arudhas, Ashtakavarga.
+
+### Design notes worth keeping
+
+* **Two passes.** Pass A matches the position convention and isolates *logic*
+  disagreements. Pass B leaves PyJHora at its default and measures what the
+  convention costs — 9 categorical flips across 6 of 300 charts, a changed
+  pada or navamsa sign. Arcseconds are invisible; a changed navamsa is not.
+* **Benign boundary straddles are separated.** When two longitudes lie either
+  side of a dividing line, both engines classified correctly and the split is
+  arithmetic. Reported apart from real counting bugs so the bugs stay visible.
+* **DST-ambiguous and nonexistent local times are dropped, and counted.** Both
+  engines would have to guess; their guesses disagreeing would be an artefact
+  of the harness.
+* **BAV/SAV reports "not implemented" rather than skipping silently.** A
+  differential test that quietly skips what it was asked to check reads later
+  as a thing that passed.
+
+### An external anchor for the chart wheel, from the UI evaluation
+
+`react-native-kundli-chart` (MIT) authors the North-Indian plate in the same
+300×300 space, and its `HOUSE_POLYGONS` table is **vertex-for-vertex identical
+to ours** once our 3-unit stroke inset is removed — all twelve cells. That is a
+second, independent derivation of the mapping the launch-blocking wheel bug was
+about. `TestPlateGeometry` proves our two layers agree with *each other*, which
+a wholesale rotation would survive; `TestPlateGeometryAgainstAnIndependentRenderer`
+cannot be satisfied by any rotation, and was verified to go red under one.
+
+The package itself is **not adopted** — see below.
+
+### UI evaluation: adopt none
+
+`ui-design/RENDERER-EVALUATION.md` has the measurements. In short:
+
+| Candidate | Licence | Size | Verdict |
+|---|---|---|---|
+| `react-native-kundli-chart` | MIT | 332 KB; chart 8 KB | React Native only; **no aspect layer** |
+| `vedic-astrology-chart-solid` | MIT | 26 KB ESM + 2.6 KB CSS | Needs SolidJS; **no aspect layer**; plate drawn as lines, nothing for a highlight to attach to |
+| `erajasekar/astrochartjs` | MIT | 392 KB (Snap.svg 224 KB) | **South Indian** grid; last commit 2016 |
+| `Kibo/AstroChart` | MIT | 3.3 MB | Western circular wheel — wrong shape |
+| `jyotichart` | **none** | 384 KB | Unlicensed; writes SVG files, not a DOM |
+| `ngx-kundali-north-chart` | **Apache-2.0** | 1.76 MB, 108 files | Angular + Angular Material |
+| shadcn/ui | MIT (+ Apache-2.0, ISC deps) | CLI 840 KB; `lucide-react` alone 34.5 MB | Is React + Tailwind; no subset works in Jinja |
+
+Neither MIT renderer has a drishti/aspect layer — the feature that justifies
+the swap is the feature that is missing — and all of them require a JavaScript
+runtime this app does not have. The dashboard restructure is a layout problem;
+`<details>` and CSS cover it. Take shadcn's *patterns*, not its code.
+
+308 passing (external 70 / invariant 148 / characterization 80).
+
 ## AGPL licence, and a PyJHora oracle for milestones 2 and 3 ✅ (2026-09-08)
 
 ### The licence was always AGPL; only the file was missing
@@ -57,6 +168,12 @@ values it was **not** computed with, so the file carries its own proof.
 
 **With both pinned, all ten bodies agree to under 49″ on both charts.** That
 is the precondition; nothing downstream means anything without it.
+
+> **Superseded the same day.** The differential run (entry above) traced every
+> one of those 49 arcseconds to a *third* default, `FLG_TRUEPOS`, and a fourth,
+> the daśā year length. With all four pinned the agreement is 0.002″ — JSON
+> rounding. The two settings named here were the two that were known at the
+> time, not the two that existed.
 
 **What it buys immediately.** `vargas.py` was characterization only — its
 expected D9/D10 signs came from this build, so asserting them proved

@@ -4,7 +4,9 @@ Run with: pytest test_gates.py -v
 """
 import json
 import re
+import sys
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import pytest
 from pathlib import Path
@@ -3439,10 +3441,11 @@ class TestContactPrecedence:
 # regenerated into something they can no longer be built on.
 ORACLE_PATH = HERE / "fixtures_pyjhora.json"
 
-# The seven visible grahas plus the two nodes and the Lagna. 60″ is a full
-# arcminute; the observed worst disagreement is 48.68″ (Mercury, partner
-# chart), and the same bodies agree with ERFA to 41″. Two independent
-# implementations landing inside an arcminute is the claim.
+# An arcminute — the outer bound, kept as a coarse net. The disagreement was
+# 48.68″ (Mercury) until the differential run traced every arcsecond of it to
+# PyJHora's FLG_TRUEPOS; with that pinned to apparent the observed gap is
+# 0.002″, which is JSON rounding at six decimals. The tight assertion lives in
+# the test, where it can explain itself.
 ORACLE_TOLERANCE_ARCSEC = 60.0
 
 
@@ -3499,7 +3502,21 @@ class TestOracleCrossCheck:
             assert gap < ORACLE_TOLERANCE_ARCSEC, (
                 f"{name} {body}: {longitude:.6f} vs "
                 f"{theirs[body]['longitude']:.6f} — {gap:.2f}″ apart")
-        assert max(worst)[0] > 0.0, "identical to the digit — suspicious"
+        # WHAT THIS DOES AND DOES NOT PROVE.
+        # Since the ayanamsa, node convention and position flag are all
+        # pinned to match, both sides are the same swisseph called the same
+        # way, and the residual is JSON rounding at six decimals — about
+        # 0.002″. That is a check on CONVENTIONS and plumbing, not on the
+        # ephemeris: the ephemeris is anchored by ERFA
+        # (`TestIndependentEphemerisCrossCheck`), and PyJHora's independence
+        # is spent on the interpretation layer instead — nakshatras, vargas,
+        # daśās, arudhas, Ashtakavarga.
+        # A NON-trivial gap here means a convention has drifted apart again,
+        # which is worth catching: it was 49″ before the position flag was
+        # pinned, and every one of those arcseconds was light-time.
+        assert max(worst)[0] < 0.01, (
+            f"{name}: conventions have drifted — worst {max(worst)[0]:.4f}″ "
+            f"at {max(worst)[1]}, expected agreement to JSON rounding")
 
     @pytest.mark.parametrize("name", ["reference", "partner"])
     def test_d1_signs_and_whole_sign_houses_agree(self, oracle, name):
@@ -3735,3 +3752,308 @@ class TestOracleGatesTheNextMilestones:
                              "cheshta_bala", "naisargika_bala", "drik_bala"))
                 assert abs(parts - sb["total_shashtiamsas"][planet]) < 0.05, \
                     (name, planet)
+
+
+class TestPlateGeometryAgainstAnIndependentRenderer:
+    """The house→cell mapping, checked against someone else's derivation.
+
+    `TestPlateGeometry` proves our two layers agree with each other. That is
+    an internal consistency check: it would stay green if the whole table
+    were rotated by one house, which is exactly the launch-blocking bug
+    class it was written after.
+
+    These coordinates come from `react-native-kundli-chart` (MIT,
+    github.com/mobile-dev-ci/react-native-kundli-chart, v1.0.0), whose
+    `constants/geometry.ts` authors the North-Indian plate in the same
+    300×300 space and derives each cell from the square corners, the four
+    side-midpoints, the centre, and the diagonal/diamond intersections. It
+    was written independently of this build and shares no code with it —
+    the same standing as the ERFA cross-check.
+
+    The package is evaluated in ui-design/RENDERER-EVALUATION.md and is NOT
+    adopted; only this table is taken, as confirmation.
+    """
+
+    # HOUSE_POLYGONS from that file, verbatim. Ours are the same vertices
+    # inset by 3 units so a 6-unit stroke sits inside the frame.
+    INDEPENDENT = {
+        1: "150,0 225,75 150,150 75,75",
+        2: "0,0 150,0 75,75",
+        3: "0,0 75,75 0,150",
+        4: "0,150 75,75 150,150 75,225",
+        5: "0,300 0,150 75,225",
+        6: "0,300 75,225 150,300",
+        7: "150,300 75,225 150,150 225,225",
+        8: "300,300 225,225 150,300",
+        9: "300,300 300,150 225,225",
+        10: "300,150 225,75 150,150 225,225",
+        11: "300,0 225,75 300,150",
+        12: "300,0 150,0 225,75",
+    }
+    INSET = 3.0          # stroke inset, in the 300-unit authoring space
+
+    def _uninset(self, points):
+        """Our cell in their coordinates, as a comparable vertex SET.
+
+        Sorted, because the two tables are free to start the same cell at a
+        different corner or wind it the other way — the cell is the set of
+        its vertices.
+        """
+        scale = 300.0 / (300.0 - 2 * self.INSET)
+        return sorted((round((x - self.INSET) * scale, 6),
+                       round((y - self.INSET) * scale, 6))
+                      for x, y in points)
+
+    def _ordered(self, spec):
+        """Their cell in authoring order — required for the shoelace area."""
+        return [tuple(float(v) for v in pair.split(","))
+                for pair in spec.split()]
+
+    def _parse(self, spec):
+        return sorted(self._ordered(spec))
+
+    def test_every_house_cell_matches_the_independent_derivation(self):
+        from app import HOUSE_POLY
+        for house in range(1, 13):
+            assert self._uninset(HOUSE_POLY[house]) == \
+                self._parse(self.INDEPENDENT[house]), (
+                    f"house {house} cell disagrees with an independently "
+                    f"derived North-Indian plate")
+
+    def test_the_cells_tile_the_plate_exactly(self):
+        """Twelve cells, no gap and no overlap: the areas must sum to the
+        whole square. A rotation of the mapping would survive the test
+        above only if it also survived this one, and it cannot."""
+        def area(points):
+            total = 0.0
+            for i, (x1, y1) in enumerate(points):
+                x2, y2 = points[(i + 1) % len(points)]
+                total += x1 * y2 - x2 * y1
+            return abs(total) / 2.0
+        cells = [self._ordered(spec) for spec in self.INDEPENDENT.values()]
+        assert len(cells) == 12
+        assert abs(sum(area(c) for c in cells) - 300 * 300) < 1e-6
+        # The four kendras are the big diamonds: each is 1/8 of the plate.
+        for kendra in (1, 4, 7, 10):
+            assert abs(area(self._ordered(self.INDEPENDENT[kendra]))
+                       - 300 * 300 / 8) < 1e-6
+
+    def test_our_own_table_still_resolves_each_cell_to_its_house(self):
+        """The independent table is only useful if it describes OUR plate:
+        the centre of each of their cells must land in our matching house."""
+        from app import house_at
+        for house in range(1, 13):
+            points = self._parse(self.INDEPENDENT[house])
+            cx = sum(p[0] for p in points) / len(points)
+            cy = sum(p[1] for p in points) / len(points)
+            # Pull the centroid slightly toward the plate centre so a
+            # centroid sitting on a shared edge is not ambiguous.
+            cx += (150 - cx) * 0.02
+            cy += (150 - cy) * 0.02
+            assert house_at(cx, cy) == house, (
+                f"the independent cell for house {house} centres in house "
+                f"{house_at(cx, cy)} of our plate")
+
+
+class TestVimshottariAgainstTheOracle:
+    """The daśā timeline, boundary by boundary, against PyJHora.
+
+    THE FIX THIS PINS
+    Sidera used the Julian year (365.25 days) to turn daśā years into dates.
+    The differential run over 300 random charts found that this was the ONLY
+    thing separating our Vimshottari from PyJHora's — every MD and AD
+    boundary, in every chart, drifted at 0.0064 days per year and nothing
+    else differed. Switching to the SIDEREAL year (365.256364) took the
+    disagreement to zero.
+
+    It is also the coherent choice: Vimshottari is measured against the
+    Moon's position among fixed stars, so its year is the sidereal one. The
+    Julian year was a computing convenience with no jyotisha claim behind it.
+
+    Without a gate the constant is one careless edit from drifting back, and
+    the symptom — dasha dates wrong by hours, growing to days — is invisible
+    in a UI that renders periods as "Mon YYYY".
+    """
+
+    TOLERANCE_SECONDS = 60.0
+
+    def test_the_year_is_sidereal_not_julian(self):
+        import dashas
+        assert dashas.DAYS_PER_YEAR == dashas.SIDEREAL_YEAR_DAYS
+        assert dashas.SIDEREAL_YEAR_DAYS == 365.256364
+        assert dashas.DAYS_PER_YEAR != dashas.JULIAN_YEAR_DAYS
+
+    @pytest.mark.parametrize("name", ["reference", "partner"])
+    def test_every_md_and_ad_boundary_matches(self, oracle, name):
+        from datetime import timedelta
+        from dashas import vimshottari
+        from engine import compute_chart, resolve_timezone
+        if not fixtures.is_built_in(name):
+            pytest.skip("fixtures substituted")
+        block = oracle["charts"][name]["vimsottari"]
+        birth = fixtures.birth(name)
+        # PyJHora reports period starts in the PLACE's local zone, because
+        # that is how it read the birth moment. Tagging them UTC would put
+        # every boundary out by the offset.
+        zone = resolve_timezone(birth.tz)
+
+        timeline = vimshottari(compute_chart(birth))
+        ours = {(md.lord, ad.lord): ad.start
+                for md in timeline.mahadashas for ad in md.antardashas}
+        assert len(ours) == 81, "nine lords nested nine deep"
+
+        checked, worst = 0, 0.0
+        for period in block["periods"]:
+            key = (period["md"], period["ad"])
+            assert key in ours, f"{name}: PyJHora has a period we do not"
+            year, month, day, hours = period["start_local"]
+            if year > 9000:                     # beyond datetime's range
+                continue
+            theirs = (datetime(year, month, day) + timedelta(hours=hours)
+                      ).replace(tzinfo=zone).astimezone(timezone.utc)
+            gap = abs((ours[key] - theirs).total_seconds())
+            worst = max(worst, gap)
+            assert gap < self.TOLERANCE_SECONDS, (
+                f"{name} {key[0]}/{key[1]}: {ours[key].isoformat()} vs "
+                f"{theirs.isoformat()} — {gap / 86400:.4f} days apart")
+            checked += 1
+        assert checked >= 70, f"only {checked} boundaries compared"
+
+    def test_the_julian_year_would_fail_this(self, oracle, monkeypatch):
+        """A gate that cannot go red is decoration.
+
+        Restoring the old constant must break the comparison above — and it
+        does, by a margin that grows the further from birth you look.
+        """
+        from datetime import timedelta
+        import dashas
+        from engine import compute_chart, resolve_timezone
+        monkeypatch.setattr(dashas, "DAYS_PER_YEAR",
+                            dashas.JULIAN_YEAR_DAYS)
+        birth = fixtures.birth("reference")
+        if not fixtures.is_built_in("reference"):
+            pytest.skip("fixtures substituted")
+        zone = resolve_timezone(birth.tz)
+        timeline = dashas.vimshottari(compute_chart(birth))
+        ours = {(md.lord, ad.lord): ad.start
+                for md in timeline.mahadashas for ad in md.antardashas}
+        worst = 0.0
+        for period in oracle["charts"]["reference"]["vimsottari"]["periods"]:
+            year, month, day, hours = period["start_local"]
+            if year > 9000:
+                continue
+            key = (period["md"], period["ad"])
+            theirs = (datetime(year, month, day) + timedelta(hours=hours)
+                      ).replace(tzinfo=zone).astimezone(timezone.utc)
+            worst = max(worst,
+                        abs((ours[key] - theirs).total_seconds()) / 86400)
+        assert worst > 0.5, (
+            "the Julian year produced no measurable disagreement — this "
+            "gate is not testing what it claims to")
+
+    def test_the_oracle_pinned_its_year_length_too(self, oracle):
+        """PyJHora's own default for this is unreliable.
+
+        `drik.true_sidereal_year()` returns ≈366.2 days — a day too long,
+        and astronomically impossible — on roughly 2% of random charts,
+        which would have written that defect into this fixture. The export
+        pins MEAN_SIDEREAL_YEAR and records the raw value so the fixture
+        says whether these two charts were affected.
+        """
+        for name in ("reference", "partner"):
+            block = oracle["charts"][name]["vimsottari"]
+            assert block["year_length_days"] == 365.256364
+            assert "MEAN_SIDEREAL_YEAR" in block["year_length_mode"]
+            assert block["pyjhora_default_mode"] == "TRUE_SIDEREAL_YEAR"
+            # A sidereal year varies by minutes, never by a day.
+            assert abs(block["true_sidereal_year_here"] - 365.256364) < 0.5
+
+
+class TestDifferentialHarness:
+    """Properties of the 300-chart differential generator itself.
+
+    The generator is the part that could quietly stop testing anything —
+    by drifting off the date range, by emitting the same chart 300 times,
+    or (the one that matters) by ever producing something that is not
+    synthetic. Its OUTPUT is deliberately not committed; these pin the
+    guarantees that make that safe.
+    """
+
+    def test_generation_is_deterministic_from_the_seed(self):
+        """The records are not committed, so the seed is the only thing
+        that makes a reported disagreement reproducible."""
+        sys.path.insert(0, str(HERE / "tools" / "oracle"))
+        import differential
+        first, _ = differential.generate(25, 4242)
+        second, _ = differential.generate(25, 4242)
+        assert first == second
+        other, _ = differential.generate(25, 4243)
+        assert other != first, "the seed does not change the records"
+
+    def test_records_are_synthetic_and_varied(self):
+        sys.path.insert(0, str(HERE / "tools" / "oracle"))
+        import differential
+        records, _skipped = differential.generate(60, 20260908)
+        assert len(records) == 60
+        places = {r["place"] for r in records}
+        years = {r["year"] for r in records}
+        assert len(places) > 40, "the same city keeps coming up"
+        assert len(years) > 30, "the dates are not spread"
+        for r in records:
+            assert differential.YEAR_FROM <= r["year"] < differential.YEAR_TO
+            assert 0 <= r["hour"] < 24 and 0 <= r["minute"] < 60
+            assert -90 <= r["latitude"] <= 90
+            assert -180 <= r["longitude"] <= 180
+            # The offset must be the one in force AT THAT MOMENT, not the
+            # zone's standard offset — otherwise half the DST-era records
+            # would be an hour out and both engines would agree on the
+            # wrong chart.
+            zone = ZoneInfo(r["tz"])
+            local = datetime(r["year"], r["month"], r["day"], r["hour"],
+                             r["minute"], r["second"], tzinfo=zone)
+            assert local.utcoffset().total_seconds() / 3600.0 == \
+                r["tz_hours"], r["place"]
+
+    def test_no_generated_record_is_a_committed_fixture(self):
+        """Belt and braces on the standing rule. A random generator cannot
+        produce a real person's birth data, but it must not silently
+        reproduce a committed chart either — that would make a 'random'
+        agreement circular."""
+        sys.path.insert(0, str(HERE / "tools" / "oracle"))
+        import differential
+        records, _ = differential.generate(300, 20260908)
+        committed = set()
+        for name in ("reference", "partner"):
+            b = fixtures.birth(name)
+            committed.add((b.year, b.month, b.day, b.hour, b.minute,
+                           round(b.latitude, 4), round(b.longitude, 4)))
+        for r in records:
+            key = (r["year"], r["month"], r["day"], r["hour"], r["minute"],
+                   round(r["latitude"], 4), round(r["longitude"], 4))
+            assert key not in committed
+
+    def test_the_report_is_committed_and_the_records_are_not(self):
+        report = HERE / "tools" / "oracle" / "DIFFERENTIAL.md"
+        assert report.exists(), (
+            "tools/oracle/DIFFERENTIAL.md is missing — regenerate with "
+            "tools/oracle/differential.py")
+        text = report.read_text(encoding="utf-8")
+        assert "not committed" in text
+        assert "--seed" in text, "the report must name the seed"
+        # The working files must stay out of the tree.
+        for stray in ("records.json", "oracle_apparent.json",
+                      "oracle_true.json"):
+            assert not (HERE / stray).exists(), (
+                f"{stray} is a differential working file and must not be "
+                "committed")
+
+    def test_ashtakavarga_is_reported_as_not_yet_compared(self):
+        """Until milestone 2 lands this must SAY it is not compared. A
+        differential test that silently skips what it was asked to check
+        reads, later, as a thing that passed."""
+        sys.path.insert(0, str(HERE / "tools" / "oracle"))
+        import differential
+        status = differential.ashtakavarga_status()
+        assert status["compared"] is False
+        assert "milestone 2" in status["reason"] or \
+            "extend" in status["reason"]

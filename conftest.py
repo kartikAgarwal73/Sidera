@@ -140,6 +140,22 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
     "TestOracleGatesTheNextMilestones": (
         "invariant", "the fixture shape milestones 2 and 3 are gated "
                      "against, asserted before the features exist"),
+    "TestDifferentialHarness": (
+        "invariant", "properties of the random-record generator: seeded and "
+                     "reproducible, spread over dates and places, never a "
+                     "committed fixture, and its output never committed"),
+    "TestVimshottariAgainstTheOracle": (
+        "external", "PyJHora's Vimshottari MD/AD boundaries for the "
+                    "fictional charts — pins the sidereal-year fix the "
+                    "300-chart differential run found"),
+    # A second derivation of the plate, by someone else. TestPlateGeometry
+    # proves our two layers agree with each other, which a wholesale rotation
+    # of the mapping would survive; this cannot be satisfied by any rotation.
+    "TestPlateGeometryAgainstAnIndependentRenderer": (
+        "external", "react-native-kundli-chart (MIT) constants/geometry.ts "
+                    "HOUSE_POLYGONS — an independently authored "
+                    "North-Indian plate; evaluated and NOT adopted, see "
+                    "ui-design/RENDERER-EVALUATION.md"),
 }
 
 # Per-test overrides, keyed "Class::test_name" (parametrisation stripped).
@@ -376,6 +392,11 @@ OVERRIDE: dict[str, tuple[str, str]] = {
     "TestOracleGatesTheNextMilestones::test_ashtakavarga_is_raw_per_sign_and_sums_to_337":
         ("external", "BPHS per-planet bindu totals 48/49/39/54/56/52/39 "
                      "summing to 337, reproduced by PyJHora"),
+
+    # This one asserts that restoring the OLD constant breaks the gate — a
+    # property of the test, not of any outside source.
+    "TestVimshottariAgainstTheOracle::test_the_julian_year_would_fail_this":
+        ("invariant", "a gate that cannot go red is decoration"),
 
     # --- deployability
     "TestDeployability::test_ephemeris_backend_is_explicit":

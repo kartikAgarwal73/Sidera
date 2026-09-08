@@ -64,6 +64,7 @@ def pin_ayanamsa() -> None:
     const._DEFAULT_AYANAMSA_MODE = AYANAMSA_MODE
     drik.set_ayanamsa_mode(AYANAMSA_MODE)
     set_node_mode(not USE_MEAN_NODES)
+    set_positions(USE_APPARENT_POSITIONS)
 
 
 def verify_ayanamsa(jd: float) -> dict:
@@ -102,6 +103,31 @@ def verify_ayanamsa(jd: float) -> dict:
 # positions are recorded alongside so the divergence stays visible and either
 # convention can be gated later.
 USE_MEAN_NODES = True
+
+# THE THIRD DEFAULT — found by the differential test, then confirmed twice.
+# PyJHora sets swisseph's FLG_TRUEPOS: true geometric positions, with no
+# light-time correction. Sidera does not, so it computes apparent positions,
+# which is what almanacs publish. Every residual arcsecond between the two
+# was this: the Sun 20.2″ (8.3 light-minutes × 0.986°/day), the Moon 0.72″.
+#
+# The Moon's 0.72″ is small on a chart and NOT small in a daśā: it is
+# 1.5 × 10⁻⁵ of a nakshatra, which shifts the balance at birth and moved
+# every MD/AD boundary in the fixture by a constant 1.32 h (reference) and
+# 2.40 h (partner). Pinned to apparent for the same reason the ayanāṃśa and
+# the nodes are pinned — so a comparison measures logic, not conventions.
+# The true-position values are recorded per chart regardless.
+USE_APPARENT_POSITIONS = True
+
+
+def set_positions(apparent: bool) -> None:
+    import swisseph as swe
+    if apparent:
+        drik.PLANET_FLAGS = _BASE_PLANET_FLAGS & ~swe.FLG_TRUEPOS
+    else:
+        drik.PLANET_FLAGS = _BASE_PLANET_FLAGS | swe.FLG_TRUEPOS
+
+
+_BASE_PLANET_FLAGS = drik.PLANET_FLAGS
 
 
 def set_node_mode(use_true: bool) -> None:
@@ -326,6 +352,47 @@ def ashtakavarga(pp) -> dict:
     }
 
 
+DASHA_LORDS = ("Sun", "Moon", "Mars", "Mercury", "Jupiter", "Venus",
+               "Saturn", "Rahu", "Ketu")
+
+
+def vimsottari(jd, place) -> dict:
+    """Every MD/AD boundary, so the daśā timeline has an external gate.
+
+    THE YEAR LENGTH IS PINNED, AND WHY.
+    PyJHora's default is `TRUE_SIDEREAL_YEAR` — `drik.true_sidereal_year()`
+    measured for the chart. The differential test (tools/oracle/DIFFERENTIAL.md)
+    found that function returning ≈366.2 days on about 2% of random charts:
+    roughly a day too long, and impossible, since a sidereal year varies by
+    minutes. Left at the default it would put a defect of the oracle's into
+    the fixture. `MEAN_SIDEREAL_YEAR` is its own 365.256364 constant, which
+    is what Sidera uses.
+
+    The raw value is recorded so the fixture says whether these two charts
+    happen to be affected.
+    """
+    from jhora.horoscope.dhasa.graha import vimsottari as vim
+    pin_ayanamsa()
+    _seed, rows = vim.get_vimsottari_dhasa_bhukthi(
+        jd, place,
+        dhasa_duration_type=const.DHASA_YEAR_DURATION.MEAN_SIDEREAL_YEAR)
+    return {
+        "note": ("MD/AD boundary starts in the PLACE's local time, as "
+                 "(year, month, day, fractional hours). Year length pinned "
+                 "to MEAN_SIDEREAL_YEAR = 365.256364 days."),
+        "year_length_days": const.sidereal_year,
+        "year_length_mode": "MEAN_SIDEREAL_YEAR (pinned)",
+        "pyjhora_default_mode": "TRUE_SIDEREAL_YEAR",
+        "true_sidereal_year_here": round(
+            drik.true_sidereal_year(jd, place), 6),
+        "periods": [
+            {"md": DASHA_LORDS[int(md)], "ad": DASHA_LORDS[int(ad)],
+             "start_local": [int(y), int(m), int(d), round(float(h), 9)],
+             "years": round(float(years), 9)}
+            for (md, ad), (y, m, d, h), years in rows],
+    }
+
+
 def sphutas(dob, tob, place) -> dict:
     from jhora.horoscope.chart import sphuta as sp
     date_obj = drik.Date(*dob)
@@ -419,6 +486,7 @@ def export_chart(name: str, birth: dict) -> dict:
             "mean_minus_true_arcsec": node_gap,
         },
         "divisional_charts": divisional_charts(jd, place),
+        "vimsottari": vimsottari(jd, place),
         "bhava_arudhas": arudha_block(pp),
         "chara_karakas": chara_karakas(pp),
         "ashtakavarga": ashtakavarga(pp),
@@ -473,6 +541,15 @@ def main() -> int:
                 "used."),
             "house_system": "whole sign (PyJHora rasi chart)",
             "node_mode": "mean",
+            "positions": "apparent",
+            "positions_note": (
+                "PyJHora sets swisseph's FLG_TRUEPOS (true geometric "
+                "positions). It is cleared here so both sides compute "
+                "apparent, light-time-corrected positions, as Sidera does. "
+                "The offset is the planet's motion across its light-time — "
+                "20.2 arcsec for the Sun, 0.72 arcsec for the Moon — and "
+                "the Moon's, small as it is, shifts every Vimshottari "
+                "boundary by hours through the balance at birth."),
             "node_note": (
                 "PyJHora's own default is the TRUE node; Sidera uses the "
                 "MEAN node, so the oracle is run with mean nodes and the "

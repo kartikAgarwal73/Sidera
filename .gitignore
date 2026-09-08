@@ -38,3 +38,10 @@ Thumbs.db
 # Runtime output from the "Ask about this chart" thumbs-down feedback.
 # Append-only operational data, never source.
 corrections.jsonl
+
+# Differential-test working files. The random records are synthetic and
+# regenerable from the seed; only tools/oracle/DIFFERENTIAL.md is committed.
+sidera-diff-*/
+records.json
+oracle_apparent.json
+oracle_true.json
