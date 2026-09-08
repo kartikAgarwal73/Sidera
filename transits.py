@@ -15,7 +15,15 @@ from datetime import datetime, timedelta
 
 from engine import PLANETS, SIGNS, Chart, Position, julian_day_ut, sidereal_positions
 
-DRISHTI_OFFSETS: dict[str, tuple[int, ...]] = {
+import schools
+
+# The seven visible grahas are not in dispute: every one aspects the 7th,
+# Mars adds the 4th and 8th, Jupiter the 5th and 9th, Saturn the 3rd and
+# 10th. The nodes ARE in dispute, so their row is not written here — it
+# comes from the reader's answer to "How far does the influence of Rahu and
+# Ketu reach?" (schools.py). `DRISHTI_OFFSETS` stays as the default view of
+# the table so existing callers and tests keep working unchanged.
+_FIXED_OFFSETS: dict[str, tuple[int, ...]] = {
     "Sun": (7,),
     "Moon": (7,),
     "Mars": (4, 7, 8),
@@ -23,9 +31,49 @@ DRISHTI_OFFSETS: dict[str, tuple[int, ...]] = {
     "Jupiter": (5, 7, 9),
     "Venus": (7,),
     "Saturn": (3, 7, 10),
-    "Rahu": (5, 7, 9),
-    "Ketu": (5, 7, 9),
 }
+_NODES = ("Rahu", "Ketu")
+
+
+def drishti_offsets(planet: str) -> tuple[int, ...]:
+    """The inclusive house offsets `planet` aspects, under the live school."""
+    if planet in _NODES:
+        return schools.NODE_OFFSETS[schools.chosen("node_reach").id]
+    return _FIXED_OFFSETS[planet]
+
+
+class _DrishtiTable(dict):
+    """`DRISHTI_OFFSETS[planet]`, with the nodes resolved when asked.
+
+    A plain dict would have frozen the nodes at import time, and every
+    reader of this module — yogas, doshas, explain, app — indexes it
+    directly. Subclassing keeps all of them working while making the two
+    disputed rows follow the selection.
+    """
+
+    def __missing__(self, key):                      # pragma: no cover
+        raise KeyError(key)
+
+    def __getitem__(self, key):
+        if key in _NODES:
+            return drishti_offsets(key)
+        return super().__getitem__(key)
+
+    def get(self, key, default=None):
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+    def items(self):
+        return ((k, self[k]) for k in self.keys())
+
+    def values(self):
+        return (self[k] for k in self.keys())
+
+
+DRISHTI_OFFSETS: dict[str, tuple[int, ...]] = _DrishtiTable(
+    {**_FIXED_OFFSETS, "Rahu": (5, 7, 9), "Ketu": (5, 7, 9)})
 
 CONJUNCTION_ORB = 3.0  # degrees
 

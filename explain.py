@@ -25,6 +25,7 @@ from dashas import (
     nakshatra_of,
 )
 from engine import PLANETS, SIGNS, Chart
+import schools
 from transits import DRISHTI_OFFSETS, TransitSnapshot
 from yogas import (
     DEEP_EXALTATION_DEGREE,
@@ -38,6 +39,22 @@ from yogas import (
 )
 
 CONFIDENCE_LEVELS = ("High", "Moderate", "Interpretive")
+
+
+def _node_reach_clause() -> str:
+    """What the nodes reach, under the reader's answer — not a constant.
+
+    This line used to read "the nodes 5/9" whatever the reader had chosen,
+    which made it simply false under two of the three answers. A sentence
+    that describes the computation has to be computed.
+    """
+    offsets = DRISHTI_OFFSETS["Rahu"]
+    if not offsets:
+        return (f"the nodes cast none at all "
+                f"({schools.chosen('node_reach').school})")
+    listed = "/".join(str(o) for o in offsets)
+    return (f"the nodes {listed} "
+            f"({schools.chosen('node_reach').school})")
 
 
 @dataclass(frozen=True)
@@ -371,7 +388,7 @@ def explain_gocara(chart: Chart, snapshot: TransitSnapshot) -> Explanation:
             f"counting from your Lagna, {chain} — the "
             f"{ordinal(sat.natal_house)} house. Each graha also casts its "
             f"drishti from there (all cast the 7th; Mars adds 4/8, Jupiter "
-            f"5/9, Saturn 3/10, the nodes 5/9)."
+            f"5/9, Saturn 3/10; {_node_reach_clause()})."
         ),
         meaning=(
             "Transits are weather over the natal promise: the slow movers "

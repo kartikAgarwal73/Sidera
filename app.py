@@ -39,6 +39,7 @@ from doshas import WEATHER_FRAMING, doshas_all, myth_busters, transit_weather
 from lessons import CONTEXT_LESSONS, LESSONS
 from engine import SIGNS, PLANETS, BirthData, compute_chart
 from explain import DASHA_THEME, explain_dashboard, explain_yoga, ordinal
+import schools
 from transits import (
     DRISHTI_OFFSETS,
     transit_contacts,
@@ -501,6 +502,11 @@ def build_dashboard(profile: Profile) -> dict:
             "lat": str(birth.latitude), "lon": str(birth.longitude),
             "tz": birth.tz, "place": birth.place,
         },
+        # The school behind any section whose numbers depend on one. Printed
+        # on the verdict itself, not only on the settings panel the reader
+        # has already scrolled past.
+        "school_node_reach": schools.chosen("node_reach").school,
+        "school_node_position": schools.chosen("node_position").school,
     }
 
 
@@ -608,9 +614,19 @@ def birth_from_fields(fields, prefix: str = "") -> BirthData:
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "GET":
-        return render_template("index.html", data=None, error=None, form={})
+        # Reset explicitly: a worker thread is reused between requests, and
+        # a GET must not inherit the previous visitor's answers.
+        schools.set_active({})
+        return render_template("index.html", data=None, error=None, form={},
+                               schools=schools.payload())
 
     form = request.form
+    # The reader's answers to the computation questions, held for the whole
+    # request. Everything downstream — engine, drishti, ledger — reads them
+    # from the context, so no signature in six modules had to change.
+    selection = schools.normalise(
+        {oid: form.get(f"school_{oid}", "") for oid in schools.OPTIONS})
+    schools.set_active(selection)
     try:
         date = _parse_date(form.get("date", ""))
         hour, minute = parse_time(form.get("time", ""))
@@ -653,11 +669,14 @@ def index():
         data = build_dashboard(profile)
     except ValueError as exc:
         return render_template("index.html", data=None, form=form,
+                               schools=schools.payload(),
                                error=str(exc)), 400
     except Exception as exc:  # bad date/tz/coords — show it on the form
         return render_template("index.html", data=None, form=form,
+                               schools=schools.payload(),
                                error=f"Could not cast the chart: {exc}"), 400
-    return render_template("index.html", data=data, error=None, form=form)
+    return render_template("index.html", data=data, error=None, form=form,
+                           schools=schools.payload())
 
 
 @app.route("/ask", methods=["POST"])

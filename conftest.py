@@ -140,6 +140,16 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
     "TestOracleGatesTheNextMilestones": (
         "invariant", "the fixture shape milestones 2 and 3 are gated "
                      "against, asserted before the features exist"),
+    # Layman-first computation options. Product rules about how a choice is
+    # PRESENTED (plain English, one recommended default, an explanation per
+    # answer) plus the two that give the feature its integrity: no live
+    # option may be a control that changes nothing, and every school-
+    # dependent statement carries its school.
+    "TestComputationOptions": (
+        "invariant", "product rules: the question must be answerable "
+                     "without the vocabulary, every live option must move a "
+                     "real computed value, and the chosen school prints on "
+                     "each verdict that depended on it"),
     "TestDifferentialHarness": (
         "invariant", "properties of the random-record generator: seeded and "
                      "reproducible, spread over dates and places, never a "

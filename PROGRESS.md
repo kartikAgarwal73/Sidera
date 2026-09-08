@@ -1,5 +1,62 @@
 # PROGRESS
 
+## Computation options, asked in plain English ✅ (2026-09-08)
+
+Jyotisha is not one method, and on a handful of points the sources genuinely
+disagree. Every astrology app silently picks a side; Sidera now asks — in a
+form a person who has never met the word *drishti* can actually use.
+
+**The pattern.** Each option is a plain-English **question**, two or three
+plain-English **answers**, and the technical **school name in small text
+underneath** — available to anyone who wants it, required of nobody. Each
+question carries a one-line **consequence** before you choose; each answer an
+**"explain this"** expander of two or three sentences. The recommended answer
+is pre-selected and labelled.
+
+> **How far does the influence of Rahu and Ketu reach?**
+> *This changes which planets Rahu and Ketu touch — and so which patterns the
+> chart reports and which transits it calls significant.*
+> ◉ They reach three places, the way Jupiter does · **recommended**
+>   <sub>Parāśarī — the 5th, 7th and 9th signs from themselves</sub>
+> ○ Only straight across the chart  <sub>Conservative — the 7th sign only</sub>
+> ○ They do not reach out at all  <sub>Chāyā-graha — shadow points cast no drishti</sub>
+
+Two questions ship **live**: nodal reach, and *where* the nodes are placed
+(mean vs true node — up to 1.8°, measured at 1.48° on the partner fixture in
+the differential run, enough to change a sign).
+
+**Two rules give the feature its integrity, and both are tests, not
+intentions.**
+
+* **No fake controls.** `test_every_live_answer_actually_changes_a_computed_value`
+  computes a chart under each answer and fails if none of them moves a real
+  value. The Upapada question — "When a sign has two possible rulers, who
+  decides?" — is therefore shown, explained, and **disabled**, because Sidera
+  does not compute arudha padas yet (milestone 3). Offering it would have been
+  a switch wired to nothing. It says so on the page, and `normalise()` refuses
+  to select it even from a hand-edited request.
+* **The choice travels with the result.** Every school-dependent statement
+  names its school — nodal aspect facts in the ledger, the node placements and
+  their transits, the transit section and the graha table on the dashboard,
+  and a line under the chart heading that turns accent-coloured when a setting
+  is away from the default. Asserted both ways: the stamp is on the affected
+  facts and *not* on the unaffected ones, because noise everywhere is the same
+  as provenance nowhere.
+
+**A latent bug this surfaced.** `explain.py` described the drishti rule with a
+hardcoded "…the nodes 5/9". Under two of the three answers that sentence was
+simply false. It is now computed from the live table.
+
+**How the selection reaches the engine.** A `contextvars.ContextVar` set for
+the span of one request. No signature in six modules had to change, and unlike
+a module global it cannot leak between readers on a reused worker thread —
+which `test_the_selection_does_not_leak_between_requests` checks.
+
+The reader can change a setting from the dashboard without retyping anything:
+the panel re-posts the birth details already on the page.
+
+330 passing (external 70 / invariant 170 / characterization 80).
+
 ## Differential accuracy test — 300 random charts; one Sidera bug fixed ✅ (2026-09-08)
 
 `tools/oracle/differential.py` generates **300 random birth records** — random

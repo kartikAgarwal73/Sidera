@@ -25,6 +25,7 @@ from dashas import nakshatra_table, vimshottari
 from doshas import doshas_all, transit_weather
 from engine import PLANETS, Chart
 from explain import ordinal
+import schools
 from rulelib import (
     CONTACT_PRECEDENCE_RULE,
     GENERAL_GOCARA_RULE,
@@ -59,6 +60,20 @@ class Fact:
 def _slug(text: str) -> str:
     keep = [c.lower() if c.isalnum() else "-" for c in text]
     return "".join(keep).strip("-").replace("--", "-")
+
+
+NODES = {"Rahu", "Ketu"}
+
+
+def school_note(*option_ids: str) -> str:
+    """The provenance clause a school-dependent statement carries.
+
+    The rule is not "mention it when it is unusual" — a reader comparing
+    this chart against another astrologer's cannot tell from the number
+    which convention produced it, and the default is a convention too.
+    """
+    note = schools.note_for(*option_ids)
+    return f" (Computed under: {note}.)" if note else ""
 
 
 def _and_list(items: list[str]) -> str:
@@ -230,7 +245,8 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
                 f"{name} is in {p.sign} at {p.dms}{retro}, in the "
                 f"{ordinal(p.house)} house, in the nakshatra {nak.name} "
                 f"pada {nak.pada} (lord {nak.lord})"
-                + (f" — dignity: {grade}." if grade else ".")),
+                + (f" — dignity: {grade}." if grade else ".")
+                + (school_note("node_position") if name in NODES else "")),
             value={"planet": name, "sign": p.sign, "house": p.house,
                    "degree": round(p.degree_in_sign, 4),
                    "retrograde": p.retrograde, "nakshatra": nak.name,
@@ -256,14 +272,21 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
         ))
 
     # --- natal aspects -----------------------------------------------------
+    # An aspect involving a node depends on an answer the reader gave, so it
+    # carries that answer. The agent then cannot state a nodal aspect
+    # without the school travelling with it.
     for a in natal_aspect_table(chart):
+        nodal = NODES & {a.aspecting, a.aspected}
+        note = school_note("node_reach") if nodal else ""
         facts.append(Fact(
             id=f"aspect.{a.aspecting.lower()}-{a.aspected.lower()}",
             kind="aspect",
             statement=(f"{a.aspecting} casts its {ordinal(a.offset)} "
-                       f"drishti onto {a.aspected}."),
+                       f"drishti onto {a.aspected}." + note),
             value={"from": a.aspecting, "to": a.aspected,
-                   "offset": a.offset},
+                   "offset": a.offset,
+                   "school": schools.chosen("node_reach").school
+                             if nodal else None},
         ))
 
     # --- divisional charts -------------------------------------------------
@@ -396,7 +419,8 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
             statement=(
                 f"TRANSIT (today, not birth): {name} is currently moving "
                 f"through {tp.sign}{retro}, which is your natal "
-                f"{ordinal(tp.natal_house)} house.{detail}{override}"),
+                f"{ordinal(tp.natal_house)} house.{detail}{override}"
+                + (school_note("node_position") if name in NODES else "")),
             value={"planet": name, "sign": tp.sign,
                    "natal_house": tp.natal_house,
                    "retrograde": tp.retrograde,

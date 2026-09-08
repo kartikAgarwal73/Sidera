@@ -32,8 +32,21 @@ _SWE_BODY = {
     "Jupiter": swe.JUPITER,
     "Venus": swe.VENUS,
     "Saturn": swe.SATURN,
-    "Rahu": swe.MEAN_NODE,  # mean node per spec; Ketu derived as Rahu + 180°
+    "Rahu": swe.MEAN_NODE,  # default; Ketu derived as Rahu + 180°
 }
+
+# Which node the reader asked for. The mean node smooths out the nodes'
+# wobble and is what the classical tables assumed; the true node is their
+# literal position. They differ by up to ~1.8°, which is enough to put a
+# node in a different sign — see tools/oracle/DIFFERENTIAL.md, where the gap
+# reached 1.48° on one fixture. The question is asked in plain English in
+# schools.py; this is where the answer lands.
+_NODE_BODY = {"mean": swe.MEAN_NODE, "true": swe.TRUE_NODE}
+
+
+def _rahu_body() -> int:
+    import schools
+    return _NODE_BODY[schools.chosen("node_position").id]
 
 _CALC_FLAGS = swe.FLG_SWIEPH | swe.FLG_SIDEREAL | swe.FLG_SPEED
 
@@ -235,8 +248,9 @@ def sidereal_positions(jd_ut: float) -> dict[str, Position]:
     for name in PLANETS:
         if name == "Ketu":
             continue  # derived from Rahu below
+        body = _rahu_body() if name == "Rahu" else _SWE_BODY[name]
         (lon, _lat, _dist, speed_lon, _slat, _sdist), _ = swe.calc_ut(
-            jd_ut, _SWE_BODY[name], _CALC_FLAGS
+            jd_ut, body, _CALC_FLAGS
         )
         out[name] = Position(longitude=lon, speed=speed_lon)
     rahu = out["Rahu"]

@@ -113,6 +113,49 @@
     <input id="p_lon" name="p_lon" type="hidden" value="{{ form.get('p_lon', '') }}">
     <input id="p_tz" name="p_tz" type="hidden" value="{{ form.get('p_tz', '') }}">
   </details>
+
+  {# ---- Computation options ---------------------------------------------
+     Astrologers genuinely disagree on a few points, and every app silently
+     picks a side. These ask instead — in plain English, with the school
+     name underneath for anyone who wants it, and a recommended answer
+     already chosen so nobody has to engage with this at all. #}
+  <details class="schoolbox">
+    <summary>How your chart is calculated
+      <span class="muted">— sensible defaults chosen; change nothing if you
+      prefer</span>
+      {% if schools.changed %}<span class="chip changed">{{ schools.changed
+      | length }} changed</span>{% endif %}
+    </summary>
+    <p class="schoolintro">Astrologers do not agree on everything. Where
+      they differ, Sidera asks rather than deciding quietly — and whatever
+      you choose is printed on every reading it affects.</p>
+
+    {% for opt in schools.options %}
+    <fieldset class="school {% if not opt.live %}notlive{% endif %}">
+      <legend>{{ opt.question }}</legend>
+      <p class="consequence">{{ opt.consequence }}</p>
+      {% if not opt.live %}
+      <p class="notyet">{{ opt.unavailable }}</p>
+      {% endif %}
+      {% for ans in opt.answers %}
+      <div class="answer">
+        <label>
+          <input type="radio" name="school_{{ opt.id }}" value="{{ ans.id }}"
+                 {% if schools.selected[opt.id] == ans.id %}checked{% endif %}
+                 {% if not opt.live or not ans.live %}disabled{% endif %}>
+          <span class="answerline"><span class="answertext">{{ ans.text }}</span>{% if ans.recommended %}<span class="rec">recommended</span>{% endif %}</span>
+        </label>
+        <span class="schoolname">{{ ans.school }}</span>
+        <details class="whythis">
+          <summary>explain this</summary>
+          <p>{{ ans.explain }}</p>
+        </details>
+      </div>
+      {% endfor %}
+    </fieldset>
+    {% endfor %}
+  </details>
+
   <button type="submit" class="cast">Cast the chart →</button>
   <p class="footnote">Sidereal · North-Indian · used only to cast your chart</p>
 </form>
@@ -127,6 +170,48 @@
 <section class="chartof" id="glance">
   <h1 class="chartof-name">{{ data.headline }}</h1>
   <div class="chartof-sub">{{ data.subline }}</div>
+  {# The reader chose how this chart is computed; the choice belongs with
+     the chart, not only on the form they have already left. #}
+  <div class="chartof-sub schoolsum {% if schools.changed %}moved{% endif %}">
+    {{ schools.summary }}
+  </div>
+
+  {# The same questions, on the dashboard, re-posting the birth details that
+     are already on this page. Without this the reader would have to retype
+     everything to change one setting. #}
+  <details class="schoolbox onboard">
+    <summary>How this chart is calculated
+      {% if schools.changed %}<span class="chip changed">{{ schools.changed
+      | length }} changed</span>{% endif %}
+    </summary>
+    <form method="post" action="/" class="schoolform">
+      {% for k in ["name","date","time","place","lat","lon","tz",
+                   "p_name","p_date","p_time","p_place","p_lat","p_lon","p_tz"] %}
+      <input type="hidden" name="{{ k }}" value="{{ form.get(k, '') }}">
+      {% endfor %}
+      {% for opt in schools.options %}
+      <fieldset class="school {% if not opt.live %}notlive{% endif %}">
+        <legend>{{ opt.question }}</legend>
+        <p class="consequence">{{ opt.consequence }}</p>
+        {% if not opt.live %}<p class="notyet">{{ opt.unavailable }}</p>{% endif %}
+        {% for ans in opt.answers %}
+        <div class="answer">
+          <label>
+            <input type="radio" name="school_{{ opt.id }}" value="{{ ans.id }}"
+                   {% if schools.selected[opt.id] == ans.id %}checked{% endif %}
+                   {% if not opt.live or not ans.live %}disabled{% endif %}>
+            <span class="answerline"><span class="answertext">{{ ans.text }}</span>{% if ans.recommended %}<span class="rec">recommended</span>{% endif %}</span>
+          </label>
+          <span class="schoolname">{{ ans.school }}</span>
+          <details class="whythis"><summary>explain this</summary>
+            <p>{{ ans.explain }}</p></details>
+        </div>
+        {% endfor %}
+      </fieldset>
+      {% endfor %}
+      <button type="submit" class="cast recast">Recalculate →</button>
+    </form>
+  </details>
 </section>
 
 <!-- Glance — design 4b: one statement, three chips, single swap panel -->
@@ -450,6 +535,7 @@
     {% endfor %}
   </div>
   {% endif %}
+  <p class="schoolstamp">Rāhu and Ketu reach: {{ data.school_node_reach }}</p>
 </section>
 
 <!-- Yogas -->
@@ -604,7 +690,7 @@
       </tr>
       {% for p in data.planets %}
       <tr>
-        <td>{{ p.name }}{% if p.retro %} ℞{% endif %}</td>
+        <td>{{ p.name }}{% if p.retro %} ℞{% endif %}{% if p.name in ("Rahu", "Ketu") %}<span class="schoolmark" title="{{ data.school_node_position }}">·</span>{% endif %}</td>
         <td class="num">{{ p.sign }} {{ p.dms }}</td>
         <td class="num">{{ p.house }}</td>
         <td>{{ p.nakshatra }} p.{{ p.pada }}</td>
@@ -614,6 +700,8 @@
       {% endfor %}
     </tbody>
   </table></div>
+  <p class="schoolstamp">Rāhu and Ketu placed with: {{ data.school_node_position }}
+    · their drishti: {{ data.school_node_reach }}</p>
   <p class="footnote" style="text-align:left">Ayanāṃśa (Lahiri) {{ "%.2f" | format(data.ayanamsa) }}° ·
   {{ data.birth.year }}-{{ "%02d" | format(data.birth.month) }}-{{ "%02d" | format(data.birth.day) }}
   {{ "%02d" | format(data.birth.hour) }}:{{ "%02d" | format(data.birth.minute) }} ({{ data.birth.tz }}) ·

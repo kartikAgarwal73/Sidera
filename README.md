@@ -45,8 +45,19 @@ checked instead:
   *violation*, and a violated answer is withheld rather than captioned. The
   feature is optional: with no `ANTHROPIC_API_KEY` the panel says so and
   everything else is unaffected.
-- **Where sources genuinely differ, the app says so** instead of inventing a
-  table cell — see the yoni and vaśya notes in `gunamilan.py`.
+- **Where sources genuinely differ, the app asks** instead of picking a side
+  quietly. `schools.py` puts the handful of real forks to the reader as plain
+  English questions — *"How far does the influence of Rahu and Ketu reach?"* —
+  with two or three plain-English answers, the school name in small text
+  underneath, a one-line note on what changes, an "explain this" expander, and
+  the mainstream answer pre-selected and labelled **recommended**. Nobody needs
+  the vocabulary to choose. Two rules are enforced by tests rather than
+  intended: **no live option may be a control that changes nothing** (a chart
+  is computed under each answer to prove it moves), and **the chosen school is
+  printed on every verdict that depended on it** — and on none that did not.
+  A question whose feature is not built yet (the Upapada's two rulers) is
+  shown, explained and disabled rather than offered. See also the yoni and
+  vaśya notes in `gunamilan.py`.
 
 ### The test suite distinguishes two kinds of guarantee
 
@@ -259,6 +270,7 @@ doshas.py         doshas with auto-run cancellations, transit weather
 gunamilan.py      aṣṭakūṭa compatibility
 ask.py            question → weighted lenses → verdict (deterministic)
 chartfacts.py     the computed fact ledger, with stable citation IDs
+schools.py        the computation options, asked in plain English
 rulelib.py        classical rules the agent interprets through, each sourced
 agent.py          grounded 'Ask about this chart' + its answer validator
 reading/          the daily reading: detect · select · compose · fragments

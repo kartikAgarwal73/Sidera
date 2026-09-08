@@ -774,7 +774,18 @@ class TestPhase6FlaskUI:
         # (The palette picker's <option value="…"> lives outside it.)
         form_html = html[html.index('<form method="post"'):html.index("</form>")]
         assert 'value=""' in form_html
-        assert re.search(r'value="[^"]', form_html) is None
+        # Every input that could carry a birth detail is empty. Radios are
+        # exempt because their value is a choice id from the computation
+        # options, not anything about a person — and the next assertion
+        # holds them to exactly that.
+        birth_inputs = re.sub(r"<input[^>]*type=\"radio\"[^>]*>", "",
+                              form_html)
+        assert re.search(r'value="[^"]', birth_inputs) is None
+        import schools
+        allowed = {a.id for o in schools.OPTIONS.values() for a in o.answers}
+        for value in re.findall(
+                r'<input[^>]*type="radio"[^>]*value="([^"]*)"', form_html):
+            assert value in allowed, f"unexpected radio value: {value}"
         # The reference chart lives ONLY in this test file — never in the UI.
         for leak in (GATE_BIRTH.place, str(GATE_BIRTH.year),
                      f"{GATE_BIRTH.hour}:{GATE_BIRTH.minute}",
@@ -4057,3 +4068,285 @@ class TestDifferentialHarness:
         assert status["compared"] is False
         assert "milestone 2" in status["reason"] or \
             "extend" in status["reason"]
+
+
+class TestComputationOptions:
+    """The layman-first settings, and the promises they make.
+
+    The hard one is the last: a control that changes nothing is worse than
+    no control, so every live answer must be shown to move a real computed
+    value. That is asserted by actually computing, not by inspection.
+    """
+
+    # --- the presentation contract -------------------------------------
+
+    def test_every_question_is_plain_english(self):
+        """A reader who has never met the word 'drishti' must still be able
+        to choose. Jargon belongs under the answer, never in the question or
+        in the answer text itself."""
+        import schools
+        jargon = ("drishti", "dṛṣṭi", "graha", "arudha", "amsa", "varga",
+                  "gochara", "node", "ayanamsa", "lord", "sidereal",
+                  "parashari", "parāśarī", "jaimini")
+        for opt in schools.OPTIONS.values():
+            assert opt.question.endswith("?"), opt.id
+            assert 2 <= len(opt.answers) <= 3, opt.id
+            haystack = f"{opt.question} {opt.consequence}".lower()
+            for term in jargon:
+                assert term not in haystack, (
+                    f"{opt.id}: the question uses '{term}' — the reader "
+                    f"should not need the vocabulary to choose")
+            for ans in opt.answers:
+                for term in jargon:
+                    assert term not in ans.text.lower(), (
+                        f"{opt.id}/{ans.id}: the ANSWER uses '{term}'; the "
+                        f"school name goes in `school`, not in `text`")
+
+    def test_the_school_name_is_carried_but_kept_secondary(self):
+        """Every answer names its school, and the template renders it in
+        small text under the answer rather than as the answer."""
+        import schools
+        for opt in schools.OPTIONS.values():
+            for ans in opt.answers:
+                assert ans.school.strip(), f"{opt.id}/{ans.id}"
+                assert len(ans.school) > len(ans.text) / 3
+        page = (HERE / "templates" / "index.html").read_text(encoding="utf-8")
+        assert "answertext" in page and "schoolname" in page
+        css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
+        block = css[css.index(".answer .schoolname"):]
+        block = block[:block.index("}")]
+        size = re.search(r"font-size:\s*([\d.]+)px", block)
+        assert size and float(size.group(1)) <= 12.0, (
+            "the school name must be smaller than the answer it sits under")
+
+    def test_exactly_one_recommended_answer_per_question(self):
+        import schools
+        for opt in schools.OPTIONS.values():
+            recommended = [a for a in opt.answers if a.recommended]
+            assert len(recommended) == 1, opt.id
+            assert opt.default == recommended[0].id
+            assert schools.DEFAULTS[opt.id] == opt.default
+
+    def test_every_question_states_its_consequence_in_one_line(self):
+        import schools
+        for opt in schools.OPTIONS.values():
+            assert opt.consequence.strip().endswith("."), opt.id
+            assert 40 < len(opt.consequence) < 220, opt.id
+
+    def test_every_answer_can_explain_itself_in_two_or_three_sentences(self):
+        import schools
+        for opt in schools.OPTIONS.values():
+            for ans in opt.answers:
+                sentences = [s for s in re.split(r"(?<=[.!?])\s+",
+                                                 ans.explain.strip()) if s]
+                assert 2 <= len(sentences) <= 4, (
+                    f"{opt.id}/{ans.id}: {len(sentences)} sentences")
+
+    def test_the_form_pre_selects_the_recommended_answer(self, client):
+        html = client.get("/").get_data(as_text=True)
+        import schools
+        for opt in schools.OPTIONS.values():
+            marker = (f'name="school_{opt.id}" value="{opt.default}"')
+            assert marker in html, opt.id
+            after = html[html.index(marker):html.index(marker) + 260]
+            assert "checked" in after, f"{opt.id} default not pre-selected"
+        assert "recommended" in html
+        assert "explain this" in html
+
+    # --- no fake controls ----------------------------------------------
+
+    def test_an_option_that_is_not_live_cannot_be_chosen(self, client):
+        """The Upapada question is real but Sidera does not compute arudha
+        padas yet, so it is shown, explained, and disabled. Offering it
+        would be a control that changes nothing."""
+        import schools
+        dead = [o for o in schools.OPTIONS.values() if not o.live]
+        assert dead, "this test needs at least one not-yet option"
+        for opt in dead:
+            assert opt.unavailable.strip(), opt.id
+            # It cannot be switched on through the form either.
+            forced = schools.normalise({opt.id: opt.answers[-1].id})
+            assert forced[opt.id] == opt.default
+        html = client.get("/").get_data(as_text=True)
+        assert "disabled" in html
+        for opt in dead:
+            assert opt.unavailable[:40] in html, opt.id
+
+    def test_every_live_answer_actually_changes_a_computed_value(self):
+        """THE INVARIANT THIS WHOLE FILE RESTS ON.
+
+        For each live option, at least one non-default answer must produce a
+        different chart or a different aspect table than the default does.
+        Asserted by computing both, so a setting cannot rot into decoration.
+        """
+        import schools
+        from engine import PLANETS, compute_chart
+        from transits import natal_aspect_table
+
+        def fingerprint():
+            chart = compute_chart(fixtures.birth("reference"))
+            return (
+                tuple(round(chart.planets[p].longitude, 6) for p in PLANETS),
+                tuple(sorted((a.aspecting, a.aspected, a.offset)
+                             for a in natal_aspect_table(chart))),
+            )
+
+        with schools.use({}):
+            baseline = fingerprint()
+        for opt in schools.OPTIONS.values():
+            if not opt.live:
+                continue
+            moved = []
+            for ans in opt.answers:
+                if ans.id == opt.default:
+                    continue
+                with schools.use({opt.id: ans.id}):
+                    moved.append(fingerprint() != baseline)
+            assert any(moved), (
+                f"option '{opt.id}' is offered but no answer changes any "
+                f"computed value — that is a fake control")
+
+    def test_node_reach_changes_exactly_the_nodal_aspects(self):
+        """And nothing else: a setting that quietly moved Jupiter's drishti
+        would be a bug wearing a feature's clothes."""
+        import schools
+        from engine import compute_chart
+        from transits import natal_aspect_table
+        chart = compute_chart(fixtures.birth("reference"))
+
+        def table(choice):
+            with schools.use({"node_reach": choice}):
+                return sorted((a.aspecting, a.aspected, a.offset)
+                              for a in natal_aspect_table(chart))
+
+        classical, opposition, none = (table("classical"),
+                                       table("opposition"), table("none"))
+        assert len(classical) > len(opposition) > len(none)
+        nodes = {"Rahu", "Ketu"}
+        # Every row that survives to 'none' involves no node as the aspector.
+        assert all(row[0] not in nodes for row in none)
+        # Non-nodal aspects are untouched by any of the three.
+        def non_nodal(rows):
+            return [r for r in rows if r[0] not in nodes]
+        assert non_nodal(classical) == non_nodal(opposition) == \
+            non_nodal(none)
+
+    def test_node_position_moves_the_nodes_and_only_the_nodes(self):
+        import schools
+        from engine import PLANETS, compute_chart
+
+        def positions(choice):
+            with schools.use({"node_position": choice}):
+                chart = compute_chart(fixtures.birth("partner"))
+                return {p: chart.planets[p].longitude for p in PLANETS}
+
+        mean, true = positions("mean"), positions("true")
+        for planet in PLANETS:
+            if planet in ("Rahu", "Ketu"):
+                # The measured gap on this fixture is 1.48° — see
+                # tools/oracle/DIFFERENTIAL.md.
+                assert abs(mean[planet] - true[planet]) > 1.0, planet
+            else:
+                assert mean[planet] == true[planet], planet
+        # Ketu stays opposite Rahu under either convention.
+        for table in (mean, true):
+            assert abs((table["Rahu"] + 180) % 360 - table["Ketu"]) < 1e-9
+
+    # --- the choice travels with the verdict ----------------------------
+
+    def test_the_school_prints_on_every_affected_fact(self):
+        """A settings screen the reader has closed is not provenance. Any
+        computed statement that depended on a school names it."""
+        import schools
+        from datetime import timezone as _tz
+        from chartfacts import build_facts
+        from engine import compute_chart
+        when = datetime(2026, 9, 3, tzinfo=_tz.utc)
+        for choice in ("classical", "opposition"):
+            with schools.use({"node_reach": choice}):
+                chart = compute_chart(fixtures.birth("reference"))
+                facts = build_facts(chart, when)
+                school = schools.chosen("node_reach").school
+                nodal = [f for f in facts if f.kind == "aspect"
+                         and {f.value["from"], f.value["to"]}
+                         & {"Rahu", "Ketu"}]
+                assert nodal or choice == "none"
+                for fact in nodal:
+                    assert school in fact.statement, fact.id
+                    assert fact.value["school"] == school
+                # …and a non-nodal aspect is NOT stamped with it: noise
+                # everywhere is the same as provenance nowhere.
+                plain = [f for f in facts if f.kind == "aspect"
+                         and not ({f.value["from"], f.value["to"]}
+                                  & {"Rahu", "Ketu"})]
+                for fact in plain:
+                    assert "Computed under" not in fact.statement, fact.id
+
+    def test_node_placement_facts_name_the_node_convention(self):
+        import schools
+        from datetime import timezone as _tz
+        from chartfacts import build_facts
+        from engine import compute_chart
+        when = datetime(2026, 9, 3, tzinfo=_tz.utc)
+        for choice in ("mean", "true"):
+            with schools.use({"node_position": choice}):
+                facts = {f.id: f for f in build_facts(
+                    compute_chart(fixtures.birth("reference")), when)}
+                school = schools.chosen("node_position").school
+                for fid in ("planet.rahu", "planet.ketu",
+                            "transit.rahu", "transit.ketu"):
+                    assert school in facts[fid].statement, (choice, fid)
+                assert school not in facts["planet.sun"].statement
+
+    def test_the_dashboard_prints_the_school_on_affected_sections(self,
+                                                                  client):
+        import schools
+        for choice in ("classical", "none"):
+            body = dict(GATE_FORM)
+            body["school_node_reach"] = choice
+            html = client.post("/", data=body).get_data(as_text=True)
+            assert html.count("schoolstamp") >= 2
+            with schools.use({"node_reach": choice}):
+                assert schools.chosen("node_reach").school in html
+
+    def test_a_changed_setting_is_announced_at_the_top_of_the_chart(self,
+                                                                    client):
+        body = dict(GATE_FORM)
+        body["school_node_reach"] = "none"
+        html = client.post("/", data=body).get_data(as_text=True)
+        assert "not the default" in html
+        assert "schoolsum moved" in html
+        # …and the reader can change it again without retyping the birth
+        # details, which the dashboard re-posts as hidden fields.
+        assert "schoolform" in html and "Recalculate" in html
+
+    def test_defaults_reproduce_the_chart_the_suite_is_anchored_to(self,
+                                                                   client):
+        """The recommended answers must be the ones every other gate in this
+        file was written against, or half the suite is describing a chart
+        nobody is served."""
+        import schools
+        assert schools.DEFAULTS == {"node_reach": "classical",
+                                    "node_position": "mean",
+                                    "dual_lord": "single"}
+        html = client.post("/", data=GATE_FORM).get_data(as_text=True)
+        assert "Computed with the recommended settings throughout." in html
+
+    def test_a_hand_edited_request_cannot_select_an_unknown_school(self,
+                                                                   client):
+        import schools
+        assert schools.normalise({"node_reach": "; DROP TABLE"}) == \
+            schools.DEFAULTS
+        assert schools.normalise({"nonsense": "x"}) == schools.DEFAULTS
+        assert schools.normalise(None) == schools.DEFAULTS
+        resp = client.post("/", data={**GATE_FORM,
+                                      "school_node_reach": "made-up"})
+        assert resp.status_code == 200
+
+    def test_the_selection_does_not_leak_between_requests(self, client):
+        """A worker thread is reused. One reader's answers must not become
+        the next reader's chart."""
+        client.post("/", data={**GATE_FORM, "school_node_reach": "none"})
+        html = client.get("/").get_data(as_text=True)
+        marker = 'name="school_node_reach" value="classical"'
+        assert "checked" in html[html.index(marker):html.index(marker) + 260]
