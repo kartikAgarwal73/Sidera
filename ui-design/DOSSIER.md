@@ -20,25 +20,36 @@ That matters for the design because a pañcāṅga is not a magazine. It is a
 someone looking something up. The design leans on that rather than on
 editorial columns.
 
+> **REVISED 2026-09-09 — the light paper almanac.** An approved Claude Design
+> mockup moved the primary reading to **light paper**, cut the palette from
+> six to two, and added a scroll choreography. The typography, the structural
+> signature (the rule above the heading), the pagination and the contents-page
+> layout below are unchanged; the colour section and the new *Choreography*
+> section at the end carry the revision. `ui-design/DESIGN-HANDOFF.md` holds
+> the superseding token table.
+
 ## Tokens
 
-### Colour — one ground, one ink, one accent
+### Colour — one ground, one ink, one bronze
 
-The six palettes stay and keep their stored values; what changes is
-**discipline**, which is what the brief actually asks for: *one accent, used
-only for verdict emphasis and links.*
+**Revised to the light paper almanac (2026-09-09).** Two readings, not six:
+the four retired palettes were variations nobody was choosing between.
 
-| Token | Role | Pastel (default) |
-|---|---|---|
-| `--ink` | the ground. Legacy name — it is the paper | `#585270` |
-| `--cream` | the ink laid on it | `#ece5d8` |
-| `--accent-300` | THE accent. Verdict emphasis and links, nothing else | `#cfc4e4` |
-| `--accent-400` | plate strokes only — the engraver's line | `#bcafd7` |
-| `--divider` / `--hairline` | rules | cream at .14 / .10 |
+| Token | Paper (default) | Night reading | Role |
+|---|---|---|---|
+| `--paper` | `#f3f2f2` | `#1a1826` | the ground |
+| `--surface` | `#eae9e9` | `#262336` | raised areas |
+| `--ink` | `#201f1d` | `#ece5d8` | text |
+| `--accent` | `#b68235` | `#dcb877` | plate strokes, large display |
+| `--accent-ink` | `#8a5f1c` | `#e2c48c` | links, text below 24px |
+| `--hairline` / `--divider` | 16% / 24% ink | same | rules |
 
-`--accent` and `--ghost` remain defined because the framework gate requires
-the full ramp on every palette, but they are no longer painted onto ordinary
-UI. Decorative gradients were already banned by
+`--ink` used to name the GROUND. It names the text now, and `--paper` is the
+ground — the rename is the honest one for a paper-first design, and the gate
+that used to catch "text painted the colour behind it" follows the new name
+rather than retiring.
+
+Decorative gradients were already banned by
 `test_framework_non_negotiable_tokens`; so are shadows and any radius but 0
 and 50%.
 
@@ -68,8 +79,8 @@ display face as the only voice in the room.
 
 | Role | Mobile | Desktop | Face |
 |---|---|---|---|
-| Verdict | 30px | 40px | Tiro, 1.18 leading |
-| Page title | 26px | 34px | Tiro |
+| Verdict | 34px | 52px | Tiro, 1.18 leading |
+| Page title | 27px | 36px | Tiro |
 | Section head | 19px | 21px | Tiro |
 | Working text | 15px | 15.5px | Plex, 1.72 leading |
 | Table / data | 13px | 13px | Plex, tabular |
@@ -193,3 +204,47 @@ where the brief left an axis free, it is not spent on another default:
 No functionality, no copy, no IA, no new dependency beyond the one font
 request. Every existing test stays green apart from the single column-count
 assertion named above.
+
+
+---
+
+## Choreography (2026-09-09)
+
+Six moves, one duration (`--reveal: 620ms`), one curve. Nothing bounces,
+nothing loops, nothing moves that a reader did not scroll into.
+
+1. **The fold rule draws in**, left to right, as its fold enters — and hands
+   off to the next one down the page. A border cannot be scaled, so the rule
+   is a pseudo-element.
+2. **The plate pins** beside the day's verdict and the contents, and
+   **releases at the last contents entry**. No JavaScript decides the release
+   point: the sticky column sits in a grid that ends there.
+3. **A ghost numeral** — the folio, at 12% ink, with the title overlapping its
+   lower half — carries the plate's presence down-leaf after it releases.
+4. **Each domain opens on a full-viewport verdict**, rising 22px into place
+   (8px on a phone).
+5. **Rhythm:** airy verdict → dense two-column working that fades in as one
+   block → a one-line caveat → the next fold.
+6. **Driven by CSS scroll-driven animation where the browser has it**, and by
+   an IntersectionObserver everywhere else. Both paths end at the same final
+   state, which is also what a reduced-motion reader gets immediately.
+
+**`prefers-reduced-motion: reduce` turns all of it off** and keeps the pin: a
+sticky element is layout, not motion, and dropping it would take the plate
+away from the reading it belongs beside — a content loss dressed up as an
+accessibility win. `TestReducedMotionInARealBrowser` drives a browser with the
+preference actually set and asserts nothing is left invisible.
+
+### Colour, revised
+
+Two readings — **Paper** and **Night reading**. The bronze splits by role
+because one hex cannot do both jobs: `#b68235` is 3.02:1 on paper (graphics
+and large display only) and `--accent-ink` `#8a5f1c` is the same hue darkened
+to 5.03:1 for links and small text. Every pair is recomputed from
+`static/style.css` by `TestPaperPalette` on every run.
+
+### The plate, on light
+
+Ink for the frame and the diagonals; the single bronze line is the diamond
+that makes it a North-Indian plate rather than a grid. Both are set in CSS,
+not as presentation attributes, so the two readings can restate them.

@@ -1,5 +1,98 @@
 # PROGRESS
 
+## The light paper almanac, and the scroll choreography ✅ (2026-09-09)
+
+An approved Claude Design mockup moved the app to **light paper** and asked
+for a scroll choreography. Re-skin and staging only: the IA, the verdict-first
+voice doctrine, the word budgets and the validator are untouched, and
+`TestDomainRestructure`, `TestEditorialDoctrine` and `TestPaperPalette` all
+pass together, which is the proof.
+
+### Contrast was computed, not chosen
+
+The brief flagged one pair and was right about it: **`#b68235` on `#f3f2f2` is
+3.02:1** — enough for graphics and large display (AA for non-text objects is
+3.0), and **not** enough for a link. On the surface tone it is 2.78:1 and
+fails outright.
+
+So the bronze **splits by role**: `--accent` `#b68235` draws the plate and
+sets large display; `--accent-ink` `#8a5f1c` — the same hue at 36°, darkened
+until it clears — takes links and every text below 24px at **5.03:1** on paper
+and **4.64:1** on surface. Every muted ink step was recomputed too; the floor
+is **4.73:1**. `TestPaperPalette` reads the hexes back out of
+`static/style.css` and recomputes all of it on every run, so a future tweak
+that lightens the bronze fails here rather than in someone's eyes.
+
+Six palettes became two — **Paper** and **Night reading**. A browser still
+holding a retired palette name falls back rather than rendering an undefined
+theme, which would have left the page unstyled.
+
+### `--ink` changed meaning, on purpose
+
+It named the **ground**; it names the **text** now, with `--paper` as the
+ground. That is the honest naming for a paper-first design, and it was a
+mechanical rename over 743 lines — including 23 hardcoded `rgba(236,229,216,…)`
+literals that became `rgba(var(--ink-rgb), …)` so they follow the theme.
+
+The gate that used to catch *"text painted the same colour as the page behind
+it"* — a real bug that once shipped three invisible buttons — **follows the
+new name** instead of retiring.
+
+### Two external gates had to be re-anchored
+
+`test_design_handoff_pastel_tokens` and
+`test_framework_six_palettes_by_root_attribute` are declared `external`,
+meaning they answer to `DESIGN-HANDOFF.md` rather than to the build. An
+approved design supersedes that document, so **the document was updated first**
+and the gates now answer to its new token table. They were not deleted: an
+external gate whose source changed should follow the source, or it stops
+meaning anything. The framework gate is in fact stricter now — it also fails
+if any component carries a palette hex directly.
+
+### The choreography
+
+Six moves, one duration (620ms), one curve. Fold rules **draw in** left to
+right; the plate **pins** beside the day's verdict and **releases at the last
+contents entry** (no JavaScript decides that — the sticky column sits in a
+grid that ends there); a **ghost folio numeral** at 12% ink carries down-leaf
+with the title overlapping it; each domain opens on a **full-viewport verdict**
+that rises 22px (8px on a phone); the working then **fades in as one block**
+in two columns. CSS scroll-driven animation where the browser has it, an
+IntersectionObserver everywhere else, both ending at the same final state.
+
+**`prefers-reduced-motion: reduce` turns all of it off and keeps the pin** — a
+sticky element is layout, not motion, and dropping it would take the plate
+away from the reading it belongs beside.
+
+### Three things looking caught that reasoning did not
+
+- **The plate rendered with no lines at all.** The token rename ran over the
+  stylesheet but not the template, so `var(--accent-400)` stopped resolving
+  and the wheel computed `stroke: none`. A DOM probe found it; a screenshot
+  had already shown it. Rebuilt to the brief: ink frame and diagonals, one
+  bronze line for the diamond, both in CSS so the two readings can restate
+  them.
+- **The ghost numeral left a 200px hole.** Absolutely positioned against a
+  centring flex container it hung at the top of the screenful while the title
+  centred below. It is in flow now with a negative bottom margin, so the group
+  travels together at any viewport height.
+- **Two pre-existing `infinite` animations** — a marching-ants dash and a
+  pulsing ring on the plate's highlight layer. An engraved plate does not have
+  crawling ants on it, and an animation that never ends is the one thing on
+  the page a reader cannot scroll away from. The dash is static now; the ring
+  pulses twice and holds.
+
+### A gate that passed for the wrong reason
+
+`TestReducedMotionInARealBrowser` went green **with the entire reduced-motion
+block deleted** — because it measured the arrival view, where the revealed
+elements sit inside hidden domain folds and were filtered out for having no
+client rects. Every assertion passed vacuously. It now navigates to a domain
+fold first and asserts it actually measured a `.reveal-rise` and a `.working`
+before judging them. Re-verified: deleting the block now turns it red.
+
+`pytest` → **443 passed** (external 70 · invariant 283 · characterization 80).
+
 ## The editorial dossier — a full visual redesign ✅ (2026-09-09)
 
 Sidera calls itself *a Vedic almanac*. It did not look like one. This makes

@@ -1,5 +1,45 @@
 # Handoff: Sidera — Vedic Astrology App
 
+> **SUPERSEDED IN PART — 2026-09-09.** An approved Claude Design mockup moved
+> the app to a **light paper-first almanac**. Where this document and the
+> section below disagree, **the section below wins**; the rest of this handoff
+> (screens, flows, copy intent, the expand-on-selection pattern) still stands.
+>
+> This matters for the test suite: `test_design_handoff_pastel_tokens` and
+> `test_framework_six_palettes_by_root_attribute` are declared `external`,
+> meaning they are anchored to *this file* rather than to the build. They now
+> answer to the table below. The gates were not deleted — an external gate
+> whose source document changed should follow the document, or it stops
+> meaning anything.
+>
+> ## Design tokens — the paper almanac (current)
+>
+> Two readings, not six. The four retired palettes (gold, sindoor, rose,
+> verdigris) were variations nobody was choosing between.
+>
+> | Token | Paper (default) | Night reading | Role |
+> |---|---|---|---|
+> | `--paper` | `#f3f2f2` | `#1a1826` | the ground |
+> | `--surface` | `#eae9e9` | `#262336` | raised areas |
+> | `--ink` | `#201f1d` | `#ece5d8` | text |
+> | `--accent` | `#b68235` | `#dcb877` | plate strokes, large display emphasis |
+> | `--accent-ink` | `#8a5f1c` | `#e2c48c` | links and text below 24px |
+> | `--hairline` | 16% ink | 16% ink | rules |
+> | `--divider` | 24% ink | 24% ink | section rules |
+>
+> **The bronze splits by role because one hex cannot do both jobs.**
+> `#b68235` on `#f3f2f2` is **3.02:1** — enough for graphics and large
+> display (AA for non-text objects is 3.0) and *not* enough for body text
+> (4.5). `--accent-ink` is the same bronze hue darkened to **5.03:1** on
+> paper and **4.64:1** on the surface tone. Every muted ink step is at or
+> above **4.73:1**. `TestPaperPalette` recomputes all of it from
+> `static/style.css` on every run rather than trusting this table.
+>
+> Type is unchanged from `ui-design/DOSSIER.md`: Tiro Devanagari Sanskrit for
+> display, IBM Plex Sans for working text. The approved mockup used Cormorant,
+> which has none of `ā ṃ ś ṛ ṣ ṭ ṇ`; Tiro stays for transliteration integrity.
+
+
 ## Overview
 Sidera is a mobile Vedic astrology app: daily reading (panchanga-based), North-Indian natal chart (kundli), transits (gochara), compatibility (Guna Milan / Ashtakuta), a learn/chant page, onboarding and profile. The design explores several Home directions plus a full screen flow in a dark "Colophon" direction, and a final concise "expand-on-selection" pattern.
 
@@ -14,7 +54,8 @@ The files in this bundle are **design references created in HTML** — prototype
 ## Direction chosen
 - App-wide visual direction: **1c "Colophon"** (dark ink screens) — full flow in screens 2a–2e, 3a.
 - Home/Today pattern direction: **turn 4/5 "concise, expand on selection"** — final merged candidate is **5a (light paper)** and **4b (dark)**; both share the same structure.
-- Active palette: **Pastel** (see Design Tokens; five alternates included).
+- Active palette: ~~**Pastel**~~ → **Paper**, with Night reading as the single
+  alternate. See the superseding token table at the top of this file.
 
 ## Screens / Views
 

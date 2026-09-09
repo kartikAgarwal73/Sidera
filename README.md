@@ -135,6 +135,21 @@ table of contents, and the working folded under footnote-style
 separating — nothing is boxed, nothing has a shadow, and the only radius in
 the stylesheet is 0 or 50%.
 
+It reads as **paper** by default, with **Night reading** as the single
+alternate — two palettes, not six. One bronze accent, split by role because
+`#b68235` is 3.02:1 on paper: bright enough for plate strokes and display
+type, not enough for a link, so `--accent-ink` is the same hue darkened until
+it clears AA. Every pair is recomputed from the stylesheet by
+`TestPaperPalette` rather than trusted from a table.
+
+Scrolling is choreographed: fold rules draw in left to right, the chart plate
+pins beside the day's verdict and releases at the last contents entry, a ghost
+folio numeral carries down-leaf, and each domain opens on a full-viewport
+verdict that rises into place. CSS scroll-driven animation where the browser
+has it, an IntersectionObserver everywhere else, and
+`prefers-reduced-motion: reduce` turns all of it off while keeping the pin —
+asserted in a browser with the preference actually set.
+
 Two faces: **Tiro Devanagari Sanskrit**, drawn by John Hudson to set
 Sanskrit — it carries both the transliteration range and the Devanagari
 block, so *Navāṃśa* sets in one face instead of falling back mid-word — and

@@ -173,6 +173,23 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
     # The visual layer, from the founder's editorial-dossier brief. Product
     # rules about SETTING — type scale, pagination, rules, restraint — none
     # of which touch what the app computes or says.
+    # The light paper almanac and its scroll choreography, from the approved
+    # Claude Design mockup. Product rules about the visual layer; the AA
+    # gates recompute contrast from the stylesheet rather than trusting a
+    # table in a document.
+    "TestReducedMotionInARealBrowser": (
+        "invariant", "product rule: a reader who asks for no motion is served "
+                     "the finished page — every reveal at its final value, "
+                     "nothing left invisible, and the pin kept"),
+    "TestPaperPalette": (
+        "invariant", "product rule: two readings, one bronze split by role, "
+                     "and every text pair recomputed to WCAG AA from "
+                     "static/style.css"),
+    "TestScrollChoreography": (
+        "invariant", "product rules from the approved mockup: rules draw, "
+                     "the plate pins and releases, ghost numerals carry it "
+                     "down-leaf, verdicts open full-viewport, and "
+                     "prefers-reduced-motion serves the finished page"),
     "TestEditorialDossier": (
         "invariant", "product rules from ui-design/DOSSIER.md: a typography-"
                      "led almanac — real type jumps, a folio on every fold, "
@@ -367,10 +384,10 @@ OVERRIDE: dict[str, tuple[str, str]] = {
         ("invariant", "product rule: timeline labels never overlap"),
     "TestUIRevisionWalkthrough::test_f_favicon_served":
         ("invariant", "product rule: the icon routes resolve"),
-    "TestUIRevisionWalkthrough::test_design_handoff_pastel_tokens":
+    "TestUIRevisionWalkthrough::test_design_handoff_paper_tokens":
         ("external", "DESIGN-HANDOFF.md token table"),
-    "TestUIRevisionWalkthrough::test_framework_six_palettes_by_root_attribute":
-        ("external", "Sidera Framework · SIX · TOKENS"),
+    "TestUIRevisionWalkthrough::test_framework_palettes_by_root_attribute":
+        ("external", "Sidera Framework · SIX · TOKENS + the superseding token table in DESIGN-HANDOFF.md"),
     "TestUIRevisionWalkthrough::test_framework_non_negotiable_tokens":
         ("external", "Sidera Framework · SIX · TOKENS non-negotiables"),
     "TestUIRevisionWalkthrough::test_design_handoff_glance_pattern":

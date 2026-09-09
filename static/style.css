@@ -1,44 +1,50 @@
-/* Sidera — token set per the build framework (SIX · TOKENS).
-   Six palettes live here and switch by [data-palette] on the root; components
-   never carry conditional colour. Dark-screen constants are shared. */
+/* Sidera — the paper almanac.
+   ONE ground, ONE ink, ONE bronze, in two readings: paper by day and
+   midnight by night. Six palettes on a printed almanac was noise; the four
+   that went (gold, sindoor, rose, verdigris) were variations on a theme
+   nobody was choosing between. ui-design/DOSSIER.md carries the direction,
+   ui-design/DESIGN-HANDOFF.md the token table these values answer to.
+
+   EVERY PAIR BELOW IS COMPUTED TO WCAG AA, NOT EYEBALLED, and
+   TestPaperPalette recomputes them from this file on every run.
+
+   The bronze splits by ROLE, because one hex cannot do both jobs:
+     --accent      #b68235  3.02:1 on paper — graphics and large display
+                            only (AA for non-text objects is 3.0)
+     --accent-ink  #8a5f1c  5.03:1 on paper, 4.64:1 on surface — links and
+                            any text below 24px. Same bronze hue (36°),
+                            darkened until it passes.
+   Using --accent for body text would fail AA at 3.02:1. That is why the
+   token is split rather than the contrast being wished away. */
 :root,
-:root[data-palette="pastel"] {
-  --ink: #585270; --accent: #a99bc9; --accent-300: #cfc4e4;
-  --accent-400: #bcafd7; --ghost: rgba(207, 196, 228, .16);
-  --raised: #4b4661;
+:root[data-palette="paper"] {
+  --paper: #f3f2f2;   --paper-rgb: 243, 242, 242;
+  --surface: #eae9e9;
+  --ink: #201f1d;     --ink-rgb: 32, 31, 29;
+  --accent: #b68235;  --accent-rgb: 182, 130, 53;
+  --accent-ink: #8a5f1c;
 }
-:root[data-palette="gold"] {
-  --ink: #211c17; --accent: #b68235; --accent-300: #dcb877;
-  --accent-400: #cda158; --ghost: rgba(182, 130, 53, .11);
-  --raised: #2a241d;
-}
-:root[data-palette="sindoor"] {
-  --ink: #251512; --accent: #a8402f; --accent-300: #dd9a84;
-  --accent-400: #c97a62; --ghost: rgba(168, 64, 47, .11);
-  --raised: #34201c;
-}
-:root[data-palette="twilight"] {
-  --ink: #1a1826; --accent: #5d58a6; --accent-300: #a09bd2;
-  --accent-400: #8681c4; --ghost: rgba(93, 88, 166, .13);
-  --raised: #262336;
-}
-:root[data-palette="rose"] {
-  --ink: #241823; --accent: #9d5578; --accent-300: #cd9bb4;
-  --accent-400: #bd81a0; --ghost: rgba(157, 85, 120, .12);
-  --raised: #332430;
-}
-:root[data-palette="verdigris"] {
-  --ink: #16221d; --accent: #3f7d6a; --accent-300: #8dbdad;
-  --accent-400: #6ba593; --ghost: rgba(63, 125, 106, .12);
-  --raised: #203029;
+/* Night reading — the single alternate. */
+:root[data-palette="night"] {
+  --paper: #1a1826;   --paper-rgb: 26, 24, 38;
+  --surface: #262336;
+  --ink: #ece5d8;     --ink-rgb: 236, 229, 216;
+  --accent: #dcb877;  --accent-rgb: 220, 184, 119;
+  --accent-ink: #e2c48c;
 }
 :root {
-  --cream: #ece5d8;
-  --cream-70: rgba(236, 229, 216, .7);
-  --cream-60: rgba(236, 229, 216, .6);
-  --cream-50: rgba(236, 229, 216, .5);
-  --divider: rgba(236, 229, 216, .14);
-  --hairline: rgba(236, 229, 216, .1);
+  color-scheme: light;
+  /* Muted inks. The floor is 4.73:1 (the faintest, on the surface tone) —
+     every one of these is still AA body text. */
+  --ink-70: rgba(var(--ink-rgb), .72);
+  --ink-60: rgba(var(--ink-rgb), .68);
+  --ink-50: rgba(var(--ink-rgb), .65);
+  /* Hairlines are 16% ink, per the brief; a divider is the same line drawn
+     a little harder where a section really ends. */
+  --hairline: rgba(var(--ink-rgb), .16);
+  --divider: rgba(var(--ink-rgb), .24);
+  --ghost: rgba(var(--accent-rgb), .13);
+
   /* Tiro Devanagari Sanskrit sets the Sanskrit AND its transliteration in
      one face; IBM Plex Sans brings the tabular figures an ephemeris table
      needs. ui-design/DOSSIER.md carries the reasoning. */
@@ -49,31 +55,39 @@
      them. The distance between the verdict and the working is the point:
      one is the answer, the other is the evidence, and the setting should
      say which is which before a word is read. */
-  --t-verdict: 30px;
-  --t-title: 26px;
+  --t-verdict: 34px;
+  --t-title: 27px;
   --t-head: 19px;
   --t-body: 15px;
   --t-data: 13px;
   --t-mark: 10px;
 
   /* Printed matter breathes. One rhythm, used everywhere. */
-  --space-fold: 44px;    /* between major blocks */
-  --space-rule: 18px;    /* around a hairline */
+  --space-fold: 48px;
+  --space-rule: 18px;
+
+  /* The choreography. One duration and one curve for the whole page, so
+     nothing feels like a different animation from anything else. */
+  --reveal: 620ms;
+  --ease: cubic-bezier(.22, .61, .36, 1);
+  --rise: 22px;
 }
+:root[data-palette="night"] { color-scheme: dark; }
 @media (min-width: 700px) {
   :root {
-    --t-verdict: 40px; --t-title: 34px; --t-head: 21px; --t-body: 15.5px;
-    --space-fold: 62px;
+    --t-verdict: 52px; --t-title: 36px; --t-head: 21px; --t-body: 15.5px;
+    --space-fold: 76px;
   }
 }
+@media (max-width: 560px) { :root { --rise: 8px; } }
 
 * { box-sizing: border-box; }
 body {
   margin: 0 auto;
   max-width: 640px;
   min-height: 100vh;
-  background: var(--ink);
-  color: var(--cream);
+  background: var(--paper);
+  color: var(--ink);
   font-family: var(--font-body);
   font-size: var(--t-body);
   padding: 0 24px 64px;
@@ -102,7 +116,7 @@ body {
 }
 .topbar-right {
   font-size: var(--t-mark); letter-spacing: .1em; text-transform: uppercase;
-  color: var(--cream-50);
+  color: var(--ink-50);
 }
 
 /* Section markers. Real small-caps, not the web eyebrow: browsers render
@@ -112,11 +126,11 @@ body {
 .kicker {
   font-size: var(--t-mark); letter-spacing: .16em;
   font-variant-caps: all-small-caps; text-transform: lowercase;
-  font-weight: 500; color: var(--cream-50);
+  font-weight: 500; color: var(--ink-50);
 }
-.mut { color: var(--cream-50); font-style: normal; }
-.accent { color: var(--accent-300); }
-.num { font-variant-numeric: tabular-nums; color: var(--cream-70); }
+.mut { color: var(--ink-50); font-style: normal; }
+.accent { color: var(--accent-ink); }
+.num { font-variant-numeric: tabular-nums; color: var(--ink-70); }
 
 /* --- birth form --- */
 .hero { position: relative; padding: 46px 0 6px; }
@@ -137,56 +151,54 @@ body {
 @media (min-width: 700px) { .hero h1 { font-size: 58px; } }
 .lede {
   position: relative; font-size: 13.5px; line-height: 1.7;
-  color: var(--cream-60); max-width: 34ch; margin: 16px 0 0;
+  color: var(--ink-60); max-width: 34ch; margin: 16px 0 0;
 }
-.birthform { padding: 30px 0 10px; }
-
-.birthform { padding: 20px 0 10px; display: flex; flex-direction: column; gap: 20px; }
+.birthform { padding: 30px 0 10px; display: flex; flex-direction: column; gap: 22px; }
 .fieldrow { display: flex; gap: 18px; }
 .field { display: flex; flex-direction: column; }
 .field.grow { flex: 1; }
 .field label {
   font-size: var(--t-mark); letter-spacing: .15em;
   font-variant-caps: all-small-caps; text-transform: lowercase;
-  color: var(--cream-50);
+  color: var(--ink-50);
 }
 .field input {
-  font-family: var(--font-heading); font-size: 21px; color: var(--cream);
+  font-family: var(--font-heading); font-size: 21px; color: var(--ink);
   background: transparent; border: none; outline: none;
-  border-bottom: 1px solid rgba(236, 229, 216, .22);
+  border-bottom: 1px solid rgba(var(--ink-rgb), .22);
   padding: 7px 0 9px; border-radius: 0;
   font-variant-numeric: tabular-nums;
 }
-.field input:focus { border-bottom-color: var(--accent-300); }
-.field input::placeholder { color: var(--cream-50); }
+.field input:focus { border-bottom-color: var(--accent-ink); }
+.field input::placeholder { color: var(--ink-50); }
 /* Date and time are masked text fields, not native pickers — the native
    ones render in the system locale, so the same keystrokes meant different
    dates to different visitors. See the mask in index.html. */
 .fieldhint {
-  font-size: 9px; letter-spacing: .08em; color: rgba(236, 229, 216, .38);
+  font-size: 9.5px; letter-spacing: .08em; color: var(--ink-50);
   margin: 5px 0 0;
 }
-.fieldhint.bad { color: var(--accent-300); }
-.field input[aria-invalid="true"] { border-bottom-color: var(--accent-300); }
+.fieldhint.bad { color: var(--accent-ink); }
+.field input[aria-invalid="true"] { border-bottom-color: var(--accent-ink); }
 
-.opt { font-size: 8px; letter-spacing: .1em; color: rgba(236, 229, 216, .35); }
+.opt { font-size: 9px; letter-spacing: .1em; color: var(--ink-50); }
 .placewrap { position: relative; }
 .suggest {
   position: absolute; top: 100%; left: 0; right: 0; z-index: 10;
-  background: var(--raised); border: 1px solid rgba(236, 229, 216, .22);
+  background: var(--surface); border: 1px solid rgba(var(--ink-rgb), .22);
   max-height: 264px; overflow-y: auto;
 }
 .suggestion {
-  padding: 10px 14px; font-size: 13px; color: var(--cream-70); cursor: pointer;
+  padding: 10px 14px; font-size: 13px; color: var(--ink-70); cursor: pointer;
   border-bottom: 1px solid var(--hairline);
 }
 .suggestion:last-child { border-bottom: none; }
-.suggestion:hover { background: var(--ghost); color: var(--accent-300); }
-.placemeta { font-size: 11px; color: var(--accent-300); margin-top: 6px; font-variant-numeric: tabular-nums; min-height: 14px; }
+.suggestion:hover { background: var(--ghost); color: var(--accent-ink); }
+.placemeta { font-size: 11px; color: var(--accent-ink); margin-top: 6px; font-variant-numeric: tabular-nums; min-height: 14px; }
 .manual summary {
-  cursor: pointer; font-size: 11px; font-style: italic; color: var(--cream-50);
+  cursor: pointer; font-size: 11px; font-style: italic; color: var(--ink-50);
   text-decoration: underline; text-underline-offset: 3px;
-  text-decoration-color: rgba(236, 229, 216, .3); list-style: none;
+  text-decoration-color: rgba(var(--ink-rgb), .3); list-style: none;
 }
 .manual summary::-webkit-details-marker { display: none; }
 
@@ -195,19 +207,19 @@ body {
 .cast {
   display: block; width: 100%; text-align: left; padding: 16px 0;
   background: transparent; border: none;
-  border-top: 1px solid var(--accent-300);
-  border-bottom: 1px solid var(--accent-300);
-  color: var(--accent-300); font-family: var(--font-heading);
+  border-top: 1px solid var(--accent-ink);
+  border-bottom: 1px solid var(--accent-ink);
+  color: var(--accent-ink); font-family: var(--font-heading);
   font-size: 20px; letter-spacing: .02em; cursor: pointer;
 }
-.cast:hover { color: var(--cream); border-color: var(--cream); }
-.footnote { text-align: center; font-size: 10px; letter-spacing: .08em; color: rgba(236, 229, 216, .4); margin: 0; }
-.error { border: none; border-left: 2px solid var(--accent-300);
-  padding: 2px 0 2px 14px; font-size: 12px; color: var(--accent-300); }
+.cast:hover { color: var(--ink); border-color: var(--ink); }
+.footnote { text-align: left; font-size: 10.5px; letter-spacing: .08em; color: var(--ink-50); margin: 0; }
+.error { border: none; border-left: 2px solid var(--accent-ink);
+  padding: 2px 0 2px 14px; font-size: 12px; color: var(--accent-ink); }
 
 /* --- dashboard --- */
 .secnav {
-  position: sticky; top: 0; z-index: 40; background: var(--ink);
+  position: sticky; top: 0; z-index: 40; background: var(--paper);
   display: flex; gap: 4px; overflow-x: auto; padding: 10px 0 0;
   border-bottom: 1px solid var(--divider); margin: 0 -24px; padding-left: 24px;
   scrollbar-width: none;
@@ -215,16 +227,16 @@ body {
 .secnav::-webkit-scrollbar { display: none; }
 .secnav a {
   flex: none; font-family: var(--font-heading); font-size: 14px;
-  letter-spacing: .03em; color: var(--cream-50); text-decoration: none;
+  letter-spacing: .03em; color: var(--ink-50); text-decoration: none;
   padding: 4px 12px 12px 0; border-bottom: 1px solid transparent;
 }
-.secnav a:hover { color: var(--accent-300); }
-.secnav a.active { color: var(--cream); border-bottom-color: var(--accent-300); }
+.secnav a:hover { color: var(--accent-ink); }
+.secnav a.active { color: var(--ink); border-bottom-color: var(--accent-ink); }
 
 .ledger { border-top: 1px solid var(--divider); margin-top: 18px; padding-top: 24px; }
 .fold > summary { cursor: pointer; list-style: none; }
 .fold > summary::-webkit-details-marker { display: none; }
-.fold > summary::after { content: " ▸"; color: var(--cream-50); }
+.fold > summary::after { content: " ▸"; color: var(--ink-50); }
 .fold[open] > summary::after { content: " ▾"; }
 details.yoga > summary { cursor: pointer; list-style: none; display: flex; }
 details.yoga > summary::-webkit-details-marker { display: none; }
@@ -238,10 +250,10 @@ details.yoga > summary::-webkit-details-marker { display: none; }
   letter-spacing: -.004em;
 }
 .chartof-sub {
-  font-size: 11px; letter-spacing: .06em; color: var(--cream-50);
+  font-size: 11px; letter-spacing: .06em; color: var(--ink-50);
   margin-top: 8px; font-variant-numeric: tabular-nums; line-height: 1.65;
 }
-.credit { font-size: 10px; color: var(--cream-50); }
+.credit { font-size: 10px; color: var(--ink-50); }
 .credit a { color: inherit; }
 
 .idline {
@@ -256,14 +268,14 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 .glance-ghost { top: 2px; right: 14px; font-size: 120px; }
 .statement {
   position: relative; font-family: var(--font-heading); font-weight: 400;
-  font-size: var(--t-verdict); line-height: 1.18; color: var(--cream);
+  font-size: var(--t-verdict); line-height: 1.18; color: var(--ink);
   margin: 14px 0 0; max-width: 22ch; text-wrap: balance;
 }
 .readlink {
   position: relative; display: inline-block; margin-top: 10px;
-  font-style: italic; font-size: 12px; color: rgba(236, 229, 216, .55);
+  font-style: italic; font-size: 12.5px; color: var(--ink-60);
   text-decoration: underline; text-underline-offset: 3px;
-  text-decoration-color: rgba(236, 229, 216, .3);
+  text-decoration-color: rgba(var(--ink-rgb), .3);
 }
 .glance-chips {
   display: flex; gap: 24px; margin-top: 24px;
@@ -274,9 +286,9 @@ details.yoga > summary::-webkit-details-marker { display: none; }
   font-family: var(--font-heading); font-size: 14px;
   letter-spacing: .03em; user-select: none; background: transparent;
   border: none; border-bottom: 1px solid transparent; margin-bottom: -1px;
-  color: var(--cream-50);
+  color: var(--ink-50);
 }
-.gchip.active { background: transparent; color: var(--cream); border-bottom-color: var(--accent-300); }
+.gchip.active { background: transparent; color: var(--ink); border-bottom-color: var(--accent-ink); }
 .glance-panel {
   margin-top: 8px; border: none;
   border-top: 1px solid var(--hairline);
@@ -285,22 +297,22 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 .gpane { width: 100%; padding: 20px 0 4px; text-align: center; }
 .gpane.hidden { display: none; }
 .minikundli { width: 140px; height: 140px; }
-.minikundli .minigrahas text { font-family: var(--font-heading); font-size: 14px; fill: var(--cream-70); }
-.gcaption { font-size: 11px; color: var(--cream-60); margin-top: 6px; font-variant-numeric: tabular-nums; }
+.minikundli .minigrahas text { font-family: var(--font-heading); font-size: 14px; fill: var(--ink-70); }
+.gcaption { font-size: 11px; color: var(--ink-60); margin-top: 6px; font-variant-numeric: tabular-nums; }
 .growlist { text-align: left; font-variant-numeric: tabular-nums; font-size: 12.5px; padding: 0 4px; }
 .grow { display: flex; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--divider); }
 .grow:last-child { border-bottom: none; }
-.grow.accent, .grow.accent .gdate { color: var(--accent-300); }
-.gdate { flex: none; width: 74px; color: var(--cream-50); }
+.grow.accent, .grow.accent .gdate { color: var(--accent-ink); }
+.gdate { flex: none; width: 74px; color: var(--ink-50); }
 .gdasha { display: flex; align-items: center; gap: 16px; text-align: left; padding: 2px 4px; }
 .gring {
   flex: none; width: 76px; height: 76px; border-radius: 50%;
   border: 1px solid var(--accent); display: grid; place-items: center;
 }
-.gringnum { font-family: var(--font-heading); font-size: 24px; color: var(--accent-300); font-variant-numeric: tabular-nums; }
-.gringpct { font-size: 10px; color: var(--cream-50); }
+.gringnum { font-family: var(--font-heading); font-size: 24px; color: var(--accent-ink); font-variant-numeric: tabular-nums; }
+.gringpct { font-size: 10px; color: var(--ink-50); }
 .gdasha-title { font-family: var(--font-heading); font-weight: 600; font-size: 16px; }
-.gdasha-sub { font-size: 11.5px; line-height: 1.5; color: var(--cream-60); margin-top: 3px; }
+.gdasha-sub { font-size: 11.5px; line-height: 1.5; color: var(--ink-60); margin-top: 3px; }
 
 /* THE PLATE — an engraved figure, not a screen graphic.
    One thin line weight throughout, the labels set in the display face, and
@@ -314,10 +326,10 @@ details.yoga > summary::-webkit-details-marker { display: none; }
   background: transparent; border: none;
   border-bottom: 1px solid transparent; margin-bottom: -1px;
   font-family: var(--font-heading); font-size: 14px; letter-spacing: .03em;
-  color: var(--cream-50);
+  color: var(--ink-50);
 }
-.tab:hover { color: var(--cream-70); }
-.tab.active { color: var(--cream); border-bottom-color: var(--accent-300); }
+.tab:hover { color: var(--ink-70); }
+.tab.active { color: var(--ink); border-bottom-color: var(--accent-ink); }
 
 .pane { text-align: center; padding: 18px 0 4px; }
 .pane.hidden { display: none; }
@@ -327,17 +339,23 @@ details.yoga > summary::-webkit-details-marker { display: none; }
   width: min(88vw, 900px); max-width: none; height: auto; aspect-ratio: 1/1;
   position: relative; left: 50%; transform: translateX(-50%);
 }
-.kundli .signnum text { font-family: var(--font-heading); font-size: 15px; fill: rgba(236, 229, 216, .34); }
+/* THE PLATE, ENGRAVED. Ink for the frame and the diagonals; the one bronze
+   line is the diamond that makes it a North-Indian plate. Both are drawn
+   through CSS so the two readings can restate them — a presentation
+   attribute in the markup cannot follow a theme. */
+.plate-rule { stroke: rgba(var(--ink-rgb), .38); }
+.plate-diamond { stroke: var(--accent); }
+.kundli .signnum text { font-family: var(--font-heading); font-size: 15px; fill: rgba(var(--ink-rgb), .34); }
 /* The grahas are the ink of this figure, not its accent: an engraved plate
    labels in the same ink it is drawn with. */
-.kundli .grahas text { font-family: var(--font-heading); font-size: 15px; fill: var(--cream); letter-spacing: .01em; }
+.kundli .grahas text { font-family: var(--font-heading); font-size: 15px; fill: var(--ink); letter-spacing: .01em; }
 /* 9px, not 10: the four narrow triangles (houses 3, 5, 9, 11) can hold
    three stacked degree labels, and at 10px a three-graha stack bled past
    the plate hairline. Shrinking the type is the right lever — the anchor
    must stay inside its own cell, so the text cannot be moved instead. */
 .kundli .grahas-deg text {
   font-family: var(--font-body); font-size: 9px; font-weight: 450;
-  font-variant-numeric: tabular-nums; fill: var(--cream-70);
+  font-variant-numeric: tabular-nums; fill: var(--ink-70);
 }
 /* degree toggle: detail labels on D1 by default; unchecking falls back to
    compact abbreviations (vargas are sign-level and always compact) */
@@ -347,23 +365,23 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 .degtoggle {
   display: flex; justify-content: flex-end; align-items: center; gap: 7px;
   margin-top: 10px; font-size: 10px; letter-spacing: .12em;
-  text-transform: uppercase; color: var(--cream-50); cursor: pointer;
+  text-transform: uppercase; color: var(--ink-50); cursor: pointer;
   user-select: none;
 }
-.degtoggle input { accent-color: var(--accent-300); width: 12px; height: 12px; }
+.degtoggle input { accent-color: var(--accent-ink); width: 12px; height: 12px; }
 /* The plate caption, set as printed matter sets one: the plate number in
    small caps, the subject, then the imprint line beneath. */
 .platecaption {
-  font-size: 11px; color: var(--cream-60); margin-top: 16px;
+  font-size: 11px; color: var(--ink-60); margin-top: 16px;
   padding-top: 11px; border-top: 1px solid var(--hairline);
   font-variant-numeric: tabular-nums; line-height: 1.7; text-align: left;
 }
 .plateno {
   font-variant-caps: all-small-caps; letter-spacing: .16em;
-  color: var(--cream); margin-right: 7px;
+  color: var(--ink); margin-right: 7px;
 }
 .platecast {
-  display: block; color: rgba(236, 229, 216, .38); font-size: 10.5px;
+  display: block; color: var(--ink-50); font-size: 10.5px;
   letter-spacing: .04em;
 }
 
@@ -375,48 +393,54 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 .chip-planet {
   background: transparent; border: none;
   border-bottom: 1px solid transparent; padding-left: 0; padding-right: 0;
-  color: var(--cream-70); font-family: var(--font-heading); font-size: 12.5px;
+  color: var(--ink-70); font-family: var(--font-heading); font-size: 12.5px;
   letter-spacing: .04em; padding: 5px 12px; cursor: pointer;
 }
-.chip-planet:hover { border-color: var(--accent-300); color: var(--accent-300); }
-.chip-planet.on { background: var(--accent-300); color: var(--ink); font-weight: 600; }
-.xcard { border: none; border-top: 1px solid var(--accent-300);
+.chip-planet:hover { border-color: var(--accent-ink); color: var(--accent-ink); }
+.chip-planet.on { background: var(--accent-ink); color: var(--paper); font-weight: 600; }
+.xcard { border: none; border-top: 1px solid var(--accent-ink);
   margin-top: 16px; padding: 12px 0 0; }
 .xcard-head { display: flex; justify-content: space-between; align-items: baseline; }
-.xcard-title { font-family: var(--font-heading); font-weight: 600; font-size: 16px; color: var(--accent-300); }
-.xcard-close { background: none; border: none; color: var(--cream-50); font-size: 18px; cursor: pointer; }
-.xcard-body p { font-size: 12px; line-height: 1.65; color: var(--cream-70); margin: 7px 0 0; }
-#hlgroup .hl-src { fill: rgba(220, 184, 119, .16); stroke: var(--accent-300); stroke-width: .8; }
-#hlgroup .hl-target { fill: rgba(220, 184, 119, .09); stroke: var(--accent-300); stroke-width: .7; stroke-dasharray: 3 3; }
-#hlgroup .hl-step { fill: rgba(236, 229, 216, .07); }
+.xcard-title { font-family: var(--font-heading); font-weight: 600; font-size: 16px; color: var(--accent-ink); }
+.xcard-close { background: none; border: none; color: var(--ink-50); font-size: 18px; cursor: pointer; }
+.xcard-body p { font-size: 12px; line-height: 1.65; color: var(--ink-70); margin: 7px 0 0; }
+#hlgroup .hl-src { fill: rgba(var(--accent-rgb), .16); stroke: var(--accent-ink); stroke-width: .8; }
+#hlgroup .hl-target { fill: rgba(var(--accent-rgb), .09); stroke: var(--accent-ink); stroke-width: .7; stroke-dasharray: 3 3; }
+#hlgroup .hl-step { fill: rgba(var(--ink-rgb), .07); }
 #hlgroup .countlabel {
   font-family: var(--font-heading); font-size: 17px; font-weight: 600;
-  fill: var(--cream); paint-order: stroke; stroke: rgba(33, 28, 23, .8); stroke-width: 3px;
+  fill: var(--ink); paint-order: stroke; stroke: rgba(var(--paper-rgb), .85); stroke-width: 3px;
 }
-#hlgroup .countlabel.hit { fill: var(--accent-300); }
+#hlgroup .countlabel.hit { fill: var(--accent-ink); }
 #hlgroup .wireline {
-  fill: none; stroke: var(--accent-300); stroke-width: 1.4;
-  stroke-dasharray: 5 4; animation: wiredash 1.2s linear infinite;
+  fill: none; stroke: var(--accent-ink); stroke-width: 1.4;
+  /* The dash pattern stays — it says "aspect wire", not "drawn line". The
+     marching went: an engraved plate does not have crawling ants on it, and
+     an animation that never ends is the one thing on this page that could
+     not be scrolled away from. */
+  stroke-dasharray: 5 4;
 }
-#hlgroup .wirelabel { font-family: var(--font-body); font-size: 9.5px; font-style: italic; fill: var(--accent-300); }
+#hlgroup .wirelabel { font-family: var(--font-body); font-size: 9.5px; font-style: italic; fill: var(--accent-ink); }
 #hlgroup .pulse-ring {
-  fill: none; stroke: var(--accent-300); stroke-width: 1.6;
-  animation: pulse 1.4s ease-out infinite; transform-origin: center; transform-box: fill-box;
+  fill: none; stroke: var(--accent-ink); stroke-width: 1.6;
+  /* Twice, then it holds. It answers a tap — which is the motion worth
+     having — and then stops asking for attention. */
+  animation: pulse 700ms var(--ease) 2 both;
+  transform-origin: center; transform-box: fill-box;
 }
-@keyframes wiredash { to { stroke-dashoffset: -18; } }
-@keyframes pulse { 0% { opacity: .9; } 70% { opacity: .25; } 100% { opacity: .9; } }
+@keyframes pulse { 0% { opacity: .25; } 100% { opacity: 1; } }
 .whybtn {
   margin-top: 9px; background: transparent; border: none;
-  border-bottom: 1px solid rgba(236, 229, 216, .25);
-  color: var(--cream-60); font-family: var(--font-body); font-size: 10.5px;
+  border-bottom: 1px solid rgba(var(--ink-rgb), .25);
+  color: var(--ink-60); font-family: var(--font-body); font-size: 10.5px;
   letter-spacing: .08em; padding: 4px 10px; cursor: pointer;
 }
-.whybtn:hover { border-color: var(--accent-300); color: var(--accent-300); }
+.whybtn:hover { border-color: var(--accent-ink); color: var(--accent-ink); }
 
 .note { border: none; border-left: 1px solid var(--divider);
   padding: 2px 0 2px 14px; margin: 14px 0 6px; }
-.notekicker { font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent-300); }
-.notebody { font-size: 12px; line-height: 1.55; color: var(--cream-70); margin-top: 5px; }
+.notekicker { font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent-ink); }
+.notebody { font-size: 12px; line-height: 1.55; color: var(--ink-70); margin-top: 5px; }
 
 .ledger { padding: 18px 0 6px; }
 /* TABLES, SET AS A PRINTED EPHEMERIS.
@@ -432,70 +456,70 @@ details.yoga > summary::-webkit-details-marker { display: none; }
   padding: 6px 0; border-bottom: none;
   line-height: 1.55;
 }
-.row > span:first-child { color: var(--cream-60); }
+.row > span:first-child { color: var(--ink-60); }
 .row:last-child { border-bottom: none; }
-.row.now, .row.now .num { color: var(--accent-300); }
+.row.now, .row.now .num { color: var(--accent-ink); }
 
 /* --- Phase 10: weather cards + progress bars --- */
 .wcard { border-bottom: 1px solid var(--hairline); padding: 12px 0; }
-.wcard.demanding { border-left: 2px solid var(--accent-300); padding-left: 12px; }
+.wcard.demanding { border-left: 2px solid var(--accent-ink); padding-left: 12px; }
 .wcard-head { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; align-items: baseline; }
-.wcard-note { font-size: 11.5px; font-style: italic; color: var(--cream-50); margin: 7px 0 0; }
-.pbar { height: 4px; background: rgba(236, 229, 216, .12); margin-top: 10px; }
-.pfill { height: 100%; background: var(--accent-300); }
+.wcard-note { font-size: 11.5px; font-style: italic; color: var(--ink-50); margin: 7px 0 0; }
+.pbar { height: 4px; background: rgba(var(--ink-rgb), .12); margin-top: 10px; }
+.pfill { height: 100%; background: var(--accent-ink); }
 .pbar-label {
   display: flex; justify-content: space-between; font-size: 10px;
-  letter-spacing: .06em; color: var(--cream-50); margin-top: 5px;
+  letter-spacing: .06em; color: var(--ink-50); margin-top: 5px;
   font-variant-numeric: tabular-nums;
 }
 
 /* --- Phase 9: life timeline --- */
 .lifegraph { width: 100%; height: auto; margin-top: 12px; }
-.lifegraph .band { fill: var(--accent-300); }
-.lifegraph .band-current { fill: var(--accent-300); stroke: var(--cream); stroke-width: .8; }
+.lifegraph .band { fill: var(--accent-ink); }
+.lifegraph .band-current { fill: var(--accent-ink); stroke: var(--ink); stroke-width: .8; }
 .lifegraph .bandlabel {
-  font-family: var(--font-heading); font-size: 13px; fill: var(--ink);
+  font-family: var(--font-heading); font-size: 13px; fill: var(--paper);
   text-anchor: middle; font-weight: 600; pointer-events: none;
 }
-.lifegraph .tick { stroke: var(--cream-50); stroke-width: 1; }
-.lifegraph .ticklabel { font-family: var(--font-body); font-size: 10px; fill: var(--cream-50); text-anchor: middle; }
-.lifegraph .here { stroke: var(--cream); stroke-width: 1.4; stroke-dasharray: 3 3; }
+.lifegraph .tick { stroke: var(--ink-50); stroke-width: 1; }
+.lifegraph .ticklabel { font-family: var(--font-body); font-size: 10px; fill: var(--ink-50); text-anchor: middle; }
+.lifegraph .here { stroke: var(--ink); stroke-width: 1.4; stroke-dasharray: 3 3; }
 .lifegraph .herelabel {
   font-family: var(--font-body); font-size: 11px; letter-spacing: .06em;
-  fill: var(--cream); text-anchor: middle;
+  fill: var(--ink); text-anchor: middle;
 }
-.lifegraph .tmarker path { fill: var(--accent-300); }
-.lifegraph .tmarker text { font-family: var(--font-body); font-size: 9.5px; fill: var(--cream-60); text-anchor: middle; }
-.lifegraph .leader { stroke: rgba(236, 229, 216, .3); stroke-width: .7; }
+.lifegraph .tmarker path { fill: var(--accent-ink); }
+.lifegraph .tmarker text { font-family: var(--font-body); font-size: 9.5px; fill: var(--ink-60); text-anchor: middle; }
+.lifegraph .leader { stroke: rgba(var(--ink-rgb), .3); stroke-width: .7; }
 .graphwrap { overflow-x: auto; }
 .graphwrap .lifegraph { min-width: 560px; }
-.ratehint { font-size: 11.5px; line-height: 1.55; color: var(--cream-50); margin: 6px 0 4px; }
+.ratehint { font-size: 11.5px; line-height: 1.55; color: var(--ink-50); margin: 6px 0 4px; }
 .rated { border-bottom: 1px solid var(--hairline); padding: 10px 0; }
 .rated-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 13px; }
-.rated-theme { font-size: 11.5px; font-style: italic; color: var(--cream-50); margin: 4px 0 0; }
+.rated-theme { font-size: 11.5px; font-style: italic; color: var(--ink-50); margin: 4px 0 0; }
 .stars { white-space: nowrap; }
-.star { background: none; border: none; color: rgba(236, 229, 216, .25); font-size: 16px; cursor: pointer; padding: 0 1px; }
-.star.lit { color: var(--accent-300); }
+.star { background: none; border: none; color: var(--ink-50); font-size: 16px; cursor: pointer; padding: 0 1px; }
+.star.lit { color: var(--accent-ink); }
 
 /* A yoga is an entry in a list, not a card. */
 .yoga { border: none; border-top: 1px solid var(--hairline);
   padding: 14px 0 4px; margin-top: 0; }
 .yogahead { display: flex; justify-content: space-between; align-items: baseline; }
 .yoganame { font-family: var(--font-heading); font-size: 17px; }
-.yogakind { font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: var(--cream-50); }
-.yogadetail { font-size: 12px; line-height: 1.6; color: var(--cream-70); margin: 6px 0 0; }
-.yoganote { font-size: 11.5px; line-height: 1.55; font-style: italic; color: var(--accent-300); margin: 6px 0 0; }
+.yogakind { font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-50); }
+.yogadetail { font-size: 12px; line-height: 1.6; color: var(--ink-70); margin: 6px 0 0; }
+.yoganote { font-size: 11.5px; line-height: 1.55; font-style: italic; color: var(--accent-ink); margin: 6px 0 0; }
 .yoga details { margin-top: 7px; }
 .yoga summary {
   cursor: pointer; font-size: 10px; letter-spacing: .12em;
-  text-transform: uppercase; color: var(--cream-50);
+  text-transform: uppercase; color: var(--ink-50);
 }
-.yogarule { font-size: 12px; line-height: 1.6; color: var(--cream-60); margin: 6px 0 0; }
+.yogarule { font-size: 12px; line-height: 1.6; color: var(--ink-60); margin: 6px 0 0; }
 
 .gtable { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px; }
 .gtable th {
   text-align: left; font-weight: 400; font-size: 9px; letter-spacing: .12em;
-  text-transform: uppercase; color: var(--cream-50); padding: 5px 8px 5px 0;
+  text-transform: uppercase; color: var(--ink-50); padding: 5px 8px 5px 0;
   border-bottom: 1px solid var(--divider);
 }
 .gtable td { padding: 7px 8px 7px 0; border-bottom: 1px solid var(--hairline); }
@@ -505,20 +529,20 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 .askmeta { display: flex; align-items: baseline; gap: 8px; flex: none; }
 .convpill {
   font-size: 9px; letter-spacing: .08em; text-transform: uppercase;
-  padding: 2px 0; border: none; color: var(--cream-50);
+  padding: 2px 0; border: none; color: var(--ink-50);
   font-variant-caps: all-small-caps; letter-spacing: .14em;
   white-space: nowrap;
 }
-.convpill.strong { border-color: var(--accent-300); color: var(--accent-300); }
-.convpill.partial { border-color: var(--cream-60); color: var(--cream-70); }
+.convpill.strong { border-color: var(--accent-ink); color: var(--accent-ink); }
+.convpill.partial { border-color: var(--ink-60); color: var(--ink-70); }
 .convpill.split { border-style: dashed; font-style: italic; }
 .convbar { margin-top: 10px; }
 .lensblock {
-  border-left: 2px solid rgba(236, 229, 216, .18);
+  border-left: 2px solid rgba(var(--ink-rgb), .18);
   padding: 8px 0 8px 12px; margin-top: 12px;
 }
 .lenshead { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-.lensname { font-family: var(--font-heading); font-weight: 600; font-size: 14px; color: var(--accent-300); }
+.lensname { font-family: var(--font-heading); font-weight: 600; font-size: 14px; color: var(--accent-ink); }
 .lensblock .row { font-size: 12px; }
 .askcard .yogahead { gap: 10px; flex-wrap: wrap; }
 
@@ -530,58 +554,58 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 }
 .xp summary::-webkit-details-marker { display: none; }
 .xptitle { font-family: var(--font-heading); font-weight: 600; font-size: 15px; }
-.xpsub { font-size: 11px; color: var(--cream-50); font-variant-numeric: tabular-nums; }
-.xp[open] .xptitle { color: var(--accent-300); }
-.xpbody { font-size: 12px; line-height: 1.65; color: var(--cream-70); margin: 0 0 10px; }
+.xpsub { font-size: 11px; color: var(--ink-50); font-variant-numeric: tabular-nums; }
+.xp[open] .xptitle { color: var(--accent-ink); }
+.xpbody { font-size: 12px; line-height: 1.65; color: var(--ink-70); margin: 0 0 10px; }
 .xplabel {
   display: inline-block; margin-right: 8px; font-size: 9px;
-  letter-spacing: .14em; text-transform: uppercase; color: var(--accent-300);
+  letter-spacing: .14em; text-transform: uppercase; color: var(--accent-ink);
 }
 .chip {
   display: inline-block; margin-left: 8px; padding: 1px 8px 2px;
   font-size: 9px; letter-spacing: .1em; text-transform: uppercase;
-  border: none; color: var(--cream-50);
+  border: none; color: var(--ink-50);
   font-variant-caps: all-small-caps; letter-spacing: .14em;
   vertical-align: 1px;
 }
-.chip-high { border-color: var(--accent-300); color: var(--accent-300); }
-.chip-moderate { border-color: var(--cream-60); color: var(--cream-70); }
-.chip-interpretive { font-style: italic; border-color: rgba(236,229,216,.3); color: var(--cream-50); }
+.chip-high { border-color: var(--accent-ink); color: var(--accent-ink); }
+.chip-moderate { border-color: var(--ink-60); color: var(--ink-70); }
+.chip-interpretive { font-style: italic; border-color: rgba(var(--ink-rgb), .3); color: var(--ink-50); }
 
 /* --- Phase 11: micro-lessons --- */
 .learn {
   background: none; border: none;
-  border-bottom: 1px solid rgba(236, 229, 216, .22);
-  color: var(--cream-50); font-family: var(--font-body); font-size: 9px;
+  border-bottom: 1px solid rgba(var(--ink-rgb), .22);
+  color: var(--ink-50); font-family: var(--font-body); font-size: 9px;
   letter-spacing: .08em; text-transform: none; padding: 2px 8px;
   cursor: pointer; vertical-align: 1px;
 }
-.learn:hover { border-color: var(--accent-300); color: var(--accent-300); }
+.learn:hover { border-color: var(--accent-ink); color: var(--accent-ink); }
 .lessonnum {
   display: inline-block; min-width: 26px; font-family: ui-monospace, monospace;
-  font-size: 10px; color: var(--accent-300); letter-spacing: .06em;
+  font-size: 10px; color: var(--accent-ink); letter-spacing: .06em;
 }
-.lesson-read-mark { color: var(--accent-300); font-size: 10px; letter-spacing: .1em; }
+.lesson-read-mark { color: var(--accent-ink); font-size: 10px; letter-spacing: .1em; }
 .lmodal {
-  position: fixed; inset: 0; z-index: 50; background: rgba(20, 17, 13, .78);
+  position: fixed; inset: 0; z-index: 50; background: rgba(var(--paper-rgb), .78);
   display: grid; place-items: center; padding: 24px;
 }
 .lmodal[hidden] { display: none; }  /* display:grid would defeat `hidden` */
 .lmodal-card {
-  background: var(--ink); border: none;
-  border-top: 1px solid var(--accent-300);
+  background: var(--paper); border: none;
+  border-top: 1px solid var(--accent-ink);
   max-width: 520px; width: 100%; padding: 18px 20px; max-height: 80vh; overflow-y: auto;
 }
 .lmodal-card .xpbody { font-size: 13px; }
 
 .again {
   display: inline-block; margin: 16px 0 4px; font-family: var(--font-heading);
-  font-size: 13px; letter-spacing: .06em; color: var(--accent-300); text-decoration: none;
+  font-size: 13px; letter-spacing: .06em; color: var(--accent-ink); text-decoration: none;
 }
 
 .colophon {
   text-align: left; font-size: 10.5px; letter-spacing: .06em; line-height: 1.9;
-  color: var(--cream-60); padding: 22px 0 10px; margin-top: var(--space-fold);
+  color: var(--ink-60); padding: 22px 0 10px; margin-top: var(--space-fold);
   border-top: 1px solid var(--divider);
 }
 
@@ -600,27 +624,27 @@ details.yoga > summary::-webkit-details-marker { display: none; }
   border-right: none;
 }
 .plabel {
-  font-size: var(--t-mark); letter-spacing: .13em; color: var(--cream-50);
+  font-size: var(--t-mark); letter-spacing: .13em; color: var(--ink-50);
   font-variant-caps: all-small-caps; text-transform: lowercase;
 }
 .pvalue {
   font-family: var(--font-heading); font-size: 16px; margin-top: 4px;
-  color: var(--cream);
+  color: var(--ink);
 }
 .pmeta {
-  font-size: 10px; letter-spacing: .04em; color: var(--cream-50);
+  font-size: 10px; letter-spacing: .04em; color: var(--ink-50);
   margin-top: 7px; font-variant-numeric: tabular-nums;
 }
 
 /* --- palette picker --- */
 .palpick {
   background: transparent; border: none;
-  border-bottom: 1px solid var(--divider); color: var(--cream-50);
+  border-bottom: 1px solid var(--divider); color: var(--ink-50);
   font-family: var(--font-body); font-size: 9px; letter-spacing: .1em;
   text-transform: uppercase; padding: 3px 6px; margin-right: 10px; cursor: pointer;
   border-radius: 0;
 }
-.palpick option { background: var(--raised); color: var(--cream); }
+.palpick option { background: var(--surface); color: var(--ink); }
 
 /* --- Guṇa Milan (design 2d) --- */
 .gmhead { position: relative; text-align: center; padding: 18px 0 8px; }
@@ -628,15 +652,15 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 .gmnames { position: relative; font-family: var(--font-heading); font-size: 22px; }
 .gmsub {
   position: relative; font-size: 10.5px; letter-spacing: .06em;
-  color: var(--cream-50); margin-top: 3px; font-variant-numeric: tabular-nums;
+  color: var(--ink-50); margin-top: 3px; font-variant-numeric: tabular-nums;
 }
 .gmring {
   position: relative; width: 104px; height: 104px; margin: 16px auto 8px;
-  border-radius: 50%; border: 1px solid var(--accent-300);
+  border-radius: 50%; border: 1px solid var(--accent-ink);
   display: grid; place-items: center;
 }
-.gmscore { font-family: var(--font-heading); font-size: 34px; color: var(--accent-300); font-variant-numeric: tabular-nums; }
-.gmmax { font-size: 12px; color: var(--cream-50); }
+.gmscore { font-family: var(--font-heading); font-size: 34px; color: var(--accent-ink); font-variant-numeric: tabular-nums; }
+.gmmax { font-size: 12px; color: var(--ink-50); }
 .gmverdict {
   position: relative; font-family: var(--font-heading); font-style: italic;
   font-size: 14px; line-height: 1.5; max-width: 460px; margin: 0 auto;
@@ -649,10 +673,10 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 }
 .gmrow > summary::-webkit-details-marker { display: none; }
 .gmkuta { font-family: var(--font-heading); font-weight: 600; font-size: 15px; }
-.gmrow.void .gmkuta, .gmrow.void > summary .num { color: var(--accent-300); }
-.gmrow[open] .gmkuta { color: var(--accent-300); }
+.gmrow.void .gmkuta, .gmrow.void > summary .num { color: var(--accent-ink); }
+.gmrow[open] .gmkuta { color: var(--accent-ink); }
 .gmfoot {
-  font-size: 11px; line-height: 1.55; color: var(--cream-50);
+  font-size: 11px; line-height: 1.55; color: var(--ink-50);
   margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--divider);
 }
 
@@ -660,63 +684,63 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 .readfold { margin-top: 10px; }
 .readfold > summary.readlink { display: inline-block; }
 .readlong {
-  font-size: 13px; line-height: 1.65; color: var(--cream-70);
+  font-size: 13px; line-height: 1.65; color: var(--ink-70);
   margin: 10px 0 0; max-width: 520px;
 }
 
 /* --- landing: differentiator line and single CTA --- */
-.lede.claim { color: var(--cream-70); max-width: 340px; margin-top: 14px; }
-.lede.claim strong { color: var(--accent-300); font-weight: 400; }
+.lede.claim { color: var(--ink-70); max-width: 340px; margin-top: 14px; }
+.lede.claim strong { color: var(--accent-ink); font-weight: 400; }
 .cta {
   position: relative; display: inline-block; margin-top: 26px;
   padding: 0 0 9px; border: none;
-  border-bottom: 1px solid var(--accent-300);
-  color: var(--accent-300); font-family: var(--font-heading);
+  border-bottom: 1px solid var(--accent-ink);
+  color: var(--accent-ink); font-family: var(--font-heading);
   font-weight: 600; font-size: 15px; letter-spacing: .06em;
   text-decoration: none;
 }
-.cta:hover { color: var(--cream); border-bottom-color: var(--cream); }
+.cta:hover { color: var(--ink); border-bottom-color: var(--ink); }
 
 /* --- Ask about this chart: grounded agent panel (v1.1) --- */
 .agentsuggest { display: flex; flex-wrap: wrap; gap: 10px 20px; margin: 16px 0 4px; }
 .sugq {
-  font: inherit; font-size: 13px; color: var(--cream);
+  font: inherit; font-size: 13px; color: var(--ink);
   background: transparent; border: none;
-  border-bottom: 1px solid var(--accent-300);
+  border-bottom: 1px solid var(--accent-ink);
   padding: 7px 11px; cursor: pointer; text-align: left;
 }
 .sugq:hover { border-color: var(--accent); }
 .agentrow { display: flex; gap: 10px; margin-top: 14px; align-items: stretch; }
 #agentq {
-  flex: 1 1 auto; min-width: 0; font: inherit; color: var(--cream);
-  background: transparent; border: 0; border-bottom: 1px solid var(--accent-300);
+  flex: 1 1 auto; min-width: 0; font: inherit; color: var(--ink);
+  background: transparent; border: 0; border-bottom: 1px solid var(--accent-ink);
   padding: 9px 2px;
 }
 #agentq:focus { outline: none; border-bottom-color: var(--accent); }
 .agentgo { flex: 0 0 auto; margin: 0; padding: 9px 20px; }
-.agentleft { font-size: 12px; color: var(--cream-50); margin: 8px 0 0; }
-.agentcard { border-top: 1px solid var(--accent-300); padding: 16px 0; margin-top: 16px; }
+.agentleft { font-size: 12px; color: var(--ink-50); margin: 8px 0 0; }
+.agentcard { border-top: 1px solid var(--accent-ink); padding: 16px 0; margin-top: 16px; }
 .agentcard.agenterr { border-top-style: dashed; }
 /* Correspondence: the question set in italic and indented like a quoted
    letter, the reply beneath it. */
 .agentq {
   font-family: var(--font-heading); font-style: italic; font-size: 17px;
-  color: var(--cream-60); margin: 0 0 12px; padding-left: 14px;
+  color: var(--ink-60); margin: 0 0 12px; padding-left: 14px;
   border-left: 1px solid var(--divider);
 }
 .thumbdown {
-  font: inherit; font-size: 12px; color: var(--cream-60); background: transparent;
+  font: inherit; font-size: 12px; color: var(--ink-60); background: transparent;
   border: none; border-bottom: 1px solid var(--hairline);
   padding: 4px 0; cursor: pointer;
   margin-top: 12px;
 }
-.thumbdown:hover:not(:disabled) { color: var(--cream); border-color: var(--accent); }
+.thumbdown:hover:not(:disabled) { color: var(--ink); border-color: var(--accent); }
 .thumbdown:disabled { opacity: .55; cursor: default; }
 @media (max-width: 560px) {
   .agentrow { flex-direction: column; }
   .agentgo { width: 100%; }
 }
-.agentread { margin: 0 0 12px; line-height: 1.72; color: var(--cream-70); max-width: 60ch; }
+.agentread { margin: 0 0 12px; line-height: 1.72; color: var(--ink-70); max-width: 60ch; }
 .agentread:last-of-type { margin-bottom: 14px; }
 
 /* A cell holding three degree-labelled grahas has no room left for its sign
@@ -732,10 +756,10 @@ details.yoga > summary::-webkit-details-marker { display: none; }
    the tradition genuinely splits. The school name sits underneath each
    answer in small text: available to anyone who wants it, required of
    nobody. */
-.schoolbox { margin: 22px 0 6px; border-top: 1px solid var(--rule);
+.schoolbox { margin: 22px 0 6px; border-top: 1px solid var(--divider);
   padding-top: 14px; }
 .schoolbox > summary { cursor: pointer; font-family: var(--serif);
-  font-size: 15px; color: var(--cream); }
+  font-size: 15px; color: var(--ink); }
 .schoolbox > summary .muted { color: var(--faint); font-size: 13px; }
 .schoolintro { color: var(--faint); font-size: 13px; line-height: 1.55;
   margin: 10px 0 16px; max-width: 60ch; }
@@ -748,7 +772,7 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 fieldset.school { border: none; border-top: 1px solid var(--divider);
   padding: 14px 16px 8px; margin: 0 0 16px; }
 fieldset.school legend { font-family: var(--serif); font-size: 15px;
-  color: var(--cream); padding: 0 6px; }
+  color: var(--ink); padding: 0 6px; }
 fieldset.school .consequence { color: var(--faint); font-size: 12.5px;
   line-height: 1.5; margin: 2px 0 12px; max-width: 62ch; }
 fieldset.school.notlive { opacity: .62; }
@@ -762,7 +786,7 @@ fieldset.school .notyet { color: var(--accent); font-size: 12.5px;
   cursor: pointer; }
 .answer input[type=radio] { accent-color: var(--accent); flex: none; }
 .answer .answerline { flex: 1 1 auto; min-width: 0; }
-.answer .answertext { color: var(--cream); font-size: 14px; }
+.answer .answertext { color: var(--ink); font-size: 14px; }
 .answer .rec { display: inline-block; margin-left: 8px; font-size: 11px;
   letter-spacing: .05em; text-transform: uppercase; white-space: nowrap;
   color: var(--accent); border: none; padding: 1px 0;
@@ -804,12 +828,12 @@ button.cast.recast { margin-top: 4px; }
   list-style: none; margin: 16px 0 0; padding: 15px 0 16px;
   border-top: 1px solid var(--divider);
   border-bottom: 1px solid var(--divider);
-  font-size: 12.5px; line-height: 1.85; color: var(--cream-60);
+  font-size: 12.5px; line-height: 1.85; color: var(--ink-60);
   font-variant-numeric: tabular-nums;
 }
 .identity li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .identity li:first-child {
-  color: var(--cream); font-family: var(--font-heading); font-size: 17px;
+  color: var(--ink); font-family: var(--font-heading); font-size: 17px;
 }
 
 .domaingrid { margin: 0 0 8px; }
@@ -831,10 +855,10 @@ button.cast.recast { margin-top: 4px; }
 .folio {
   text-align: right; margin: 14px 0 0;
   font-size: var(--t-mark); letter-spacing: .12em; line-height: 1.7;
-  font-variant-caps: all-small-caps; color: var(--cream-50);
+  font-variant-caps: all-small-caps; color: var(--ink-50);
 }
-.folio-p { color: var(--cream-70); letter-spacing: .16em; }
-.folio-of { color: rgba(236, 229, 216, .34); }
+.folio-p { color: var(--ink-70); letter-spacing: .16em; }
+.folio-of { color: var(--ink-50); }
 
 /* THE CONTENTS PAGE.
    A four-column grid: fold number, title, verdict, and the page's own
@@ -854,26 +878,26 @@ button.cast.recast { margin-top: 4px; }
   text-decoration: none; color: inherit;
 }
 .dcard:hover { background: transparent; }
-.dcard:hover .dcard-title { color: var(--accent-300); }
+.dcard:hover .dcard-title { color: var(--accent-ink); }
 .dcard-no {
   grid-area: no; font-family: var(--font-heading);
-  font-size: 15px; color: var(--cream-50);
+  font-size: 15px; color: var(--ink-50);
   font-variant-numeric: tabular-nums lining-nums;
 }
 .dcard-title {
   grid-area: title; font-family: var(--font-heading);
-  font-size: var(--t-head); line-height: 1.2; color: var(--cream);
+  font-size: var(--t-head); line-height: 1.2; color: var(--ink);
 }
 .dcard-teaser {
   grid-area: teaser; font-size: 13.5px; line-height: 1.62;
-  color: var(--cream-60); max-width: 54ch;
+  color: var(--ink-60); max-width: 54ch;
 }
 .dcard-more {
   grid-area: more; font-size: var(--t-mark); letter-spacing: .12em;
-  font-variant-caps: all-small-caps; color: var(--cream-50);
+  font-variant-caps: all-small-caps; color: var(--ink-50);
   white-space: nowrap; padding-top: 4px;
 }
-.dcard:hover .dcard-more { color: var(--accent-300); }
+.dcard:hover .dcard-more { color: var(--accent-ink); }
 
 /* Domain view: the answer first, the working underneath.
    The verdict is the largest type on the page because it IS the answer —
@@ -882,16 +906,16 @@ button.cast.recast { margin-top: 4px; }
 .domainread { padding-top: 4px; }
 .dverdict {
   font-family: var(--font-heading); font-size: var(--t-verdict);
-  line-height: 1.18; color: var(--cream);
+  line-height: 1.18; color: var(--ink);
   margin: 18px 0 0; max-width: 26ch;
   text-wrap: balance;
 }
 .dsynth {
   font-size: var(--t-body); line-height: 1.72;
-  color: var(--cream-70); margin: 22px 0 0; max-width: 60ch;
+  color: var(--ink-70); margin: 22px 0 0; max-width: 60ch;
 }
 .conf {
-  font-size: 11.5px; color: var(--cream-50);
+  font-size: 11.5px; color: var(--ink-50);
   margin: var(--space-rule) 0 0; padding-top: 14px;
   border-top: 1px solid var(--hairline);
   display: flex; align-items: baseline; gap: 10px; line-height: 1.6;
@@ -903,7 +927,7 @@ button.cast.recast { margin-top: 4px; }
    chevron in a square. */
 .dstep { margin-top: 0; border-bottom: 1px solid var(--hairline); }
 .dstep > summary {
-  font-family: var(--font-heading); font-size: 17px; color: var(--cream);
+  font-family: var(--font-heading); font-size: 17px; color: var(--ink);
   cursor: pointer; display: flex; align-items: baseline; gap: 10px;
   padding: 13px 0;
 }
@@ -915,22 +939,160 @@ button.cast.recast { margin-top: 4px; }
   content: "show the working ↓"; margin-left: auto;
   font-family: var(--font-body); font-size: var(--t-mark);
   letter-spacing: .11em; font-variant-caps: all-small-caps;
-  color: var(--cream-50);
+  color: var(--ink-50);
 }
 .dstep[open] > summary:has(.dstep-n)::after { content: "hide ↑"; }
-.dstep > summary:hover::after { color: var(--accent-300); }
+.dstep > summary:hover::after { color: var(--accent-ink); }
 /* The plain folds keep the app's existing ▸ marker. */
 .dstep-n {
-  font-family: var(--font-body); font-size: 11px; color: var(--cream-50);
+  font-family: var(--font-body); font-size: 11px; color: var(--ink-50);
   border: none; padding: 0;
   font-variant-numeric: tabular-nums;
 }
 .dstep-do {
-  font-size: 12.5px; line-height: 1.6; color: var(--cream-50);
+  font-size: 12.5px; line-height: 1.6; color: var(--ink-50);
   margin: 8px 0 10px; max-width: 62ch;
 }
 .dstep .row { align-items: flex-start; gap: 14px; }
 .dstep .row .num {
   font-size: 10.5px; letter-spacing: 0; text-align: right;
   flex: none; max-width: 42%; word-break: break-word;
+}
+
+/* ============================================================
+   SCROLL CHOREOGRAPHY
+   Six moves, one duration, one curve. Nothing bounces, nothing loops,
+   nothing moves that a reader did not scroll into. CSS scroll-driven
+   animation drives it where the browser has it; an IntersectionObserver
+   adds .is-in for everyone else. Both paths end at the SAME final state,
+   which is also the state a reduced-motion reader gets immediately.
+   ============================================================ */
+
+/* --- 1. the fold rule draws in, left to right ---------------------------
+   A border cannot be scaled, so the rule is a pseudo-element and the fold
+   hands off to the next one down the page in scroll order. */
+.mark, .fold-rule {
+  position: relative; border-top: none;
+  padding-top: 10px; margin-top: var(--space-fold);
+}
+.mark::before, .fold-rule::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: var(--divider);
+  transform: scaleX(0); transform-origin: left center;
+  transition: transform var(--reveal) var(--ease);
+}
+.mark.is-in::before, .fold-rule.is-in::before { transform: scaleX(1); }
+
+/* --- 2. the plate pins beside the day and the contents ------------------
+   Two columns at desktop; the plate is sticky inside a grid that ENDS at
+   the last contents entry, which is what releases it. No JS: the release
+   point is the end of the grid. */
+.leaf { display: block; }
+@media (min-width: 1000px) {
+  .leaf {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    column-gap: 56px;
+    width: min(1120px, 94vw);
+    position: relative; left: 50%; transform: translateX(-50%);
+  }
+  .leaf > .plate {
+    grid-column: 1; grid-row: 1 / span 2;
+    position: sticky; top: 20px; align-self: start;
+  }
+  .leaf > .glance { grid-column: 2; grid-row: 1; padding-top: 0; }
+  .leaf > .domaingrid { grid-column: 2; grid-row: 2; }
+  /* Inside the pinned column the plate no longer breaks out of the reading
+     column — it IS a column. */
+  .leaf .kundli { width: 100%; left: auto; transform: none; }
+}
+
+/* --- 3. the ghost numeral: the plate's presence, continued -------------- */
+.domainread { position: relative; }
+/* The numeral sits with the title it belongs to and the type overlaps its
+   lower half — the editorial device, rather than a number parked in a
+   corner with a hole beneath it.
+   IN FLOW, deliberately: absolutely positioned against the centring flex
+   container it hung at the top of the screenful while the title centred
+   below, leaving 200px of nothing between them. In flow with a negative
+   bottom margin the group travels together at any viewport height. */
+.ghostno {
+  position: relative; z-index: 0; display: block; align-self: flex-start;
+  font-family: var(--font-heading); font-size: 168px; line-height: .78;
+  margin: 0 0 -.30em -.055em;
+  color: rgba(var(--ink-rgb), .12);
+  pointer-events: none; user-select: none;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+.verdictmoment > *:not(.ghostno) { position: relative; z-index: 1; }
+@media (max-width: 560px) { .ghostno { font-size: 112px; } }
+
+/* --- 4. the verdict moment: a screenful, and it rises into place -------- */
+.verdictmoment {
+  position: relative;
+  min-height: 68vh; display: flex; flex-direction: column;
+  justify-content: center; padding: 20px 0 12px;
+}
+.reveal-rise {
+  opacity: 0; transform: translateY(var(--rise));
+  transition: opacity var(--reveal) var(--ease),
+              transform var(--reveal) var(--ease);
+}
+.reveal-rise.is-in { opacity: 1; transform: none; }
+
+/* --- 5. rhythm: airy verdict, dense working, a one-line pause ---------- */
+.working {
+  opacity: 0; transition: opacity var(--reveal) var(--ease);
+  margin-top: 4px;
+}
+.working.is-in { opacity: 1; }
+@media (min-width: 700px) {
+  .working { column-count: 2; column-gap: 42px; }
+  .working .dsynth { margin-top: 0; margin-bottom: 18px; break-inside: avoid; }
+}
+.conf { margin-top: var(--space-fold); }
+
+/* --- 6. scroll-driven where the browser has it -------------------------
+   Same properties, same curve, same end state — the browser drives the
+   progress instead of an observer flipping a class. */
+@supports (animation-timeline: view()) {
+  .mark::before, .fold-rule::before {
+    transform: scaleX(0); transition: none;
+    animation: draw-rule linear both;
+    animation-timeline: view();
+    animation-range: entry 10% entry 55%;
+  }
+  .reveal-rise {
+    transition: none;
+    animation: rise-in linear both;
+    animation-timeline: view();
+    animation-range: entry 5% entry 45%;
+  }
+  .working {
+    transition: none;
+    animation: fade-in linear both;
+    animation-timeline: view();
+    animation-range: entry 5% entry 40%;
+  }
+}
+@keyframes draw-rule { to { transform: scaleX(1); } }
+@keyframes rise-in { to { opacity: 1; transform: none; } }
+@keyframes fade-in { to { opacity: 1; } }
+
+/* --- 7. reduced motion: everything arrives already arrived -------------
+   ALL motion off. The pin STAYS — a sticky element is layout, not motion,
+   and removing it would take away the one thing that keeps the plate beside
+   the reading it belongs to. Nothing here is hidden or unreachable: every
+   animated property is forced to its final value, so a reader who asked for
+   no motion sees the finished page immediately. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+  .mark::before, .fold-rule::before { transform: scaleX(1) !important; }
+  .reveal-rise, .working { opacity: 1 !important; transform: none !important; }
+  .verdictmoment { min-height: 0; }
 }

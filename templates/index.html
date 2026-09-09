@@ -20,10 +20,9 @@
 <header class="topbar">
   <span class="brand">Sidera</span>
   <span class="topbar-right">
-    <select id="palettePicker" class="palpick" aria-label="palette">
-      <option value="pastel">Pastel</option><option value="gold">Gold</option>
-      <option value="sindoor">Sindoor</option><option value="twilight">Twilight</option>
-      <option value="rose">Rose</option><option value="verdigris">Verdigris</option>
+    <select id="palettePicker" class="palpick" aria-label="reading">
+      <option value="paper">Paper</option>
+      <option value="night">Night reading</option>
     </select>
     {% if data %}{{ data.birth.place or "Janma kundli" }}{% else %}Sidereal · Lahiri{% endif %}</span>
 </header>
@@ -196,6 +195,12 @@
    contents, the five domains, and the technical sections. See DOSSIER.md. #}
 <p class="folio"><span class="folio-p">P. 01</span> · Contents<br>
   <span class="folio-of">Fold 1 of 7</span></p>
+{# THE LEAF. On a wide screen this is two columns: the plate pins in the
+   left one and the day's verdict and the contents scroll past it in the
+   right, releasing at the last contents entry because the grid ends there.
+   At 560px and below it collapses to one column, plate first, unpinned.
+   Same sections, same order, same ids — a wrapper, not a re-organisation. #}
+<div class="leaf">
 <!-- Chart plate with D1/D9/D10 switcher -->
 <section class="plate showdeg" id="plate">
   <div class="switcher" role="tablist">
@@ -212,11 +217,12 @@
                               ("d10", data.kundli_d10, "D10 lagna " ~ data.d10_lagna)] %}
   <div class="pane {% if key != 'd1' %}hidden{% endif %}" id="pane-{{ key }}">
     <svg viewBox="0 0 300 300" class="kundli" aria-label="North-Indian chart {{ key }}">
-      <g fill="none" stroke="var(--accent-400)" stroke-width="0.75">
+      <g fill="none" class="plate-rule" stroke-width="0.75">
         <rect x="3" y="3" width="294" height="294"/>
         <path d="M3 3 L297 297 M297 3 L3 297"/>
-        <path d="M150 3 L297 150 L150 297 L3 150 Z"/>
       </g>
+      <path class="plate-diamond" fill="none" stroke-width="1"
+            d="M150 3 L297 150 L150 297 L3 150 Z"/>
       <g class="signnum" text-anchor="middle">
         {% for h in houses %}<text x="{{ h.num_pos[0] }}" y="{{ h.num_pos[1] }}"{% if h.crowded %} class="crowded"{% endif %}>{{ h.sign_num }}</text>{% endfor %}
       </g>
@@ -348,11 +354,12 @@
   <div class="glance-panel">
     <div class="gpane" id="gpane-chart">
       <svg viewBox="0 0 300 300" class="minikundli" aria-label="mini chart">
-        <g fill="none" stroke="var(--accent-400)" stroke-width="0.9">
+        <g fill="none" class="plate-rule" stroke-width="1.4">
           <rect x="3" y="3" width="294" height="294"/>
           <path d="M3 3 L297 297 M297 3 L3 297"/>
-          <path d="M150 3 L297 150 L150 297 L3 150 Z"/>
         </g>
+        <path class="plate-diamond" fill="none" stroke-width="1.8"
+              d="M150 3 L297 150 L150 297 L3 150 Z"/>
         <g class="minigrahas" text-anchor="middle">
           {% for h in data.kundli_d1 %}{% if h.line1 %}
           <text x="{{ h.pl_pos[0] }}" y="{{ h.pl_pos[1] }}">{{ h.line1 }}{% if h.line2 %}<tspan x="{{ h.pl_pos[0] }}" dy="15">{{ h.line2 }}</tspan>{% endif %}</text>
@@ -433,6 +440,7 @@
     </a>
   </div>
 </section>
+</div><!-- /leaf -->
 </div><!-- /view-arrival -->
 
 <!-- ============ DOMAIN VIEWS ============
@@ -444,11 +452,24 @@
     <span class="folio-of">Fold {{ loop.index + 1 }} of 7</span></p>
   <a class="backlink" href="#top" data-view="view-arrival">← All of your chart</a>
   <section class="domainread">
+    {# The folio, set enormous and nearly invisible — the plate has released
+       by now and this carries its weight down the leaf. Decorative, so the
+       screen reader is told to skip it: the same number is already in the
+       folio above, where it is read properly. #}
+    <div class="verdictmoment">
+    <span class="ghostno" aria-hidden="true">{{ "%02d"|format(loop.index + 1) }}</span>
     <h1 class="chartof-name">{{ d.title }}</h1>
     {# The answer, first and alone. Nothing positions it, nothing qualifies
-       it, and no house number reaches it — see voice.py. #}
-    <p class="dverdict">{{ d.verdict }}</p>
-    {% for para in d.paragraphs %}<p class="dsynth">{{ para }}</p>{% endfor %}
+       it, and no house number reaches it — see voice.py. It rises into
+       place as the fold enters, which is the only motion on this screen. #}
+    <p class="dverdict reveal-rise">{{ d.verdict }}</p>
+    </div>
+    {# The working: dense after the airy verdict, and it fades in as ONE
+       block rather than paragraph by paragraph, so the eye is handed a
+       page rather than a queue. Two columns where there is room. #}
+    <div class="working reveal">
+      {% for para in d.paragraphs %}<p class="dsynth">{{ para }}</p>{% endfor %}
+    </div>
     {# One caveat, at the end, one line. The confidence label carries the
        rest of the honesty, where it can be checked. #}
     <p class="conf"><span class="chip chip-{{ d.confidence|lower }}">{{ d.confidence }}</span>
@@ -887,6 +908,48 @@ Sidereal · Lahiri ayanāṃśa · Whole Sign · North-Indian<br>
 <span class="credit"><a href="https://github.com/kartikAgarwal73/Sidera">Source</a> — AGPL-3.0, as required by <a href="https://github.com/astrorigin/pyswisseph">pyswisseph</a></span></footer>
 
 <script>
+// ---- Scroll choreography --------------------------------------------------
+// Where the browser has scroll-driven animation, CSS owns this entirely and
+// this block does nothing at all — that is the check on the first line.
+// Everywhere else an IntersectionObserver adds .is-in once, and the CSS
+// transition (same duration, same curve, same end state) does the rest.
+//
+// One-shot on purpose: an element that re-animates every time it re-enters
+// is the thing that makes a long page feel restless.
+(function () {
+  const scrollDriven = window.CSS && CSS.supports &&
+    CSS.supports("animation-timeline", "view()");
+  const quiet = window.matchMedia &&
+    matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const targets = document.querySelectorAll(
+    ".mark, .fold-rule, .reveal-rise, .working");
+  // Reduced motion: the CSS has already forced every final value, so there
+  // is nothing to observe and nothing to wait for.
+  if (scrollDriven || quiet || !("IntersectionObserver" in window)) {
+    if (!scrollDriven) targets.forEach(el => el.classList.add("is-in"));
+    return;
+  }
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (!e.isIntersecting) return;
+      e.target.classList.add("is-in");
+      io.unobserve(e.target);
+    });
+  }, { rootMargin: "0px 0px -12% 0px", threshold: 0.01 });
+  targets.forEach(el => io.observe(el));
+
+  // A view switched into by hash routing is revealed on arrival: it was
+  // display:none when the observer first looked, so it never intersected.
+  window.addEventListener("sidera:viewshown", (ev) => {
+    (ev.detail ? ev.detail.querySelectorAll(
+      ".mark, .fold-rule, .reveal-rise, .working") : []).forEach(el => {
+      const r = el.getBoundingClientRect();
+      if (r.top < window.innerHeight) el.classList.add("is-in");
+      else io.observe(el);
+    });
+  });
+})();
+
 // ---- Masked date and time fields -----------------------------------------
 // WHY NOT type="date" / type="time".
 // The native pickers render in the SYSTEM locale, not the page's. On macOS
@@ -1001,10 +1064,16 @@ Sidereal · Lahiri ayanāṃśa · Whole Sign · North-Indian<br>
     target.setAttribute("tabindex", "-1");
     if (scrollTo) {
       const el = document.getElementById(scrollTo);
-      if (el) { el.scrollIntoView({ block: "start" }); target.focus({ preventScroll: true }); return; }
+      if (el) {
+        el.scrollIntoView({ block: "start" });
+        target.focus({ preventScroll: true });
+        window.dispatchEvent(new CustomEvent("sidera:viewshown", {detail: target}));
+        return;
+      }
     }
     window.scrollTo(0, 0);
     target.focus({ preventScroll: true });
+    window.dispatchEvent(new CustomEvent("sidera:viewshown", {detail: target}));
   }
 
   // #marriage → the marriage view; #ask / #agent / a section id → explore,
@@ -1033,17 +1102,22 @@ Sidereal · Lahiri ayanāṃśa · Whole Sign · North-Indian<br>
   fromHash();
 })();
 
-// Palette: six token sets, switched by a data attribute on the root — never
-// by conditional colour in markup (build framework, SIX · TOKENS).
+// Palette: two token sets — paper and night reading — switched by a data
+// attribute on the root, never by conditional colour in markup (build
+// framework, SIX · TOKENS). Four palettes were retired; a browser still
+// holding one of their names in storage falls back to paper rather than
+// rendering an undefined theme, which would leave the page unstyled.
+const PALETTES = ["paper", "night"];
 const PAL_KEY = "sidera:palette";
 const picker = document.getElementById("palettePicker");
 function applyPalette(name) {
+  if (!PALETTES.includes(name)) name = PALETTES[0];
   document.documentElement.setAttribute("data-palette", name);
   try { localStorage.setItem(PAL_KEY, name); } catch (e) {}
   if (picker) picker.value = name;
 }
-applyPalette((() => { try { return localStorage.getItem(PAL_KEY) || "pastel"; }
-                      catch (e) { return "pastel"; } })());
+applyPalette((() => { try { return localStorage.getItem(PAL_KEY) || "paper"; }
+                      catch (e) { return "paper"; } })());
 picker?.addEventListener("change", () => applyPalette(picker.value));
 
 document.querySelectorAll(".tab").forEach(btn => btn.addEventListener("click", () => {

@@ -1744,30 +1744,52 @@ class TestUIRevisionWalkthrough:
             assert resp.status_code == 200
             assert b"<svg" in resp.data
 
-    def test_design_handoff_pastel_tokens(self):
-        # DESIGN-HANDOFF.md: "Active palette: Pastel" — it is the default,
-        # i.e. the values on bare :root before any [data-palette] applies.
-        css = open(HERE / "static/style.css").read()
-        default = css[css.index(":root,"):css.index('[data-palette="gold"]')]
-        assert "--ink: #585270" in default
-        assert "--accent: #a99bc9" in default
-        assert "--accent-300: #cfc4e4" in default
-        fav = open(HERE / "static/favicon.svg").read()
-        assert "#585270" in fav and "#cfc4e4" in fav
+    def test_design_handoff_paper_tokens(self):
+        """Re-anchored 2026-09-09 to the superseding token table at the top
+        of DESIGN-HANDOFF.md, after an approved mockup moved the app to a
+        light paper-first almanac.
 
-    def test_framework_six_palettes_by_root_attribute(self):
-        # Build framework, SIX · TOKENS: all six stored centrally and
-        # switched by custom properties on the root — never conditional
-        # colour in components.
+        This gate stays `external` and stays strict — it just answers to the
+        current design record instead of the retired one. An external gate
+        whose source document changed must follow the document, or it stops
+        meaning anything.
+        """
+        handoff = (HERE / "ui-design" / "DESIGN-HANDOFF.md").read_text("utf-8")
+        assert "SUPERSEDED IN PART" in handoff, (
+            "the token table below is only authoritative because the handoff "
+            "says it supersedes the old one")
         css = open(HERE / "static/style.css").read()
-        for pal in ("pastel", "gold", "sindoor", "twilight", "rose",
-                    "verdigris"):
-            assert f':root[data-palette="{pal}"]' in css, pal
-        # every palette supplies the full accent ramp + ghost + ink
+        default = css[css.index(":root,"):css.index('[data-palette="night"]')]
+        for token, value in (("--paper", "#f3f2f2"), ("--surface", "#eae9e9"),
+                             ("--ink", "#201f1d"), ("--accent", "#b68235"),
+                             ("--accent-ink", "#8a5f1c")):
+            assert f"{token}: {value}" in default, (token, value)
+            assert f"| `{token}` | `{value}` |" in handoff, (token, value)
+        fav = open(HERE / "static/favicon.svg").read()
+        assert "#f3f2f2" in fav and "#201f1d" in fav and "#b68235" in fav
+
+    def test_framework_palettes_by_root_attribute(self):
+        """Build framework, SIX · TOKENS: palettes stored centrally and
+        switched by custom properties on the root — never conditional colour
+        in components.
+
+        Re-anchored 2026-09-09: SIX referred to how tokens are stored, and
+        six palettes on a printed almanac was noise. Two readings ship. What
+        the framework actually requires — central storage, root switching,
+        no conditional colour in a component — is unchanged and asserted
+        harder than before: every palette must define the FULL set.
+        """
+        css = open(HERE / "static/style.css").read()
+        palettes = set(re.findall(r':root\[data-palette="(\w+)"\]', css))
+        assert palettes == {"paper", "night"}, palettes
         block = css[:css.index("* { box-sizing")]
-        for token in ("--ink", "--accent", "--accent-300", "--accent-400",
-                      "--ghost"):
-            assert block.count(token) >= 6, token
+        for token in ("--paper", "--surface", "--ink", "--accent",
+                      "--accent-ink", "--ink-rgb", "--accent-rgb"):
+            assert block.count(f"{token}:") >= 2, token
+        # A component may never carry a palette's hex directly.
+        body = css[css.index("* { box-sizing"):]
+        stray = [h for h in re.findall(r"#[0-9a-fA-F]{6}", body)]
+        assert stray == [], f"hardcoded colour outside the token block: {stray}"
 
     def test_framework_non_negotiable_tokens(self):
         # "Square corners everywhere. The device bezel is the only radius"
@@ -3218,23 +3240,27 @@ class TestAgentEndpoint:
         assert client.post("/ask/feedback", json={}).status_code == 400
 
     def test_ground_colour_is_never_used_as_text_colour(self):
-        """Regression: `--ink` is the GROUND, `--cream` is the text.
+        """Regression: text must never be painted the colour behind it.
 
-        The agent panel first shipped with `color: var(--ink)` on its
-        suggestion buttons, which painted the text the same colour as the
-        page behind it — the buttons rendered as three empty boxes. The
+        The agent panel first shipped with the ground colour on its
+        suggestion buttons, which rendered them as three empty boxes. The
         markup was correct and the DOM had the text, so nothing but looking
         at the render caught it.
 
-        Inverted elements (a light `--accent-300` background with dark text)
-        are the legitimate use, so the rule is not "never" — it is "never
-        without a background in the same block".
+        Re-pointed 2026-09-09: the tokens flipped meaning in the paper
+        redesign. `--ink` was the ground and is now the text; `--paper` is
+        the ground. The failure being guarded is identical — only the name of
+        the ground changed — so the gate follows it rather than retiring.
+
+        Inverted elements (a dark ink panel with paper-coloured text) are the
+        legitimate use, so the rule is not "never" — it is "never without a
+        background in the same block".
         """
         css = (HERE / "static/style.css").read_text(encoding="utf-8")
         offenders = []
         for block in re.finditer(r"\{([^{}]*)\}", css):
             body = block.group(1)
-            if re.search(r"color:\s*var\(--ink\)", body) and \
+            if re.search(r"color:\s*var\(--paper\)", body) and \
                     not re.search(r"background(-color)?:", body):
                 offenders.append(" ".join(body.split())[:70])
         assert offenders == [], (
@@ -5440,7 +5466,8 @@ class TestEditorialDoctrine:
         and not on the page has not been applied."""
         import voice
         for cls in ("dcard-teaser", "dverdict"):
-            found = re.findall(rf'class="{cls}"[^>]*>(.*?)</', page, re.S)
+            found = re.findall(rf'class="[^"]*\b{cls}\b[^"]*"[^>]*>(.*?)</',
+                               page, re.S)
             assert found, cls
             for raw in found:
                 text = re.sub(r"<[^>]+>", "", raw).strip()
@@ -5455,8 +5482,9 @@ class TestEditorialDoctrine:
         for did in ("marriage", "career"):
             view = page[page.index(f'id="view-domain-{did}"'):]
             view = view[:view.index("The working, step by step")]
-            assert view.index('class="dverdict"') < view.index('class="conf"')
-            assert 'class="dsynth"' not in view[:view.index('class="dverdict"')]
+            at = re.search(r'class="[^"]*\bdverdict\b', view).start()
+            assert at < view.index('class="conf"')
+            assert 'class="dsynth"' not in view[:at]
 
     def test_the_glance_still_answers_in_one_breath(self, page):
         """The Glance was already answer-first. This keeps it that way."""
@@ -5675,17 +5703,23 @@ class TestEditorialDossier:
 
     # --- colour restraint ---------------------------------------------------
 
-    def test_the_six_palettes_survive_the_redesign(self):
+    def test_two_readings_ship_not_six(self):
         css = self._css()
-        for pal in ("pastel", "gold", "sindoor", "twilight", "rose",
-                    "verdigris"):
-            assert f':root[data-palette="{pal}"]' in css, pal
+        assert set(re.findall(r':root\[data-palette="(\w+)"\]', css)) == \
+            {"paper", "night"}
 
-    def test_the_plate_is_engraved_not_drawn_in_neon(self):
-        """Thin strokes, one weight. A plate is engraved, not lit."""
-        page = (HERE / "templates" / "index.html").read_text(encoding="utf-8")
-        for w in re.findall(r'stroke-width="([\d.]+)"', page):
-            assert float(w) <= 1.0, f"stroke-width {w} is a screen graphic"
+    def test_the_plate_is_engraved_not_drawn_in_neon(self, measured):
+        """Thin strokes. A plate is engraved, not lit.
+
+        Measured as RENDERED pixels, not as the raw attribute: an SVG
+        stroke-width is in user units, so the same number is a hairline on
+        the 530px plate and invisible on the 140px mini one. Judging the
+        attribute told me the mini plate was "too heavy" when it was in fact
+        drawing at 0.65px.
+        """
+        for width, m in measured.items():
+            for name, px in m["strokePx"].items():
+                assert 0.4 <= px <= 1.8, (width, name, px)
         # A `paint-order` halo is not a drawn line — it is how a label stays
         # legible where it crosses one. Judge the strokes that draw.
         css = self._css()
@@ -5730,7 +5764,7 @@ class TestEditorialDossier:
                         pg.evaluate("document.querySelector('#cast').submit()")
                     pg.wait_for_load_state("load")
                     pg.wait_for_timeout(900)          # let the webfonts land
-                    out[width] = pg.evaluate("""() => {
+                    out[width] = pg.evaluate(r"""() => {
                       const q = s => document.querySelector(s);
                       const rows = [...document.querySelectorAll('.dcard')]
                         .map(e => e.getBoundingClientRect());
@@ -5747,6 +5781,23 @@ class TestEditorialDossier:
                         bodyPx: parseFloat(cs('body').fontSize),
                         displayFace: cs('.statement').fontFamily,
                         textFace: cs('.dcard-teaser').fontFamily,
+                        strokePx: (() => {
+                          const out = {};
+                          document.querySelectorAll(
+                            '.kundli, .minikundli').forEach((svg, i) => {
+                            const vb = svg.getAttribute('viewBox').split(/\s+/);
+                            const scale = svg.getBoundingClientRect().width /
+                                          parseFloat(vb[2]);
+                            svg.querySelectorAll(
+                              '[stroke-width]').forEach((el, j) => {
+                              const w = parseFloat(
+                                el.getAttribute('stroke-width'));
+                              if (scale > 0) out[i + ':' + j] = +(w * scale)
+                                .toFixed(2);
+                            });
+                          });
+                          return out;
+                        })(),
                         identityLines: [...document.querySelectorAll(
                           '.identity li')].reduce((n, li) => n + Math.round(
                             li.getBoundingClientRect().height /
@@ -5792,3 +5843,400 @@ class TestEditorialDossier:
         phone feel unfinished."""
         for width, m in measured.items():
             assert m["identityLines"] == 3, (width, m["identityLines"])
+
+
+def _srgb(component: float) -> float:
+    c = component / 255
+    return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+
+def _luminance(hex_colour: str) -> float:
+    h = hex_colour.lstrip("#")
+    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    return .2126 * _srgb(r) + .7152 * _srgb(g) + .0722 * _srgb(b)
+
+
+def contrast(a: str, b: str) -> float:
+    """WCAG 2.x contrast ratio. Two hex colours in, one number out."""
+    la, lb = _luminance(a), _luminance(b)
+    hi, lo = max(la, lb), min(la, lb)
+    return (hi + .05) / (lo + .05)
+
+
+def _over(fg: str, bg: str, alpha: float) -> str:
+    """Composite `fg` over `bg` — what the eye actually receives."""
+    f, b = fg.lstrip("#"), bg.lstrip("#")
+    return "#" + "".join(
+        f"{round(int(f[i:i+2], 16) * alpha + int(b[i:i+2], 16) * (1 - alpha)):02x}"
+        for i in (0, 2, 4))
+
+
+class TestPaperPalette:
+    """The light almanac, with its contrast COMPUTED from the stylesheet.
+
+    A palette table in a document is a claim. This reads the hexes out of
+    `static/style.css` and recomputes every pair, so a future tweak that
+    lightens the bronze by two steps fails here rather than in someone's
+    eyes.
+    """
+
+    @classmethod
+    @pytest.fixture(scope="class")
+    def tokens(cls):
+        css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
+        head = css[:css.index("* { box-sizing")]
+        out = {}
+        for name, block in (
+                ("paper", head[head.index(":root,"):head.index('[data-palette="night"]')]),
+                ("night", head[head.index('[data-palette="night"]'):])):
+            out[name] = dict(re.findall(r"(--[\w-]+):\s*(#[0-9a-fA-F]{6})",
+                                        block))
+        return out
+
+    def test_both_readings_define_the_whole_set(self, tokens):
+        for reading, t in tokens.items():
+            for token in ("--paper", "--surface", "--ink", "--accent",
+                          "--accent-ink"):
+                assert token in t, (reading, token)
+
+    def test_body_text_clears_aa_on_both_grounds(self, tokens):
+        for reading, t in tokens.items():
+            for ground in ("--paper", "--surface"):
+                r = contrast(t["--ink"], t[ground])
+                assert r >= 4.5, f"{reading} ink on {ground}: {r:.2f}:1"
+
+    def test_links_and_small_text_clear_aa_on_both_grounds(self, tokens):
+        """The pair the brief singled out.
+
+        The bronze the mockup specified — #b68235 — is 3.02:1 on paper:
+        fine for graphics and large display, and NOT enough for body text.
+        That is why `--accent-ink` exists. If the two are ever collapsed
+        back into one token, this fails.
+        """
+        for reading, t in tokens.items():
+            for ground in ("--paper", "--surface"):
+                r = contrast(t["--accent-ink"], t[ground])
+                assert r >= 4.5, (
+                    f"{reading} accent-ink on {ground}: {r:.2f}:1 — links and "
+                    f"small text must clear AA")
+
+    def test_the_graphic_accent_clears_the_non_text_floor(self, tokens):
+        """AA for non-text objects — a plate stroke, a rule — is 3.0:1."""
+        for reading, t in tokens.items():
+            r = contrast(t["--accent"], t["--paper"])
+            assert r >= 3.0, f"{reading} accent on paper: {r:.2f}:1"
+
+    def test_the_muted_ink_steps_are_still_readable_text(self, tokens):
+        """Every muted step is real body text somewhere in the app, so
+        every one of them has to clear 4.5 — including on the surface tone,
+        which is the darker of the two grounds in the light reading."""
+        css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
+        alphas = [float(a) for a in re.findall(
+            r"--ink-\d+:\s*rgba\(var\(--ink-rgb\),\s*(\.\d+)\)", css)]
+        assert len(alphas) >= 3, alphas
+        for reading, t in tokens.items():
+            for alpha in alphas:
+                for ground in ("--paper", "--surface"):
+                    mixed = _over(t["--ink"], t[ground], alpha)
+                    r = contrast(mixed, t[ground])
+                    assert r >= 4.5, (
+                        f"{reading} ink@{alpha} on {ground}: {r:.2f}:1")
+
+    def test_no_component_carries_a_palette_hex(self):
+        """Colour lives in the token block or nowhere. This is what makes
+        one attribute on the root able to reskin the whole page."""
+        css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
+        body = css[css.index("* { box-sizing"):]
+        assert re.findall(r"#[0-9a-fA-F]{6}", body) == []
+
+
+class TestScrollChoreography:
+    """The pass's core: what moves, when, and what happens if you ask it
+    not to. Nothing here changes what the app says or computes."""
+
+    @staticmethod
+    def _css():
+        return (HERE / "static" / "style.css").read_text(encoding="utf-8")
+
+    @staticmethod
+    def _page_src():
+        return (HERE / "templates" / "index.html").read_text(encoding="utf-8")
+
+    # --- 1. the rules draw --------------------------------------------------
+
+    def test_fold_rules_draw_left_to_right(self):
+        css = self._css()
+        block = css[css.index(".mark::before, .fold-rule::before {"):]
+        block = block[:block.index("}")]
+        assert "transform: scaleX(0)" in block
+        assert "transform-origin: left" in block
+        assert "height: 1px" in block
+        done = css[css.index(".mark.is-in::before"):]
+        assert "scaleX(1)" in done[:done.index("}")]
+
+    def test_a_rule_is_never_a_border_that_cannot_be_drawn(self):
+        """`.mark` used to be a border-top. A border cannot be scaled, so
+        the rule is a pseudo-element now — this pins the swap."""
+        css = self._css()
+        block = css[css.index(".mark, .fold-rule {"):]
+        assert "border-top: none" in block[:block.index("}")]
+
+    # --- 2. the plate pins and releases ------------------------------------
+
+    def test_the_plate_pins_beside_the_reading(self):
+        css = self._css()
+        assert '<div class="leaf">' in self._page_src()
+        block = css[css.index(".leaf > .plate {"):]
+        block = block[:block.index("}")]
+        assert "position: sticky" in block
+        assert "align-self: start" in block
+        assert "grid-row: 1 / span 2" in block, (
+            "the pin must span the whole leaf, or it releases early")
+
+    def test_the_pin_is_desktop_only_and_the_phone_gets_the_plate_first(self):
+        """At 390px the plate leads, unpinned — a pinned plate on a phone
+        would eat the screen the reading needs."""
+        css = self._css()
+        pin = css.index(".leaf > .plate {")
+        media = css.rindex("@media (min-width: 1000px)", 0, pin)
+        assert media < pin
+        # …and nothing pins it outside that query.
+        outside = css[:media] + css[css.index("/* --- 3. the ghost numeral"):]
+        assert ".leaf > .plate" not in outside
+
+    def test_the_release_point_is_the_last_contents_entry(self):
+        """No JS decides this: the sticky column ends where its grid ends,
+        and the grid ends after the contents. The proof is the DOM order."""
+        page = self._page_src()
+        leaf = page[page.index('<div class="leaf">'):page.index("<!-- /leaf -->")]
+        assert leaf.index('class="plate') < leaf.index('class="glance"')
+        assert leaf.index('class="glance"') < leaf.index('class="domaingrid"')
+        assert "domaingrid" in leaf and leaf.rindex("dcard") < len(leaf)
+
+    # --- 3. ghost numerals --------------------------------------------------
+
+    def test_every_domain_carries_its_ghost_numeral(self, page):
+        ghosts = re.findall(r'class="ghostno"[^>]*>([^<]+)<', page)
+        assert ghosts == ["02", "03", "04", "05", "06"], ghosts
+        # It repeats the folio, so it is decoration to a screen reader.
+        assert page.count('class="ghostno" aria-hidden="true"') == 5
+
+    def test_the_ghost_numeral_is_a_watermark_not_a_heading(self):
+        css = self._css()
+        block = css[css.index(".ghostno {"):]
+        block = block[:block.index("}")]
+        # In FLOW, not absolute: positioned against the centring flex
+        # container it hung at the top of the screenful while the title
+        # centred below it, leaving 200px of nothing between the two. What
+        # the gate actually cares about is that it behaves as a watermark —
+        # under the type, untouchable, and faint.
+        assert "z-index: 0" in block
+        assert "pointer-events: none" in block
+        assert "user-select: none" in block
+        alpha = float(re.search(r"rgba\(var\(--ink-rgb\),\s*(\.\d+)\)",
+                                block).group(1))
+        assert .08 <= alpha <= .16, f"{alpha} is not a watermark"
+
+    # --- 4 & 5. the verdict moment and the rhythm --------------------------
+
+    def test_each_domain_opens_on_a_full_viewport_verdict(self):
+        css = self._css()
+        block = css[css.index(".verdictmoment {"):]
+        block = block[:block.index("}")]
+        vh = float(re.search(r"min-height:\s*(\d+)vh", block).group(1))
+        assert vh >= 60, vh
+        assert '<div class="verdictmoment">' in self._page_src()
+
+    def test_the_verdict_rises_into_place(self):
+        css = self._css()
+        block = css[css.index(".reveal-rise {"):]
+        block = block[:block.index("}")]
+        assert "translateY(var(--rise))" in block and "opacity: 0" in block
+        rise = int(re.search(r"--rise:\s*(\d+)px", css).group(1))
+        assert 16 <= rise <= 24, f"{rise}px is outside the brief's 16-24px"
+        phone = re.search(r"max-width:\s*560px\)\s*\{\s*:root\s*\{\s*--rise:\s*(\d+)px",
+                          css)
+        assert phone and int(phone.group(1)) == 8, "the phone gets 8px"
+
+    def test_the_working_fades_in_as_one_block_not_a_queue(self):
+        css = self._css()
+        assert 'class="working reveal"' in self._page_src()
+        block = css[css.index(".working {"):]
+        assert "opacity: 0" in block[:block.index("}")]
+        # Two columns where there is room — dense after the airy verdict.
+        twocol = css[css.index("@media (min-width: 700px) {\n  .working"):]
+        assert "column-count: 2" in twocol[:200]
+
+    # --- 6. how it is driven ------------------------------------------------
+
+    def test_scroll_driven_where_supported_observer_everywhere_else(self):
+        css, page = self._css(), self._page_src()
+        assert "@supports (animation-timeline: view())" in css
+        assert "animation-timeline: view()" in css
+        assert 'CSS.supports("animation-timeline", "view()")' in page
+        assert "new IntersectionObserver" in page
+        # The observer stands down where CSS is already driving it.
+        js = page[page.index("const scrollDriven"):]
+        assert "if (scrollDriven || quiet" in js[:900]
+
+    def test_nothing_bounces_or_loops(self):
+        """Judged on declarations, not on the word appearing in a comment.
+
+        This caught two pre-existing infinite animations in the plate's
+        highlight layer — a marching-ants dash and a pulsing ring. An
+        engraved plate does not have crawling ants on it, and an animation
+        that never ends is the one thing on the page a reader cannot scroll
+        away from.
+        """
+        css = self._css()
+        decls = re.findall(r"\banimation(?:-name|-direction|-iteration-count)?:"
+                           r"\s*([^;]+);", css)
+        for value in decls:
+            assert "infinite" not in value, value
+            assert "alternate" not in value, value
+        for dur in re.findall(r"--reveal:\s*(\d+)ms", css):
+            assert 500 <= int(dur) <= 700, dur
+
+    def test_the_reveal_is_one_shot(self):
+        """An element that re-animates every time it re-enters is what makes
+        a long page feel restless."""
+        page = self._page_src()
+        assert "io.unobserve(e.target)" in page
+
+    # --- 7. reduced motion --------------------------------------------------
+
+    def test_reduced_motion_kills_every_animation(self):
+        css = self._css()
+        block = css[css.index("@media (prefers-reduced-motion: reduce)"):]
+        block = block[:block.index("\n}\n", block.index(".verdictmoment"))]
+        assert "animation: none !important" in block
+        assert "transition: none !important" in block
+
+    def test_reduced_motion_leaves_nothing_hidden(self):
+        """The failure mode of a reveal is a reader who asked for no motion
+        being served opacity:0 forever. Every animated property is forced to
+        its FINAL value, not its initial one."""
+        css = self._css()
+        block = css[css.index("@media (prefers-reduced-motion: reduce)"):]
+        assert "scaleX(1) !important" in block
+        assert "opacity: 1 !important" in block
+        assert "transform: none !important" in block
+
+    def test_reduced_motion_keeps_the_pin(self):
+        """'Un-pins nothing essential.' A sticky element is layout, not
+        motion; dropping it would take the plate away from the reading it
+        belongs beside, which is a content loss, not a motion reduction."""
+        css = self._css()
+        block = css[css.index("@media (prefers-reduced-motion: reduce)"):]
+        assert "position: static" not in block
+        assert "position: relative !important" not in block
+
+    def test_the_observer_stands_down_under_reduced_motion(self):
+        page = self._page_src()
+        js = page[page.index("const scrollDriven"):]
+        assert 'matchMedia("(prefers-reduced-motion: reduce)")' in js[:600]
+        assert 'targets.forEach(el => el.classList.add("is-in"))' in js[:1400]
+
+
+class TestReducedMotionInARealBrowser:
+    """'prefers-reduced-motion: reduce disables ALL motion and un-pins
+    nothing essential — test this explicitly.'
+
+    A stylesheet assertion cannot show that a reader who asked for no motion
+    actually SEES the page. The failure mode of any reveal is serving that
+    reader `opacity: 0` forever, and only a browser with the preference set
+    can prove it does not happen here.
+    """
+
+    @classmethod
+    @pytest.fixture(scope="class")
+    def quiet(cls):
+        pw = pytest.importorskip("playwright.sync_api",
+                                 reason="playwright not installed")
+        import threading
+        from werkzeug.serving import make_server
+        from app import app
+        srv = make_server("127.0.0.1", 0, app, threaded=True)
+        port = srv.socket.getsockname()[1]
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            with pw.sync_playwright() as p:
+                browser = TestMaskedBirthFieldsInARealBrowser._launch(p, pytest)
+                ctx = browser.new_context(viewport={"width": 1280,
+                                                    "height": 900},
+                                          reduced_motion="reduce")
+                pg = ctx.new_page()
+                pg.goto(f"http://127.0.0.1:{port}/")
+                for k, v in GATE_FORM.items():
+                    pg.evaluate(
+                        "([k,v]) => { const e = document.querySelector("
+                        "`[name=\"${k}\"]`); if (e) e.value = v; }", [k, v])
+                with pg.expect_navigation():
+                    pg.evaluate("document.querySelector('#cast').submit()")
+                pg.wait_for_load_state("load")
+                # A domain view, NOT the arrival one. The revealed elements
+                # live inside the domain folds, and on arrival they are in a
+                # hidden view with no client rects — measuring there passed
+                # every assertion vacuously and proved nothing.
+                pg.evaluate("location.hash = '#marriage'")
+                pg.wait_for_timeout(900)
+                out = pg.evaluate(r"""() => {
+                  const vis = [];
+                  document.querySelectorAll(
+                    '.reveal-rise, .working, .mark').forEach(el => {
+                    if (!el.getClientRects().length) return;   // other views
+                    const cs = getComputedStyle(el);
+                    vis.push({
+                      cls: el.className.toString().slice(0, 24),
+                      opacity: +cs.opacity,
+                      transform: cs.transform,
+                      transition: cs.transitionDuration,
+                      animation: cs.animationName,
+                    });
+                  });
+                  const mark = document.querySelector('.mark');
+                  const rule = mark ? getComputedStyle(mark, '::before') : null;
+                  const plate = document.querySelector('.leaf > .plate');
+                  return {
+                    elements: vis,
+                    ruleTransform: rule ? rule.transform : null,
+                    platePosition: plate
+                      ? getComputedStyle(plate).position : null,
+                    prefersReduced: matchMedia(
+                      '(prefers-reduced-motion: reduce)').matches,
+                  };
+                }""")
+                browser.close()
+        finally:
+            srv.shutdown()
+        return out
+
+    def test_the_browser_really_is_asking_for_no_motion(self, quiet):
+        assert quiet["prefersReduced"] is True
+
+    def test_nothing_is_left_invisible(self, quiet):
+        """The one that matters. Every revealed element is fully opaque and
+        untransformed the moment the page renders."""
+        kinds = {k for el in quiet["elements"] for k in el["cls"].split()}
+        assert "reveal-rise" in kinds and "working" in kinds, (
+            f"the animated elements were never measured: {kinds} — a gate "
+            f"that measures a hidden view passes for free")
+        for el in quiet["elements"]:
+            assert el["opacity"] == 1, el
+            assert el["transform"] in ("none", "matrix(1, 0, 0, 1, 0, 0)"), el
+
+    def test_no_transition_or_animation_is_left_running(self, quiet):
+        for el in quiet["elements"]:
+            assert el["transition"] in ("0s", "0s, 0s", "0s, 0s, 0s"), el
+            assert el["animation"] == "none", el
+
+    def test_the_drawn_rule_is_drawn(self, quiet):
+        """scaleX(0) forever would be a page with no rules on it at all."""
+        assert quiet["ruleTransform"] in ("none", "matrix(1, 0, 0, 1, 0, 0)"), \
+            quiet["ruleTransform"]
+
+    def test_the_pin_survives(self, quiet):
+        """Un-pins nothing essential. A sticky element is layout, not motion;
+        dropping it would take the plate away from the reading it belongs
+        beside, which is a content loss dressed up as an accessibility win."""
+        assert quiet["platePosition"] == "sticky"
