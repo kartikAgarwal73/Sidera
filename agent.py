@@ -134,11 +134,12 @@ leaves. USE THE ASPECTS: "transiting Saturn in your 4th also aspects your \
 is the kind of sentence this step exists to produce. Check \
 `contact.*` for any transit sitting within 3° of a natal point, and \
 `transit.X.station` for retrogrades.
-  6. SYNTHESIS. Two to four paragraphs weaving all five together — what \
-SUPPORTS the matter, what DELAYS or complicates it, and what the running \
-period is emphasising right now. Not five labelled sections: one reading in \
-which the frames agree, disagree, and are weighed. Where two frames point \
-different ways, say so and say which governs.
+  6. SYNTHESIS. Weave all five together — what SUPPORTS the matter, what \
+DELAYS or complicates it, and what the running period is emphasising right \
+now. Not five labelled sections: one reading in which the frames agree, \
+disagree, and are weighed. Where two frames point different ways, say so and \
+say which governs. Work all five frames BEFORE you write; then write the \
+answer first, as below.
 
 Every sentence of the synthesis is INTERPRETIVE and cites its rule. Timing \
 appears ONLY as a window already in the ledger — a dasha period's dates or a \
@@ -182,19 +183,62 @@ Describe what the chart says; leave decisions to them. No medical, legal or \
 financial instructions, no predictions of death or disease. Where a question \
 touches those, speak to the chart's themes and leave the action to the person.
 
+ANSWER FIRST, THEN SHOW THE WORKING
+Answer like a confident astrologer in two sentences, then show the working.
+
+`verdict` is those two sentences and it is the FIRST thing the reader sees. \
+It must:
+  * contain the actual answer, in words a stranger with no astrology \
+understands — "Marriage is late in this chart but well supported: the delays \
+are real and they have an end." NOT "the chart suggests it may be possible \
+that..."
+  * use NO Sanskrit and NO house numbers. Say "the planet that rules your \
+marriage" and not "the 7th lord"; "the deeper chart that tests it" and not \
+"the D9". The technical names belong in `answer` and the statements, where \
+they are glossed and cited.
+  * carry no caveat, no preamble and no throat-clearing. Never open with \
+"It is important to note", "The chart does not forecast outcomes", "While \
+there is no definitive", "That said", "First of all", or any other sentence \
+about the reading standing in front of the reading.
+  * still be a CONDITION, not a certainty. "Marriage is well supported and \
+slow" is a verdict this system can stand behind; "you will marry in 2027" is \
+not, and the validator will withhold the whole answer for it. Answering \
+first changed the ORDER of speech, not what may be said.
+
+`answer` is the working underneath: 2-6 sentences that earn the verdict, \
+naming the frames, the placements and the dated windows. Its FIRST paragraph \
+is at most 80 words. Technical language is welcome here. Sanskrit terms in \
+their usual roman transliteration, briefly glossed the first time.
+
+ONE CAVEAT, AT THE END, ONE LINE
+If a caveat is genuinely needed, it is the LAST line of `answer` and it is \
+one line. Not two, not one per paragraph, and never before the reading. The \
+honesty of this system lives in the confidence labels, the cited fact ids \
+and the validator that withholds a bad answer outright — not in preamble. A \
+reader who is hedged at cannot check anything; a reader who is shown the \
+ledger can.
+
 VOICE
 An honest astrologer speaking to someone they respect. Warm, direct, \
 unhurried. No flattery, no cosmic reassurance, no hedging filler, no \
-compliance language. Sanskrit terms in their usual roman transliteration, \
-briefly glossed the first time.
+compliance language.
 """
 
 RESPONSE_SCHEMA = {
     "type": "object",
     "properties": {
+        "verdict": {
+            "type": "string",
+            "description": (
+                "The answer itself, in 1-2 sentences a stranger understands. "
+                "No Sanskrit, no house numbers, no caveat, no preamble. This "
+                "is the first thing the reader sees."),
+        },
         "answer": {
             "type": "string",
-            "description": "The reply in plain prose, 2-6 sentences.",
+            "description": (
+                "The working underneath the verdict, 2-6 sentences. First "
+                "paragraph at most 80 words. Technical language welcome."),
         },
         "answer_statements": {
             "type": "array",
@@ -227,7 +271,8 @@ RESPONSE_SCHEMA = {
         "refusal_reason": {"type": "string"},
     },
     "required": ["answer", "answer_statements", "facts_used",
-                 "rules_applied", "confidence", "refused", "refusal_reason"],
+                 "rules_applied", "confidence", "refused", "refusal_reason",
+                 "verdict"],
     "additionalProperties": False,
 }
 
@@ -643,7 +688,12 @@ def validate_payload(payload: dict, chart: Chart,
     known = {f.id for f in build_facts(chart, when)}
     moving = _frame_positions(chart, when)
     ledger = _ledger_text(chart, when)
-    answer = payload.get("answer", "")
+    # The verdict is prose, and it is the prose the reader is MOST likely to
+    # read — often the only prose they read. It is therefore validated exactly
+    # as the answer is. A claim that escaped checking by being promoted to the
+    # headline would be escaping in the worst possible place.
+    answer = "\n\n".join(
+        p for p in (payload.get("verdict", ""), payload.get("answer", "")) if p)
     out = list(validate_answer(answer, chart, when,
                                payload.get("facts_used", ()), known,
                                transits=moving))
@@ -724,45 +774,49 @@ def explain_violations(violations) -> tuple[str, str]:
     next. Name the kind of mistake and suggest a narrower question, because
     the usual cause is a question broad enough that the reply wandered off
     the computed facts.
+
+    `why` is a CLAUSE, not a sentence: the caller renders the hint first and
+    the reason after it ("Ask … . That reply <why>, so it was not shown."),
+    because the one useful sentence should not be last.
     """
     kinds = {v.kind for v in violations}
     if "asserted-certainty" in kinds:
-        return ("the reply stated an outcome as certain, and this chart "
-                "describes tendencies and seasons rather than events",
+        return ("stated an outcome as certain, and this chart describes "
+                "tendencies and seasons rather than events",
                 "Ask what the period favours or asks for, rather than what "
                 "will happen.")
     if "invented-date" in kinds:
-        return ("the reply named a date your chart did not produce",
+        return ("named a date your chart did not produce",
                 "Ask about a window the chart does carry — a dasha period or "
                 "a slow transit.")
     if "wrong-transit-aspect" in kinds:
-        return ("the reply said a transiting graha aspects a house that it "
-                "does not aspect from where it currently stands",
+        return ("said a transiting graha aspects a house it does not "
+                "aspect from where it currently stands",
                 "Ask what a particular transit is touching — for example "
                 "\u201cwhat is Saturn working on right now?\u201d")
     if "ungoverned-generic" in kinds:
-        return ("the reply gave the general from-the-Moon verdict for a "
-                "transit that is sitting on one of your natal grahas, where "
-                "the contact is what governs",
+        return ("gave the general from-the-Moon verdict for a transit "
+                "sitting on one of your natal grahas, where the contact "
+                "is what governs",
                 "Ask about the contact itself — for example “what does "
                 "the transit sitting on my natal Venus mean?”")
     if "unknown-rule-id" in kinds:
-        return ("the reply leaned on a classical rule that is not in this "
-                "app's rule library",
+        return ("leaned on a classical rule that is not in this app's "
+                "rule library",
                 "Try asking about a dasha period or a transit, where the "
                 "library is fullest.")
     if kinds & {"wrong-natal-sign", "wrong-natal-house", "wrong-lagna"}:
-        why = ("the reply made a placement claim that does not match your "
-               "computed chart")
+        why = ("made a placement claim that does not match your computed "
+               "chart")
     elif kinds & {"wrong-transit-sign", "wrong-transit-house"}:
-        why = ("the reply described a transit that does not match where the "
-               "grahas actually are today")
+        why = ("described a transit that does not match where the grahas "
+               "actually are today")
     elif "unknown-fact-id" in kinds:
-        why = "the reply cited a fact that is not in your chart's ledger"
+        why = "cited a fact that is not in your chart's ledger"
     elif kinds & {"uncited-interpretation", "uncited-computed"}:
-        why = "the reply made a claim without citing what it rests on"
+        why = "made a claim without citing what it rests on"
     else:
-        why = "the reply did not check out against your computed chart"
+        why = "did not check out against your computed chart"
     hint = ("Try rephrasing — for example \u201cwhat does my current dasha "
             "emphasise?\u201d or \u201cwhich house is Saturn transiting?\u201d")
     return why, hint
@@ -857,6 +911,10 @@ def log_correction(question: str, answer: str, *, reason: str = "",
 @dataclass(frozen=True)
 class AgentAnswer:
     answer: str
+    # The 1-2 sentence answer the reader sees first. Separate from `answer`
+    # so answer-first is a property of the structure, not of the model
+    # remembering to put it first.
+    verdict: str = ""
     statements: list[dict] = field(default_factory=list)
     facts_used: list[str] = field(default_factory=list)
     rules_applied: list[str] = field(default_factory=list)
@@ -986,6 +1044,7 @@ def ask_chart(chart: Chart, when: datetime, question: str, *,
         rules_applied=data.get("rules_applied", []),
         confidence=data.get("confidence", "Interpretive"),
         refused=bool(data.get("refused")),
+        verdict=data.get("verdict", ""),
         refusal_reason=data.get("refusal_reason", ""),
         violations=violations,
         model=model,

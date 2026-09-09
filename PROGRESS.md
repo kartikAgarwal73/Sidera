@@ -1,5 +1,93 @@
 # PROGRESS
 
+## Answer first, one breath, then the working ✅ (2026-09-09)
+
+**From the founder's live walk.** The app over-explained and buried the
+answer — the same over-hedging disease the readings are built to avoid, in
+text form. Someone arriving with a question about their marriage was handed
+three hundred words that opened on the word *"Mixed"* and never quite said
+anything.
+
+**This changes the ORDER and the ECONOMY of speech, not its honesty.** Every
+fact id, rule citation, confidence label and validator check is untouched, and
+`TestEditorialDoctrine` permits no sentence that was forbidden yesterday.
+
+### The doctrine, as code
+
+`voice.py` holds the budgets, the banned patterns and the checkers, so the
+prose and the tests that police it cannot drift apart: answer first in one
+breath · 20-word teaser, 120-word synthesis, 80-word agent lead · no
+throat-clearing · one caveat, at the end, one line · plain register on top.
+
+### Measured, before and after
+
+| | before | after |
+|---|---|---|
+| domain synthesis, visible | 255–301 words | **73–90** |
+| card teaser | 16–21 words, opening on "Mixed —" | **14–20**, opening on the verdict |
+| signals shown | all of them, in the top layer | the sharpest; **all 59 still in the expanders** |
+
+The marriage card used to read *"Mixed — a strong 5th lord and a debilitated
+7th lord. Live now: Saturn on it until Jun 2027."* It now reads:
+
+> **Marriage is more contested than helped — the planet that rules it is weak.
+> Right now, Saturn is on it until Jun 2027.**
+
+Same facts, same fact ids, same rules. The verdict is in the first clause, and
+"5th lord" has moved one tap down to where it can be glossed.
+
+### The plain register is a translation, not a dumbing-down
+
+Each `Signal` now carries three registers: `text` (full, technical, for the
+expander), `brief`, and `plain` (no Sanskrit, no house numbers, for the top
+layer). An empty `plain` means the signal has no top-layer form and stays in
+the working — which is the right answer for a supporting-house detail nobody
+needs in the first breath. A test asserts the expanders still contain
+"house", "lord" and "drishti", because an app that went plain all the way
+down would have lost the thing that makes it checkable.
+
+### Answer-first as structure, not as a habit
+
+Three places where the doctrine is now a property of the shape rather than
+something to remember:
+
+- **The caveat is a field**, not a sentence buried in prose. "One caveat, at
+  the end" is enforced by there being exactly one slot for it.
+- **The agent's `verdict` is a required schema field.** A model cannot forget
+  it or bury it mid-paragraph if the reply will not validate without it. Its
+  style section is rewritten around *"answer like a confident astrologer in
+  two sentences, then show the working."*
+- **The verdict is validated exactly as the answer is.** The headline is the
+  worst possible place for a claim to escape, so it is folded into the same
+  prose the validator reads. A test moves a certainty into each field in turn
+  and asserts both are caught.
+
+### Also fixed, and worth naming
+
+The withheld message opened on the word *"Withheld"* and put the one useful
+sentence — what to ask instead — last, behind an explanation of our own
+machinery. It leads with the action now. The deterministic `/ask` lenses led
+with their own scoring (*"The strongest agreement (75%) points toward…"*); the
+finding opens the sentence.
+
+**Two things the tests caught that I had not:**
+
+- The **"Explore the full chart" card** read *"Grahas, daśās, the timeline,
+  transits, yogas, doshas…"* — the arrival screen, the most-read surface in
+  the app, written entirely in Sanskrit. It tells a newcomer nothing.
+- My **first banned-phrase pattern was too greedy**: unanchored `before i`
+  flagged the innocent word "before it" in the app's own copy. Openers like
+  "First," and "That said," are only throat-clearing where a sentence begins,
+  so they are matched there and nowhere else. A test now asserts both halves —
+  that the list catches eleven real offenders, and that it fires on none of
+  seven honest sentences the app should keep saying.
+
+**Verified red before being kept:** restoring the old verbose, hedged
+synthesis fails **4** gates independently — preamble, budget, throat-clearing
+and jargon.
+
+`pytest` → **398 passed** (external 70 · invariant 238 · characterization 80).
+
 ## The birth fields stop following the viewer's system locale ✅ (2026-09-08)
 
 **Reported live.** On sidera.onrender.com, macOS Safari with a 12-hour system

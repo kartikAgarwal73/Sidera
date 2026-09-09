@@ -2483,8 +2483,13 @@ class FakeClient:
 
 
 def _reply(answer, *, statements=None, facts=(), rules=(),
-           confidence="Interpretive", refused=False, reason=""):
+           confidence="Interpretive", refused=False, reason="", verdict=None):
     return {
+        # The verdict is a required field now, and it is validated exactly as
+        # the answer is — so a fixture that leaves it out defaults to the
+        # answer's own first sentence rather than to an unchecked blank.
+        "verdict": (answer.split(".")[0] + "." if verdict is None and answer
+                    else (verdict or "")),
         "answer": answer,
         "answer_statements": statements if statements is not None else [
             {"text": answer, "label": "COMPUTED",
@@ -3098,7 +3103,10 @@ class TestGroundedAgent:
         schema = sent["output_config"]["format"]["schema"]
         assert schema["required"] == [
             "answer", "answer_statements", "facts_used", "rules_applied",
-            "confidence", "refused", "refusal_reason"]
+            "confidence", "refused", "refusal_reason",
+            # Answer-first is structural: the verdict is its own required
+            # field, so it cannot be forgotten or buried mid-paragraph.
+            "verdict"]
         assert schema["additionalProperties"] is False
 
     def test_question_length_is_bounded(self, chart):
@@ -4988,7 +4996,7 @@ class TestDomainRestructure:
                        "definitely", "expect to", "going to"):
             assert banned not in blob, banned
         # …and it does say what it IS for: support, strain, what is live.
-        assert "what supports" in blob and "what asks more of you" in blob
+        assert "what holds it up" in blob and "what asks more of you" in blob
 
     def test_the_reading_spans_all_five_frames(self, chart):
         import domainread
@@ -5239,3 +5247,286 @@ class TestMaskedBirthFieldsInARealBrowser:
         error = re.search(r'<p class="error">(.*?)</p>', html, re.S)
         assert not error, f"form refused a valid masked entry: {error.group(1)}"
         assert "Leo 11°05′08″" in html
+
+
+class TestEditorialDoctrine:
+    """Answer first, one breath, then the working — enforced, not hoped for.
+
+    A live walk-through found the app over-explaining and burying the answer:
+    the domain synthesis ran to three hundred words and opened on the word
+    "Mixed". This class is the doctrine in `voice.py` made non-negotiable.
+
+    It polices ORDER and ECONOMY only. Every honesty gate — the validator,
+    the fact ids, the confidence labels, the rule citations — is unchanged and
+    tested exactly as before, elsewhere in this file. Nothing here permits a
+    single sentence that was not permitted yesterday.
+    """
+
+    @classmethod
+    @pytest.fixture(scope="class")
+    def readings(cls, chart):
+        import domainread
+        return domainread.read_all(chart, AGENT_WHEN)
+
+    # --- 1. answer first ----------------------------------------------------
+
+    def test_every_domain_opens_with_the_verdict_not_a_preamble(
+            self, readings):
+        import voice
+        for r in readings:
+            assert r.verdict, r.domain.id
+            assert r.paragraphs[0] == r.verdict, (
+                f"{r.domain.id}: the verdict must BE the first paragraph, "
+                f"not something the reader scrolls to")
+            assert voice.is_answer_first(r.verdict), r.domain.id
+            # "One breath" is two sentences, not a paragraph with a full stop.
+            assert len(voice.sentences(r.verdict)) <= voice.VERDICT_SENTENCES, (
+                f"{r.domain.id}: {r.verdict}")
+
+    def test_the_card_teaser_is_the_readings_own_first_breath(self, readings):
+        """A card promising one thing and a view saying another would be two
+        readings of one chart — and the card is the more-read of the two."""
+        for r in readings:
+            assert r.verdict.startswith(r.teaser.rstrip(".")[:40]), (
+                f"{r.domain.id}: card and view have drifted apart\n"
+                f"  card: {r.teaser}\n  view: {r.verdict}")
+
+    # --- 2. hard budgets ----------------------------------------------------
+
+    def test_teasers_fit_the_card_budget(self, readings):
+        import voice
+        for r in readings:
+            n = voice.words(r.teaser)
+            assert 0 < n <= voice.TEASER_WORDS, (
+                f"{r.domain.id}: {n} words > {voice.TEASER_WORDS}\n"
+                f"  {r.teaser}")
+
+    def test_the_visible_synthesis_fits_its_budget(self, readings):
+        """120 words before any expander. What is cut is not lost — it is in
+        the working below, unchanged and still citing its fact ids."""
+        import voice
+        for r in readings:
+            n = voice.words(r.visible)
+            assert n <= voice.SYNTHESIS_WORDS, (
+                f"{r.domain.id}: {n} words visible > {voice.SYNTHESIS_WORDS}")
+            # …and the working is still all there, which is the other half of
+            # the bargain. Cutting the top layer must not cut the evidence.
+            assert len(r.signals) >= 3, r.domain.id
+
+    def test_the_budget_is_binding_not_decorative(self, readings):
+        """A budget nothing ever approaches would prove nothing.
+
+        The synthesis before this change ran 255-301 words. If some later
+        edit shrinks every reading to a stub the budgets would still 'pass',
+        so this asserts the readings are substantial as well as short.
+        """
+        import voice
+        assert max(voice.words(r.visible) for r in readings) >= 60
+
+    # --- 3. no throat-clearing ---------------------------------------------
+
+    def test_no_throat_clearing_anywhere_a_reader_looks(self, readings):
+        import voice
+        for r in readings:
+            for text in (r.teaser, r.visible):
+                hits = voice.find_throat_clearing(text)
+                assert not hits, f"{r.domain.id}: {hits}\n  in: {text}"
+
+    def test_the_banned_phrases_actually_catch_the_disease(self):
+        """The list is only worth having if it fires on the real sentences.
+
+        Each of these is a shape the app or the model actually produced, or
+        the founder quoted back. A pattern list that passes everything is
+        decoration.
+        """
+        import voice
+        for sentence in (
+                "It's important to note that the chart does not forecast "
+                "outcomes.",
+                "It is worth noting that Saturn is slow.",
+                "While no definitive answer is possible, marriage is likely.",
+                "The chart doesn't predict outcomes, but Venus is strong.",
+                "That said, the 7th lord is weak.",
+                "First of all, let us look at the 7th house.",
+                "Before we begin, a word about how this works.",
+                "Keep in mind that transits are temporary.",
+                "The chart suggests that it may be possible that you marry.",
+                "There are several factors at play here.",
+                "The short answer is that Saturn is transiting your 4th."):
+            assert voice.find_throat_clearing(sentence), (
+                f"not caught: {sentence}")
+
+    def test_the_banned_phrases_do_not_fire_on_honest_prose(self):
+        """The other half: a list that flags real readings is worse than none.
+
+        These are sentences the app should keep saying.
+        """
+        import voice
+        for sentence in (
+                "Marriage is more contested than helped — the planet that "
+                "rules it is weak.",
+                "Saturn is on it until Jun 2027.",
+                "A transit is a season with an end date, not a verdict.",
+                "This reads the chart's condition, not what will happen.",
+                "The day runs 01-31, and the month comes second.",
+                "Work and money is one of the harder parts of your chart.",
+                "Two frames disagree here, and the contact governs."):
+            assert not voice.find_throat_clearing(sentence), (
+                f"false positive on: {sentence}")
+
+    # --- 4. one caveat, at the end -----------------------------------------
+
+    def test_exactly_one_caveat_and_it_comes_last(self, readings):
+        """The caveat is a FIELD, not a habit — so 'one, at the end' is a
+        property of the structure rather than something to remember."""
+        for r in readings:
+            assert r.caveat and "\n" not in r.caveat
+            assert len(r.caveat.split(". ")) == 1, r.caveat
+            body = " ".join(r.paragraphs)
+            for hedge in ("not a verdict", "not what will happen",
+                          "rather than a bad sign"):
+                assert hedge not in body, (
+                    f"{r.domain.id}: a second caveat inside the reading — "
+                    f"'{hedge}'")
+            assert r.visible.rstrip().endswith(r.caveat)
+
+    # --- 5. plain register on top ------------------------------------------
+
+    def test_the_top_layer_carries_no_sanskrit_and_no_house_numbers(
+            self, readings):
+        """Someone who has never met this system reads the verdict.
+
+        The technical language is not removed from the app — it is required
+        one tap down, where it can be glossed and cited, and the next test
+        asserts it is still there.
+        """
+        import voice
+        for r in readings:
+            hits = voice.find_jargon(r.visible)
+            assert not hits, f"{r.domain.id}: {hits}\n  in: {r.visible}"
+
+    def test_the_working_underneath_keeps_every_technical_word(self, readings):
+        """The plain register is a translation, not a dumbing-down.
+
+        If the expanders had gone plain too, the app would have lost the
+        thing that makes it checkable.
+        """
+        import voice
+        blob = " ".join(s.text for r in readings for s in r.signals)
+        assert voice.find_jargon(blob), (
+            "the expanders have gone plain — the technical statement, with "
+            "its house numbers and its drishti, is the checkable one")
+        for term in ("house", "lord", "drishti"):
+            assert term in blob.lower(), term
+
+    # --- the rendered page --------------------------------------------------
+
+    def test_the_dashboard_obeys_the_doctrine_where_a_reader_meets_it(
+            self, page):
+        """Not the module — the HTML. A doctrine that holds in a dataclass
+        and not on the page has not been applied."""
+        import voice
+        for cls in ("dcard-teaser", "dverdict"):
+            found = re.findall(rf'class="{cls}"[^>]*>(.*?)</', page, re.S)
+            assert found, cls
+            for raw in found:
+                text = re.sub(r"<[^>]+>", "", raw).strip()
+                assert not voice.find_throat_clearing(text), (cls, text)
+                assert not voice.find_jargon(text), (cls, text)
+                budget = (voice.TEASER_WORDS if cls == "dcard-teaser"
+                          else voice.SYNTHESIS_WORDS)
+                assert voice.words(text) <= budget, (cls, text)
+
+    def test_the_verdict_is_the_first_prose_in_the_domain_view(self, page):
+        """Order on the page, not just in the payload."""
+        for did in ("marriage", "career"):
+            view = page[page.index(f'id="view-domain-{did}"'):]
+            view = view[:view.index("The working, step by step")]
+            assert view.index('class="dverdict"') < view.index('class="conf"')
+            assert 'class="dsynth"' not in view[:view.index('class="dverdict"')]
+
+    def test_the_glance_still_answers_in_one_breath(self, page):
+        """The Glance was already answer-first. This keeps it that way."""
+        import voice
+        raw = re.search(r'<p class="statement">(.*?)</p>', page, re.S).group(1)
+        text = re.sub(r"<[^>]+>", "", raw).strip()
+        assert not voice.find_throat_clearing(text), text
+        assert voice.words(text) <= 25, text
+        assert len(voice.sentences(text)) <= 2, text
+
+    # --- the agent ----------------------------------------------------------
+
+    def test_the_agent_is_told_to_answer_first_and_shown_how(self):
+        import agent
+        p = agent.SYSTEM_PROMPT
+        assert "ANSWER FIRST" in p
+        assert "confident astrologer in two sentences" in p
+        assert "ONE CAVEAT, AT THE END, ONE LINE" in p
+        assert "NO Sanskrit and NO house numbers" in p
+        # The doctrine must not be sold as a licence to overclaim.
+        assert "CONDITION, not a certainty" in p
+        assert "You may not say what WILL happen." in p
+
+    def test_the_agents_verdict_is_a_required_field(self):
+        """Answer-first as structure. A model cannot forget the verdict or
+        bury it mid-paragraph if the schema will not accept the reply."""
+        import agent
+        assert "verdict" in agent.RESPONSE_SCHEMA["required"]
+        desc = agent.RESPONSE_SCHEMA["properties"]["verdict"]["description"]
+        assert "1-2 sentences" in desc and "no caveat" in desc.lower()
+
+    def test_the_verdict_is_validated_exactly_as_the_answer_is(
+            self, chart, agent_facts):
+        """The headline is the worst possible place for a claim to escape.
+
+        Whatever the answer would be withheld for, the verdict is withheld
+        for — moving a sentence into the verdict must not launder it.
+        """
+        import agent
+        for field in ("answer", "verdict"):
+            payload = _reply("Saturn is transiting your 4th house.",
+                             facts=["transit.saturn"], verdict="")
+            payload[field] = ("You will definitely marry in March 2031.")
+            violations = agent.validate_payload(payload, chart, AGENT_WHEN)
+            kinds = {v.kind for v in violations}
+            assert kinds & {"asserted-certainty", "invented-date"}, (
+                f"a certainty in `{field}` went unchecked: {kinds}")
+
+    def test_a_withheld_answer_leads_with_what_to_do(self, chart):
+        """Answer-first applies to the bad news too.
+
+        The old message opened on the word "Withheld" and put the one useful
+        sentence — what to ask instead — last, behind an explanation of our
+        own machinery.
+        """
+        import agent, voice
+        for kind in ("asserted-certainty", "invented-date", "unknown-fact-id"):
+            why, hint = agent.explain_violations(
+                [agent.Violation(kind, "x", "y")])
+            message = f"{hint} That reply {why}, so it was not shown."
+            first = voice.sentences(message)[0]
+            assert first.lower().startswith(("ask", "try")), first
+            assert not voice.find_throat_clearing(message), message
+
+    def test_the_ask_lenses_answer_before_they_score(self):
+        """The deterministic /ask led with its own methodology: "The
+        strongest agreement (75%) points toward…". The finding leads now."""
+        import ask, voice
+        for q in ask.REGISTRY.values():
+            frame = q.answer_frame
+            assert frame.startswith("{modal}"), (
+                f"{q.key}: the answer must open the sentence — {frame}")
+            assert not voice.find_throat_clearing(frame), q.key
+
+    def test_the_ask_answers_render_finding_first(self, page):
+        import voice
+        seg = page[page.index('id="ask"'):page.index('id="agent"')]
+        answers = re.findall(r'class="yogadetail">(.*?)</p>', seg, re.S)
+        assert answers, "no /ask answers rendered"
+        for raw in answers:
+            text = re.sub(r"<[^>]+>", "", raw).strip()
+            if "carried by" not in text:
+                continue
+            assert not text.startswith(("The strongest", "Dated windows",
+                                        "The period's")), text
+            assert not voice.find_throat_clearing(text), text

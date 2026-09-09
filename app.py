@@ -580,7 +580,11 @@ def domain_cards(chart, now: datetime) -> list[dict]:
             "title": DOMAIN_TITLES[did],
             "label": domain.label,
             "teaser": reading.teaser,
-            "paragraphs": list(reading.paragraphs),
+            # The verdict is paragraphs[0]; carried separately so the view can
+            # set it in the answering voice and the rest in the working one.
+            "verdict": reading.verdict,
+            "paragraphs": list(reading.paragraphs[1:]),
+            "caveat": reading.caveat,
             "confidence": reading.confidence,
             "houses_label": ", ".join(
                 f"the {ordinal(h)}" for h in domain.houses),
@@ -854,8 +858,12 @@ def ask_endpoint():
             facts_used=answer.facts_used, model=answer.model,
             violations=answer.violations)
         why, hint = agent.explain_violations(answer.violations)
+        # Answer-first applies to the bad news too. The old wording led with
+        # the word "Withheld" and put the one useful sentence — what to ask
+        # instead — at the very end, behind an explanation of our own
+        # machinery. The action comes first now; the reason follows it, once.
         return jsonify(
-            error=(f"Withheld: {why}, so it was not shown. {hint}"),
+            error=f"{hint} That reply {why}, so it was not shown.",
             withheld=True,
             violations=[f"{v.kind}: {v.detail}" for v in answer.violations],
             remaining=remaining), 422

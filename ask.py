@@ -224,8 +224,13 @@ def ask(key: str, ctx: ChartContext) -> Verdict:
         disagreement = ("The lenses do not fully agree — shown side by "
                         "side, unresolved: " + "; ".join(parts) + ".")
 
+    # The finding now opens the sentence, so it needs a capital it did not
+    # need mid-clause. Only the first character: "D9 lagna" must stay "D9".
+    def _open(text: str) -> str:
+        return text[:1].upper() + text[1:] if text else text
+
     answer = q.answer_frame.format(
-        modal=", ".join(modal) if modal else "no single signal",
+        modal=_open(", ".join(modal) if modal else "no single signal"),
         carriers=", ".join(f.lens for f in findings
                            if f.indications & set(modal)) or "none",
         pct=int(convergence * 100),
@@ -477,8 +482,8 @@ REGISTRY: dict[str, Question] = {q.key: q for q in [
         text="What field might my spouse work in?",
         category="partnership",
         techniques=("7th lordship", "navamsa", "karaka"),
-        answer_frame=("The strongest agreement ({pct}%) points toward "
-                      "{modal} — carried by {carriers}."),
+        answer_frame=("{modal} — that is where the lenses agree, at "
+                      "{pct}%, carried by {carriers}."),
         lenses=(
             Lens("7th lord", "lordship",
                  "The 7th lord's nature describes the partner's vocation.",
@@ -497,8 +502,8 @@ REGISTRY: dict[str, Question] = {q.key: q for q in [
         text="What field suits my career?",
         category="career",
         techniques=("10th lordship", "occupancy", "dasamsa"),
-        answer_frame=("The strongest agreement ({pct}%) points toward "
-                      "{modal} — carried by {carriers}."),
+        answer_frame=("{modal} — that is where the lenses agree, at "
+                      "{pct}%, carried by {carriers}."),
         lenses=(
             Lens("10th lord", "lordship",
                  "The lord of the 10th describes the native's karma-field.",
@@ -516,8 +521,8 @@ REGISTRY: dict[str, Question] = {q.key: q for q in [
         text="When do wealth-building periods open?",
         category="wealth",
         techniques=("vimshottari", "dhana lordship", "gocara"),
-        answer_frame=("Dated windows with the strongest overlap ({pct}%): "
-                      "{modal} — carried by {carriers}."),
+        answer_frame=("{modal} — the dated windows where the lenses overlap "
+                      "most, at {pct}%, carried by {carriers}."),
         lenses=(
             Lens("Wealth-lord dashas", "vimshottari",
                  "Periods ruled by the lords of 2/5/9/11 or by Dhana-yoga "
@@ -533,8 +538,8 @@ REGISTRY: dict[str, Question] = {q.key: q for q in [
         text="When are marriage-significant periods?",
         category="partnership",
         techniques=("vimshottari", "karaka", "gocara"),
-        answer_frame=("Dated windows with the strongest overlap ({pct}%): "
-                      "{modal} — carried by {carriers}."),
+        answer_frame=("{modal} — the dated windows where the lenses overlap "
+                      "most, at {pct}%, carried by {carriers}."),
         lenses=(
             Lens("7th-connected dashas", "vimshottari",
                  "Periods of the 7th lord, Venus, or planets occupying the "
@@ -550,8 +555,8 @@ REGISTRY: dict[str, Question] = {q.key: q for q in [
         text="What are the themes of my current period?",
         category="timing",
         techniques=("vimshottari", "lordship", "naisargika maitri"),
-        answer_frame=("The period's converging themes ({pct}%): {modal} — "
-                      "carried by {carriers}."),
+        answer_frame=("{modal} — the period's converging themes, at "
+                      "{pct}%, carried by {carriers}."),
         lenses=(
             Lens("Mahadasha lord", "vimshottari",
                  "The mahadasha lord's placement and lordships set the "

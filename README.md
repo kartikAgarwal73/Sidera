@@ -11,9 +11,10 @@ The dashboard is organised by **what people ask about**, not by technique:
 the wheel, a three-line identity strip and the day's verdict, then a card per
 life domain — Love & Marriage, Work & Money, Home & Family, Body & Vitality,
 Learning & Path — each carrying a one-line condition drawn from its own
-checklist. Tapping one opens the reading verdict-first, with the six-step
-working (natal houses and their lords · karaka · varga · daśā · transits by
-drishti · synthesis) underneath as expanders. Every technical section lives
+checklist. Tapping one opens the reading **answer-first** — one or two sentences a
+stranger understands, carrying the actual verdict — with the six-step working
+(natal houses and their lords · karaka · varga · daśā · transits by drishti ·
+synthesis) underneath as expanders. Every technical section lives
 behind **Explore the full chart**. See
 [`ui-design/RESTRUCTURE.md`](ui-design/RESTRUCTURE.md) for the decision and
 its constraints.
@@ -107,6 +108,23 @@ labelled accordingly rather than dressed up. What genuinely anchors the
 numbers is the ERFA cross-check above and `TestAstronomicalAnchors` —
 person-free published facts (Spica at 180°, the epoch ayanāṃśa, a catalogued
 eclipse) that anyone can verify in any ephemeris.
+
+## How it speaks
+
+Answer first, one breath, then the working. Every domain card, domain view and
+`/ask` reply opens with the verdict in words a stranger understands; the
+working, the Sanskrit and the house numbers begin one tap down, where a term
+can be glossed and a claim can be checked. Hard budgets — 20 words on a card,
+120 on a synthesis, 80 on an agent lead — with one caveat, at the end, one
+line.
+
+This constrains the **order and economy** of speech, never its honesty. The
+validator, the fact ids, the rule citations and the confidence labels are
+unchanged: the agent's verdict is validated exactly as its answer is, because
+the headline is the worst possible place for a claim to escape.
+[`voice.py`](voice.py) holds the doctrine and `TestEditorialDoctrine` enforces
+it, including a banned-phrase list tested in both directions — that it catches
+the real offenders, and that it fires on none of the honest sentences.
 
 ## Stack
 
@@ -312,6 +330,7 @@ chartfacts.py     the computed fact ledger, with stable citation IDs
 schools.py        the computation options, asked in plain English
 domains.py        life domains: their houses, karakas, varga and checklist
 domainread.py     the domain reading, composed deterministically (no LLM)
+voice.py          the editorial doctrine: budgets, banned phrases, checkers
 rulelib.py        classical rules the agent interprets through, each sourced
 agent.py          grounded 'Ask about this chart' + its answer validator
 reading/          the daily reading: detect · select · compose · fragments

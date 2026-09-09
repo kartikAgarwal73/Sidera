@@ -401,8 +401,11 @@
     </a>
     <a class="dcard dcard-alt dcard-wide" href="#explore" data-view="view-explore">
       <span class="dcard-title">Explore the full chart</span>
-      <span class="dcard-teaser">Grahas, daśās, the timeline, transits,
-        yogas, doshas, compatibility and the 20-card learning path.</span>
+      {# Named by what they are, not by their Sanskrit. The section names are
+         waiting inside, where a term can be glossed — on the arrival screen
+         they told a newcomer nothing. #}
+      <span class="dcard-teaser">Every planet, period and transit, your
+        compatibility, and a 20-card path into how it all works.</span>
       <span class="dcard-more">Open →</span>
     </a>
   </div>
@@ -417,12 +420,17 @@
   <a class="backlink" href="#top" data-view="view-arrival">← All of your chart</a>
   <section class="domainread">
     <h1 class="chartof-name">{{ d.title }}</h1>
-    <div class="chartof-sub">{{ d.label }} · read through {{ d.houses_label }}</div>
+    {# The answer, first and alone. Nothing positions it, nothing qualifies
+       it, and no house number reaches it — see voice.py. #}
+    <p class="dverdict">{{ d.verdict }}</p>
     {% for para in d.paragraphs %}<p class="dsynth">{{ para }}</p>{% endfor %}
-    <p class="conf">Confidence: {{ d.confidence }} — this describes the
-      chart's condition, not what will happen.</p>
+    {# One caveat, at the end, one line. The confidence label carries the
+       rest of the honesty, where it can be checked. #}
+    <p class="conf"><span class="chip chip-{{ d.confidence|lower }}">{{ d.confidence }}</span>
+      {{ d.caveat }}</p>
 
     <div class="kicker" style="margin-top:26px">The working, step by step</div>
+    <p class="dstep-do">{{ d.label }} · read through {{ d.houses_label }}.</p>
     {% for step in d.steps %}
     <details class="fold dstep">
       <summary>{{ step.title }}<span class="dstep-n">{{ step.count }}</span></summary>
@@ -1295,9 +1303,14 @@ wirePlace("p_");
   }
 
   function render(q, data) {
-    // The reading leads. Paragraph breaks are the model's own; keep them,
+    // The VERDICT leads, alone, in the answering voice — 1-2 sentences a
+    // stranger understands. The working follows in the smaller voice.
+    // Paragraph breaks in the working are the model's own; keep them,
     // because a wall of text reads like a disclaimer and this should read
     // like someone talking.
+    const verdict = (data.verdict || "").trim();
+    const lead = verdict
+      ? `<p class="agentverdict">${esc(verdict)}</p>` : "";
     const prose = (data.answer || data.refusal_reason || "")
       .split(/\n\s*\n/).filter(p => p.trim())
       .map(p => `<p class="agentread">${esc(p.trim())}</p>`).join("");
@@ -1317,7 +1330,7 @@ wirePlace("p_");
       `<div class="row"><span class="mut">rule</span>` +
       `<span>${esc(r.text || r.id || r)}</span></div>`).join("");
     const el = card(
-      `<p class="agentq">${esc(q)}</p>` + prose +
+      `<p class="agentq">${esc(q)}</p>` + lead + prose +
       (data.refused
         ? `<p class="yoganote">This one sits outside your chart.</p>` : "") +
       `<span class="chip chip-${esc((data.confidence || "").toLowerCase())}">` +

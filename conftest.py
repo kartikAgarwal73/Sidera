@@ -162,6 +162,16 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
     # The bug was a browser behaviour — a native picker following the
     # viewer's SYSTEM locale — so the guard has to be a browser. Markup
     # assertions cannot show that Safari rejects a typed "13".
+    # Order and economy of speech, from the founder's live walk-through.
+    # These are product rules, not observations: the app over-explained and
+    # buried the answer, and the budgets and banned phrases are the decision
+    # about how it speaks. They constrain ORDER only — every honesty gate is
+    # tested unchanged elsewhere.
+    "TestEditorialDoctrine": (
+        "invariant", "product rules from voice.py: answer first in one "
+                     "breath, hard word budgets, no throat-clearing, one "
+                     "caveat at the end, and no Sanskrit or house numbers "
+                     "in the layer a stranger reads"),
     "TestMaskedBirthFieldsInARealBrowser": (
         "invariant", "product rule: the birth date and time are entered "
                      "identically on every browser and every system locale, "

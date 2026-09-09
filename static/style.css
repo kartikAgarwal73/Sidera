@@ -697,16 +697,31 @@ button.cast.recast { margin-top: 4px; }
 }
 .backlink:hover { text-decoration: underline; }
 
-/* Domain view: the synthesis first, the working underneath. */
+/* Domain view: the answer first, the working underneath.
+   The verdict is set larger and in full-strength cream because it IS the
+   answer — the reader should be able to leave after this one paragraph and
+   have got what they came for. */
 .domainread { padding-top: 6px; }
+.dverdict {
+  font-family: var(--font-heading); font-size: 22px; line-height: 1.5;
+  color: var(--cream); margin: 14px 0 0; max-width: 34ch;
+}
 .dsynth {
   font-family: var(--font-body); font-size: 15px; line-height: 1.75;
   color: var(--cream-70); margin: 16px 0 0; max-width: 62ch;
 }
-.dsynth:first-of-type { color: var(--cream); }
+@media (max-width: 560px) { .dverdict { font-size: 20px; } }
+/* The agent's verdict — same job as .dverdict, same voice. */
+.agentverdict {
+  font-family: var(--font-heading); font-size: 20px; line-height: 1.5;
+  color: var(--cream); margin: 12px 0 0; max-width: 34ch;
+}
 .conf {
   font-size: 11.5px; color: var(--cream-50); margin: 16px 0 0;
   letter-spacing: .01em;
+  /* The label and the one caveat share a line; without this the caveat
+     wrapped underneath and collided with the chip's border. */
+  display: flex; align-items: baseline; gap: 8px; line-height: 1.6;
 }
 .dstep { margin-top: 10px; }
 .dstep > summary {
