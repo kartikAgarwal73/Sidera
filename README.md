@@ -8,9 +8,9 @@ classical rule applied, and how confident that rule is.
 ![Sidera landing](docs/landing.png)
 
 The dashboard is organised by **what people ask about**, not by technique:
-the wheel, a three-line identity strip and the day's verdict, then a card per
-life domain — Love & Marriage, Work & Money, Home & Family, Body & Vitality,
-Learning & Path — each carrying a one-line condition drawn from its own
+the wheel, a three-line identity strip and the day's verdict, then a numbered
+contents page — Love & Marriage, Work & Money, Home & Family, Body & Vitality,
+Learning & Path — each entry carrying a one-line condition drawn from its own
 checklist. Tapping one opens the reading **answer-first** — one or two sentences a
 stranger understands, carrying the actual verdict — with the six-step working
 (natal houses and their lords · karaka · varga · daśā · transits by drishti ·
@@ -125,6 +125,27 @@ the headline is the worst possible place for a claim to escape.
 [`voice.py`](voice.py) holds the doctrine and `TestEditorialDoctrine` enforces
 it, including a banned-phrase list tested in both directions — that it catches
 the real offenders, and that it fires on none of the honest sentences.
+
+## How it looks
+
+An almanac, set as printed matter: a numbered fold per view with its folio
+top-right, the wheel as a captioned **Plate I**, the arrival screen as a
+table of contents, and the working folded under footnote-style
+`show the working ↓` lines. Hairline rules and whitespace do all the
+separating — nothing is boxed, nothing has a shadow, and the only radius in
+the stylesheet is 0 or 50%.
+
+Two faces: **Tiro Devanagari Sanskrit**, drawn by John Hudson to set
+Sanskrit — it carries both the transliteration range and the Devanagari
+block, so *Navāṃśa* sets in one face instead of falling back mid-word — and
+**IBM Plex Sans** for the working text and the true tabular figures an
+ephemeris table needs. The structural signature is borrowed from the script
+itself: Devanagari hangs from a headline rather than sitting on a baseline,
+so every section marker here is **a rule with its heading beneath it**.
+
+[`ui-design/DOSSIER.md`](ui-design/DOSSIER.md) carries the direction and the
+reasoning; `TestEditorialDossier` measures it in a browser at 390px and
+1280px.
 
 ## Stack
 
@@ -331,6 +352,7 @@ schools.py        the computation options, asked in plain English
 domains.py        life domains: their houses, karakas, varga and checklist
 domainread.py     the domain reading, composed deterministically (no LLM)
 voice.py          the editorial doctrine: budgets, banned phrases, checkers
+ui-design/DOSSIER.md   the visual direction: type, pagination, rules
 rulelib.py        classical rules the agent interprets through, each sourced
 agent.py          grounded 'Ask about this chart' + its answer validator
 reading/          the daily reading: detect · select · compose · fragments

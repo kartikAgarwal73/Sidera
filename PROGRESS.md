@@ -1,5 +1,97 @@
 # PROGRESS
 
+## The editorial dossier — a full visual redesign ✅ (2026-09-09)
+
+Sidera calls itself *a Vedic almanac*. It did not look like one. This makes
+the visual layer match the claim: typeset, numbered, printed matter with
+unhurried pacing.
+
+**Visual layer only.** The IA, the verdict-first structure, the word budgets,
+the validator and every computed value are untouched. `TestDomainRestructure`
+and `TestEditorialDoctrine` pass unchanged, which is the proof.
+
+The direction was written first as
+[`ui-design/DOSSIER.md`](ui-design/DOSSIER.md), reviewed against the brief for
+genericness, and only then built.
+
+### The typeface is the argument
+
+**Tiro Devanagari Sanskrit** replaces Cormorant Garamond. John Hudson drew it
+to set **Sanskrit**, and it carries three things this app specifically needs
+and Cormorant could not supply:
+
+1. the full transliteration range — `ā ṃ ś ṛ ṣ ṭ ṇ ḷ` — so *Navāṃśa* and
+   *kṛṣṇa* set in one face instead of falling back mid-word;
+2. the **Devanagari block itself**, matched to the same Latin design;
+3. one upright weight, which is the right instrument for large, calm display
+   setting. Bookfaces are set large and light; only advertising sets them
+   heavy.
+
+**IBM Plex Sans** takes the working text, chosen for true tabular figures —
+what an ephemeris table actually needs — and a drawing-office neutrality that
+leaves the display face as the only voice in the room. One Google Fonts
+request, as specified.
+
+### The structural signature — the rule goes ABOVE
+
+Devanagari does not sit on a baseline. It **hangs from a headline**, the
+śiro-rekhā drawn across the top of a word.
+
+So every section marker inverts the Western convention: the rule is drawn
+first and the heading hangs beneath it. One move, applied consistently, and it
+is the thing that stops a hairline-and-small-caps layout from reading as a
+newspaper. It comes from the writing system the subject is written in.
+
+That is where the boldness is spent. Everything else stays quiet.
+
+### What changed, concretely
+
+| | before | after |
+|---|---|---|
+| domain cards | bordered app-cards, two-up at 560px | a numbered contents page, one column, hairline-ruled |
+| the wheel | a screen graphic, 1.8px strokes | **Plate I**, 0.75px, captioned with its cast date and ayanāṃśa |
+| expanders | chunky accordions | footnote lines: `show the working ↓` |
+| tables | rule under every row | printed ephemeris: rule under the head only |
+| boxes | 24 bordered rectangles | **2**, both earned — the city dropdown floats over text, and the two score rings are circles |
+| verdict / body ratio | 27 / 15 px | 40 / 15.5 px on desktop |
+
+### The one place the brief and an existing test disagreed
+
+`test_the_card_grid_is_one_column_on_a_phone` pinned the domain grid going
+two-up at 560px. A contents page is a single column at every width — rules
+*between* entries only work down one column, and that is what makes it read
+as a contents page rather than as cards with lines on them. The test is
+re-pinned to the contents-list contract and now also forbids any width
+reintroducing a second column. **No IA changed**: the same seven
+destinations, in the same order, behind the same links.
+
+### Caught by looking rather than reasoning
+
+- The footnote marker `show the working ↓` is a CSS `::after`, and it landed
+  on the **"Ask about this in your own words"** fold too, because that fold
+  shares the `.dstep` class. That silently changed what the app says — out of
+  scope for a visual pass. Scoped to summaries that carry a step count.
+- The printer's device (ॐ) was cropping off the top-right corner. An
+  almanac's device sits whole on the page; resized and inset.
+- The colophon was set at .4 opacity on a mid-tone ground — below any
+  reasonable contrast floor, and it carries the AGPL source link the licence
+  requires. Lifted to `--cream-60`.
+
+### Measured, not eyeballed
+
+`TestEditorialDossier` adds 17 gates, six of which drive a real browser at
+390px and 1280px: no horizontal overflow, the contents page is one column at
+both widths, every entry clears the 44px tap target, both faces actually
+load, the display type really is ≥1.8× the body, the folio stays on the page,
+and the imprint is still exactly three lines.
+
+Four of those seventeen failed on first run — **all four were my test bugs,
+not design faults**: a `preconnect` hint counted as a stylesheet request, an
+HTML-escaped `&amp;`, a `paint-order` text halo judged as a drawn stroke, and
+a line count that divided a mixed-size block by one line-height.
+
+`pytest` → **415 passed** (external 70 · invariant 255 · characterization 80).
+
 ## Answer first, one breath, then the working ✅ (2026-09-09)
 
 **From the founder's live walk.** The app over-explained and buried the

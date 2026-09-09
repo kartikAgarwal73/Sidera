@@ -5020,15 +5020,28 @@ class TestDomainRestructure:
 
     # --- mobile and the view machinery -----------------------------------
 
-    def test_the_card_grid_is_one_column_on_a_phone(self):
+    def test_the_contents_list_is_one_column_at_every_width(self):
+        """Re-pinned 2026-09-09 with the editorial-dossier redesign.
+
+        This used to assert the domain grid went two-up at 560px. The grid
+        is now a table of contents (ui-design/DOSSIER.md), and a contents
+        page is a single column at every width — rules BETWEEN entries only
+        work down one column, which is what makes it read as a contents
+        page rather than as cards with lines on them.
+
+        The IA is untouched: the same seven destinations, in the same
+        order, behind the same links, asserted by the tests above.
+        """
         css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
         block = css[css.index(".cards {"):]
-        assert "grid-template-columns: 1fr;" in block[:block.index("}")]
-        # …and two only once there is room for two.
-        media = css[css.index("@media (min-width: 560px) { .cards"):]
-        assert "1fr 1fr" in media[:120]
+        block = block[:block.index("}")]
+        assert "grid-template-columns: 1fr;" in block
+        # No width may reintroduce a second column of contents entries.
+        assert "@media (min-width: 560px) { .cards" not in css
+        for media in re.finditer(r"@media[^{]*\{[^{]*\.cards\b[^}]*\}", css):
+            assert "1fr 1fr" not in media.group(0), media.group(0)
         # Square corners survive the new components.
-        new = css[css.index("Domains-not-techniques restructure"):]
+        new = css[css.index("THE EDITORIAL DOSSIER"):]
         for radius in re.findall(r"border-radius:\s*([^;]+);", new):
             assert radius.strip() in ("0", "50%"), radius
 
@@ -5530,3 +5543,252 @@ class TestEditorialDoctrine:
             assert not text.startswith(("The strongest", "Dated windows",
                                         "The period's")), text
             assert not voice.find_throat_clearing(text), text
+
+
+class TestEditorialDossier:
+    """The visual layer, measured — ui-design/DOSSIER.md.
+
+    Every assertion here is about SETTING: type scale, rules, pagination,
+    restraint. Nothing in this class touches what the app computes or says;
+    the IA, the verdict-first order and the word budgets are asserted
+    unchanged by TestDomainRestructure and TestEditorialDoctrine.
+    """
+
+    @staticmethod
+    def _css():
+        return (HERE / "static" / "style.css").read_text(encoding="utf-8")
+
+    # --- typography-led -----------------------------------------------------
+
+    def test_the_pairing_is_the_one_the_dossier_chose(self):
+        """Tiro Devanagari Sanskrit is not decoration: it is the only face
+        here that sets the transliteration AND the Devanagari, so 'Navāṃśa'
+        does not fall back mid-word."""
+        page = (HERE / "templates" / "index.html").read_text(encoding="utf-8")
+        assert "Tiro+Devanagari+Sanskrit" in page
+        assert "IBM+Plex+Sans" in page
+        # One stylesheet request, not three. (The preconnect hint is not a
+        # request for a font; it is a hint that one is coming.)
+        links = re.findall(
+            r'<link rel="stylesheet" href="https://fonts\.googleapis[^"]*"',
+            page)
+        assert len(links) == 1, links
+        assert "Cormorant" not in page.split("</head>")[0]
+
+    def test_the_type_scale_has_real_jumps(self):
+        """No timid 18px headings. Each step is a real change of voice."""
+        css = self._css()
+        block = css[css.index("--t-verdict"):css.index("--space-fold")]
+        sizes = {k: float(v) for k, v in
+                 re.findall(r"--t-(\w+):\s*([\d.]+)px", block)}
+        assert sizes["verdict"] >= 28, sizes
+        assert sizes["verdict"] / sizes["body"] >= 1.8, sizes
+        assert sizes["title"] / sizes["head"] >= 1.3, sizes
+        assert sizes["head"] / sizes["body"] >= 1.2, sizes
+
+    def test_the_verdict_is_the_largest_type_on_a_domain_page(self, page):
+        """The answer is the biggest thing set, because it is the answer."""
+        css = self._css()
+        for cls, token in (("dverdict", "--t-verdict"),
+                           ("dsynth", "--t-body")):
+            block = css[css.index(f".{cls} {{"):]
+            assert token in block[:block.index("}")], cls
+
+    # --- pagination as identity ---------------------------------------------
+
+    def test_every_view_carries_its_folio(self, page):
+        """Seven folds, and they really are a sequence — which is the test
+        for whether numbering is information or ornament."""
+        folios = re.findall(r'<p class="folio">(.*?)</p>', page, re.S)
+        assert len(folios) == 7, f"{len(folios)} folios, expected 7"
+        joined = re.sub(r"<[^>]+>", " ", " ".join(folios))
+        for n in range(1, 8):
+            assert f"P. {n:02d}" in joined, n
+            assert f"Fold {n} of 7" in joined, n
+        import html as _html
+        joined = _html.unescape(joined)
+        assert "Contents" in joined and "Love & Marriage" in joined
+
+    def test_the_wheel_is_a_captioned_plate(self, page):
+        """Plate number, subject, and the imprint line printed matter puts
+        under a figure: what it is, when it was cast, under which ayanāṃśa."""
+        assert 'class="plateno">Plate I<' in page
+        for numeral in ("Plate I", "Plate II", "Plate III"):
+            assert numeral in page, numeral
+        cast = re.search(r'class="platecast">(.*?)</span>', page, re.S)
+        assert cast, "the plate has no imprint line"
+        assert "Lahiri ayanāṃśa" in cast.group(1)
+        assert re.search(r"cast \d{1,2} \w+ \d{4}", cast.group(1))
+
+    def test_the_arrival_is_a_contents_page(self, page):
+        """Numbered entries, one column, hairline-separated — not cards."""
+        grid = page[page.index('<section class="domaingrid"'):]
+        grid = grid[:grid.index("</section>")]
+        numbers = re.findall(r'class="dcard-no">([^<]+)<', grid)
+        assert numbers == ["02", "03", "04", "05", "06", "—", "07"], numbers
+        css = self._css()
+        block = css[css.index(".dcard {"):]
+        block = block[:block.index("}")]
+        assert "border-bottom: 1px solid var(--divider)" in block
+        # An entry is never a box.
+        assert not re.search(r"^\s*border:\s*1px", block, re.M), block
+
+    # --- space and rules ----------------------------------------------------
+
+    def test_nothing_is_a_box(self):
+        """'No boxes-in-boxes, no shadows; whitespace does the separating.'
+
+        Two exceptions, both earned: the city dropdown floats OVER text and
+        needs an edge to be readable, and the two score rings are circles,
+        not boxes — the documented 50% radius.
+        """
+        css = self._css()
+        offenders = []
+        for block in re.finditer(r"([^{}]+)\{([^{}]*)\}", css):
+            selector, body = block.group(1).strip(), block.group(2)
+            if not re.search(r"border:\s*1px solid", body):
+                continue
+            if "border-radius: 50%" in body:
+                continue                      # a ring is not a box
+            if ".suggest" in selector:
+                continue                      # floats over text
+            offenders.append(selector.splitlines()[-1].strip()[:50])
+        assert offenders == [], f"boxes remain: {offenders}"
+
+    def test_the_rule_goes_above_the_heading(self):
+        """The structural signature, from the śiro-rekhā: Devanagari hangs
+        from a headline rather than sitting on a baseline, so every section
+        marker here is a rule with its heading beneath it."""
+        css = self._css()
+        block = css[css.index(".mark {"):]
+        block = block[:block.index("}")]
+        assert "border-top" in block and "border-bottom" not in block
+        page = (HERE / "templates" / "index.html").read_text(encoding="utf-8")
+        assert '<div class="mark">' in page
+
+    def test_no_shadows_no_gradients_no_stray_radius(self):
+        """Restated here because a redesign is exactly when these creep in."""
+        css = self._css()
+        assert "box-shadow" not in css and "gradient" not in css
+        assert sorted(set(re.findall(r"border-radius:\s*([^;]+);", css))) \
+            == ["0", "50%"]
+
+    # --- colour restraint ---------------------------------------------------
+
+    def test_the_six_palettes_survive_the_redesign(self):
+        css = self._css()
+        for pal in ("pastel", "gold", "sindoor", "twilight", "rose",
+                    "verdigris"):
+            assert f':root[data-palette="{pal}"]' in css, pal
+
+    def test_the_plate_is_engraved_not_drawn_in_neon(self):
+        """Thin strokes, one weight. A plate is engraved, not lit."""
+        page = (HERE / "templates" / "index.html").read_text(encoding="utf-8")
+        for w in re.findall(r'stroke-width="([\d.]+)"', page):
+            assert float(w) <= 1.0, f"stroke-width {w} is a screen graphic"
+        # A `paint-order` halo is not a drawn line — it is how a label stays
+        # legible where it crosses one. Judge the strokes that draw.
+        css = self._css()
+        for block in re.finditer(r"([^{}]+)\{([^{}]*)\}", css):
+            body = block.group(2)
+            if "paint-order" in body:
+                continue
+            for w in re.findall(r"stroke-width:\s*([\d.]+)", body):
+                assert float(w) <= 1.6, (block.group(1).strip()[:40], w)
+
+    # --- measured in a browser ----------------------------------------------
+
+    @classmethod
+    @pytest.fixture(scope="class")
+    def measured(cls):
+        """The layout facts, read off the rendered page at both widths.
+
+        A stylesheet assertion cannot tell you the contents page went
+        two-column or the folio fell off the edge. This can.
+        """
+        pw = pytest.importorskip("playwright.sync_api",
+                                 reason="playwright not installed")
+        import threading
+        from werkzeug.serving import make_server
+        from app import app
+        srv = make_server("127.0.0.1", 0, app, threaded=True)
+        port = srv.socket.getsockname()[1]
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        out = {}
+        try:
+            with pw.sync_playwright() as p:
+                browser = TestMaskedBirthFieldsInARealBrowser._launch(p, pytest)
+                for width in (390, 1280):
+                    pg = browser.new_context(
+                        viewport={"width": width, "height": 900}).new_page()
+                    pg.goto(f"http://127.0.0.1:{port}/")
+                    for k, v in GATE_FORM.items():
+                        pg.evaluate(
+                            "([k,v]) => { const e = document.querySelector("
+                            "`[name=\"${k}\"]`); if (e) e.value = v; }", [k, v])
+                    with pg.expect_navigation():
+                        pg.evaluate("document.querySelector('#cast').submit()")
+                    pg.wait_for_load_state("load")
+                    pg.wait_for_timeout(900)          # let the webfonts land
+                    out[width] = pg.evaluate("""() => {
+                      const q = s => document.querySelector(s);
+                      const rows = [...document.querySelectorAll('.dcard')]
+                        .map(e => e.getBoundingClientRect());
+                      const cs = s => getComputedStyle(q(s));
+                      return {
+                        overflow: document.documentElement.scrollWidth
+                                  > window.innerWidth,
+                        entries: rows.length,
+                        columns: new Set(rows.map(r => Math.round(r.left))).size,
+                        minEntryHeight: Math.min(...rows.map(r => r.height)),
+                        folioRight: q('.folio').getBoundingClientRect().right,
+                        win: window.innerWidth,
+                        verdictPx: parseFloat(cs('.statement').fontSize),
+                        bodyPx: parseFloat(cs('body').fontSize),
+                        displayFace: cs('.statement').fontFamily,
+                        textFace: cs('.dcard-teaser').fontFamily,
+                        identityLines: [...document.querySelectorAll(
+                          '.identity li')].reduce((n, li) => n + Math.round(
+                            li.getBoundingClientRect().height /
+                            parseFloat(getComputedStyle(li).lineHeight)), 0),
+                      };
+                    }""")
+                browser.close()
+        finally:
+            srv.shutdown()
+        return out
+
+    def test_no_horizontal_overflow_at_either_width(self, measured):
+        for width, m in measured.items():
+            assert not m["overflow"], width
+
+    def test_the_contents_page_is_one_column_on_a_phone_and_a_desktop(
+            self, measured):
+        """The redesign's own claim, measured rather than asserted in CSS:
+        a contents page is a list at every width."""
+        for width, m in measured.items():
+            assert m["entries"] == 7, (width, m["entries"])
+            assert m["columns"] == 1, (
+                f"{width}px: contents split into {m['columns']} columns")
+            assert m["minEntryHeight"] >= 44, (width, m["minEntryHeight"])
+
+    def test_the_chosen_faces_actually_load(self, measured):
+        for width, m in measured.items():
+            assert "Tiro Devanagari Sanskrit" in m["displayFace"], width
+            assert "IBM Plex Sans" in m["textFace"], width
+
+    def test_the_display_type_really_is_display_sized(self, measured):
+        for width, m in measured.items():
+            assert m["verdictPx"] / m["bodyPx"] >= 1.8, (width, m)
+        assert measured[1280]["verdictPx"] > measured[390]["verdictPx"]
+
+    def test_the_folio_stays_on_the_page(self, measured):
+        for width, m in measured.items():
+            assert m["folioRight"] <= m["win"], width
+
+    def test_the_imprint_is_still_exactly_three_lines(self, measured):
+        """The redesign reset the type; the identity strip must not have
+        grown a fourth line at 390px, which is the first thing that makes a
+        phone feel unfinished."""
+        for width, m in measured.items():
+            assert m["identityLines"] == 3, (width, m["identityLines"])

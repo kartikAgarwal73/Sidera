@@ -153,6 +153,9 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
     # ui-design/RESTRUCTURE.md — the load-bearing one is that nothing was
     # lost in the move: every technical section that existed before must
     # still exist, re-homed under "Explore the full chart".
+    "TestDomainRestructure::test_the_contents_list_is_one_column_at_every_width":
+        ("invariant", "product rule from ui-design/DOSSIER.md: the contents "
+                      "page is one column at every width"),
     "TestDomainRestructure": (
         "invariant", "product rules from ui-design/RESTRUCTURE.md: nothing "
                      "deleted, arrival reads wheel → identity → verdict → "
@@ -167,6 +170,14 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
     # buried the answer, and the budgets and banned phrases are the decision
     # about how it speaks. They constrain ORDER only — every honesty gate is
     # tested unchanged elsewhere.
+    # The visual layer, from the founder's editorial-dossier brief. Product
+    # rules about SETTING — type scale, pagination, rules, restraint — none
+    # of which touch what the app computes or says.
+    "TestEditorialDossier": (
+        "invariant", "product rules from ui-design/DOSSIER.md: a typography-"
+                     "led almanac — real type jumps, a folio on every fold, "
+                     "the wheel as a captioned plate, a one-column contents "
+                     "page, rules above headings, and nothing boxed"),
     "TestEditorialDoctrine": (
         "invariant", "product rules from voice.py: answer first in one "
                      "breath, hard word budgets, no throat-clearing, one "
