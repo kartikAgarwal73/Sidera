@@ -30,7 +30,6 @@
 {% if not data %}
 <!-- ============ Birth form ============ -->
 <section class="hero">
-  <div class="ghost" aria-hidden="true">ॐ</div>
   <div class="kicker">Sidera · a Vedic almanac</div>
   <h1>Your chart,<br>computed and shown.</h1>
   <p class="lede">A sidereal Vedic chart calculated from the Swiss Ephemeris —
@@ -322,7 +321,6 @@
 </section>
 <!-- Glance — design 4b: one statement, three chips, single swap panel -->
 <section class="glance">
-  <div class="ghost glance-ghost" aria-hidden="true">☾</div>
   <div class="kicker">{{ data.today.strftime("%a %d %B") }} · {{ data.pancanga.paksa }} {{ data.pancanga.tithi.name }}</div>
   <p class="statement">{{ data.reading.statement_stem }}<span class="accent">{{ data.reading.emphasis }}.</span></p>
   <details class="fold readfold">
@@ -505,18 +503,70 @@
 <p class="folio"><span class="folio-p">P. 07</span> · The full chart<br>
   <span class="folio-of">Fold 7 of 7</span></p>
 <a class="backlink" href="#top" data-view="view-arrival">← All of your chart</a>
+{# EXPLORE IS AN INDEX, NOT A DUMP.
+   Eight categories; opening one shows that category's sections and hides
+   every other, so no fold ever presents two categories at once. The
+   sections themselves are untouched and stay exactly where they are in the
+   markup — they carry a data-cat and the CSS does the rest, because moving
+   them would have cut through the {% raw %}{% if %}{% endraw %} wrappers around several. #}
+<section class="exindex">
+  <h1 class="chartof-name">Explore the full chart</h1>
+  <div class="mark"><div class="kicker">Index</div></div>
+  <div class="cats">
+    <a class="catrow" href="#cat-charts" data-cat="charts">
+      <span class="catrow-title">The Charts</span>
+      <span class="catrow-desc">Your kundli read three ways, and a walk through what each placement means.</span>
+      <span class="catrow-more">Open →</span>
+    </a>
+    <a class="catrow" href="#cat-periods" data-cat="periods">
+      <span class="catrow-title">Periods</span>
+      <span class="catrow-desc">Which planetary period is running, when it ends, and the whole hundred and twenty years.</span>
+      <span class="catrow-more">Open →</span>
+    </a>
+    <a class="catrow" href="#cat-sky" data-cat="sky">
+      <span class="catrow-title">The Sky Now</span>
+      <span class="catrow-desc">Where the slow planets are today, which of your houses they touch, and the dates they move on.</span>
+      <span class="catrow-more">Open →</span>
+    </a>
+    <a class="catrow" href="#cat-combinations" data-cat="combinations">
+      <span class="catrow-title">Combinations</span>
+      <span class="catrow-desc">Yogas and doshas the chart forms, each with its cancellation checks run and shown.</span>
+      <span class="catrow-more">Open →</span>
+    </a>
+    <a class="catrow" href="#cat-tables" data-cat="tables">
+      <span class="catrow-title">Tables</span>
+      <span class="catrow-desc">Every planet with its sign, house, nakṣatra and dignity, set as an ephemeris table.</span>
+      <span class="catrow-more">Open →</span>
+    </a>
+    <a class="catrow" href="#cat-match" data-cat="match">
+      <span class="catrow-title">Match</span>
+      <span class="catrow-desc">Aṣṭakūṭa compatibility against a second chart, kūṭa by kūṭa.</span>
+      <span class="catrow-more">Open →</span>
+    </a>
+    <a class="catrow" href="#cat-ask" data-cat="ask">
+      <span class="catrow-title">Ask</span>
+      <span class="catrow-desc">Put a question to the chart — the stored classical lenses, and the grounded agent.</span>
+      <span class="catrow-more">Open →</span>
+    </a>
+    <a class="catrow" href="#cat-learn" data-cat="learn">
+      <span class="catrow-title">Learn</span>
+      <span class="catrow-desc">Twenty cards, a minute each, from what a lagna is to reading your own chart.</span>
+      <span class="catrow-more">Open →</span>
+    </a>
+  </div>
+</section>
 <nav class="secnav" id="secnav">
-  <a href="#glance">Glance</a><a href="#plate">Chart</a><a href="#dashas">Daśās</a><a href="#lifeline">Timeline</a><a href="#weather">Transits</a><a href="#doshas">Doshas</a><a href="#myths">Myths</a><a href="#yogas">Yogas</a>{% if data.match %}<a href="#match">Match</a>{% endif %}<a href="#ask">Ask</a><a href="#agent">Agent</a><a href="#patha">Paṭha</a><a href="#grahas">Grahas</a><a href="#learnpath">Learn</a>
+  <a href="#explore" data-cat="index">← Index</a><a href="#cat-charts" data-cat="charts">The Charts</a><a href="#cat-periods" data-cat="periods">Periods</a><a href="#cat-sky" data-cat="sky">The Sky Now</a><a href="#cat-combinations" data-cat="combinations">Combinations</a><a href="#cat-tables" data-cat="tables">Tables</a><a href="#cat-match" data-cat="match">Match</a><a href="#cat-ask" data-cat="ask">Ask</a><a href="#cat-learn" data-cat="learn">Learn</a>
 </nav>
 <!-- Current dasha standing note -->
-<div class="note">
+<div class="note" data-cat="periods">
   <div class="notekicker">Viṃśottarī · now</div>
   <div class="notebody">{{ data.current_md }} mahādaśā · {{ data.current_ad }} antaradaśā —
   until {{ data.current_ad_end }}.</div>
 </div>
 
 <!-- Dasha ledger -->
-<section class="ledger" id="dashas">
+<section class="ledger" id="dashas" data-cat="periods">
   <div class="kicker">Viṃśottarī daśā <button class="learn" data-lesson="dasha">ⓘ 60s</button></div>
   <div class="rows">
     {% for md in data.mahadashas %}
@@ -540,7 +590,7 @@
 </section>
 
 <!-- Phase 9: Life Timeline -->
-<section class="ledger" id="lifeline">
+<section class="ledger" id="lifeline" data-cat="periods">
   <div class="kicker">Life timeline · Viṃśottarī over 120 years <button class="learn" data-lesson="antardasha">ⓘ 60s</button></div>
   <div class="graphwrap"><svg viewBox="0 0 1000 150" class="lifegraph" preserveAspectRatio="xMidYMid meet">
     {% for b in data.life.bands %}
@@ -598,12 +648,12 @@
 </section>
 
 <!-- Phase 10: weather framing + slow-mover cards with end dates -->
-<div class="note">
+<div class="note" data-cat="sky">
   <div class="notekicker">Weather, not verdict</div>
   <div class="notebody">{{ data.weather_framing }}</div>
 </div>
 
-<section class="ledger" id="weather">
+<section class="ledger" id="weather" data-cat="sky">
   <div class="kicker">Slow movers · every season dated <button class="learn" data-lesson="gocara">ⓘ 60s</button></div>
   {% for w in data.weather %}
   <div class="wcard{% if w.demanding %} demanding{% endif %}">
@@ -622,7 +672,7 @@
 </section>
 
 <!-- Phase 10: doshas, always with their cancellation checks -->
-<section class="ledger" id="doshas">
+<section class="ledger" id="doshas" data-cat="combinations">
   <div class="kicker">Doshas · checks always run <button class="learn" data-lesson="dosha">ⓘ 60s</button></div>
   {% for d in data.doshas %}
   <details class="yoga">
@@ -648,7 +698,7 @@
 </section>
 
 <!-- Phase 10: myth-busters -->
-<section class="ledger" id="myths">
+<section class="ledger" id="myths" data-cat="combinations">
   <div class="kicker">Myth vs classical record</div>
   {% for m in data.mythbusters %}
   <details class="yoga">
@@ -664,7 +714,7 @@
 </section>
 
 <!-- Gocara / transits -->
-<section class="ledger">
+<section class="ledger" data-cat="sky">
   <div class="kicker">Gocara · {{ data.today.strftime("%d %B %Y") }}</div>
   <details class="fold">
   <summary class="kicker" style="margin-top:8px">Positions today · all nine grahas — expand</summary>
@@ -692,7 +742,7 @@
 </section>
 
 <!-- Yogas -->
-<section class="ledger" id="yogas">
+<section class="ledger" id="yogas" data-cat="combinations">
   <div class="kicker">Yogas <button class="learn" data-lesson="yoga">ⓘ 60s</button></div>
   {% for y, xp in data.yogas %}
   <div class="yoga">
@@ -717,10 +767,9 @@
 
 {% if data.match %}
 <!-- Guṇa Milan — design 2d: score ring, verdict, aṣṭakūṭa ledger -->
-<section class="ledger" id="match">
+<section class="ledger" id="match" data-cat="match">
   <div class="kicker">Guṇa Milan · aṣṭakūṭa</div>
   <div class="gmhead">
-    <div class="ghost gmghost" aria-hidden="true">36</div>
     <div class="gmnames">{{ data.match.a.name }} <span class="accent">✕</span> {{ data.match.b.name }}</div>
     <div class="gmsub">{{ data.match.a.nakshatra_name }} p.{{ data.match.a.pada }} · {{ data.match.a.moon_sign }}
       — {{ data.match.b.nakshatra_name }} p.{{ data.match.b.pada }} · {{ data.match.b.moon_sign }}</div>
@@ -746,7 +795,7 @@
 {% endif %}
 
 <!-- Ask Your Chart — question-to-evidence engine -->
-<section class="ledger" id="ask">
+<section class="ledger" id="ask" data-cat="ask">
   <div class="kicker">Ask your chart · evidence, not oracle</div>
   <p class="ratehint">Each question runs its stored classical lenses over your
   computed chart. Agreement is scored; disagreement is shown side by side,
@@ -778,7 +827,7 @@
 </section>
 
 <!-- Ask about this chart — grounded agent (v1.1) -->
-<section class="ledger" id="agent">
+<section class="ledger" id="agent" data-cat="ask">
   <div class="kicker">Ask about this chart · grounded answers</div>
   <p class="ratehint">Ask anything about this chart and get a reading — what
   the classical rules make of what is actually running, not a list of
@@ -815,7 +864,7 @@
 </section>
 
 <!-- Paṭha — the chart, explained in three layers -->
-<section class="ledger" id="patha">
+<section class="ledger" id="patha" data-cat="charts">
   <div class="kicker">Paṭha · your chart, explained</div>
   {% for item in data.patha %}
   <details class="xp">
@@ -832,7 +881,7 @@
 </section>
 
 <!-- Nakshatra / graha table -->
-<section class="ledger" id="grahas">
+<section class="ledger" id="grahas" data-cat="tables">
   <div class="kicker">Grahas · nakṣatras · dignity <button class="learn" data-lesson="nakshatra">ⓘ 60s</button> <button class="learn" data-lesson="dignity">ⓘ dignity</button></div>
   <div class="scrollwrap"><table class="gtable">
     <thead><tr><th>Graha</th><th>Rāśi</th><th>Bhāva</th><th>Nakṣatra</th><th>Lord</th><th>Dignity</th></tr></thead>
@@ -863,7 +912,7 @@
 </section>
 
 <!-- Phase 11: 20-card literacy path -->
-<section class="ledger" id="learnpath">
+<section class="ledger" id="learnpath" data-cat="learn">
   <div class="kicker">Learn the sky · 20 cards, 60 seconds each</div>
   <p class="ratehint">A reading path from "what is a lagna" to reading your
   own D9. Cards you open are remembered in this browser —
@@ -908,6 +957,42 @@ Sidereal · Lahiri ayanāṃśa · Whole Sign · North-Indian<br>
 <span class="credit"><a href="https://github.com/kartikAgarwal73/Sidera">Source</a> — AGPL-3.0, as required by <a href="https://github.com/astrorigin/pyswisseph">pyswisseph</a></span></footer>
 
 <script>
+// ---- Explore: one category at a time --------------------------------------
+// The index is the default; opening a category sets data-showing on the view
+// and the CSS reveals only that category's sections. Nothing is removed from
+// the DOM, so the back button and deep links keep working.
+(function () {
+  const view = document.getElementById("view-explore");
+  if (!view) return;
+  const SECTION_CAT = {};
+  view.querySelectorAll("[data-cat][id]").forEach(
+    el => { SECTION_CAT[el.id] = el.getAttribute("data-cat"); });
+
+  function showCat(cat) {
+    if (!cat || cat === "index") view.removeAttribute("data-showing");
+    else view.setAttribute("data-showing", cat);
+    view.querySelectorAll("#secnav a[data-cat]").forEach(a =>
+      a.classList.toggle("active", a.getAttribute("data-cat") === cat));
+    window.dispatchEvent(new CustomEvent("sidera:viewshown", {detail: view}));
+  }
+  window.sideraShowCategory = showCat;
+
+  view.addEventListener("click", ev => {
+    const a = ev.target.closest("a[data-cat]");
+    if (!a) return;
+    ev.preventDefault();
+    const cat = a.getAttribute("data-cat");
+    showCat(cat);
+    history.pushState({}, "", cat === "index" ? "#explore" : "#cat-" + cat);
+    window.scrollTo(0, 0);
+  });
+
+  // A card on the arrival page that jumps straight to a section — "Ask about
+  // this chart" — must open the category that section lives in, or it would
+  // scroll to something the CSS is hiding.
+  window.sideraCategoryOf = id => SECTION_CAT[id] || null;
+})();
+
 // ---- Scroll choreography --------------------------------------------------
 // Where the browser has scroll-driven animation, CSS owns this entirely and
 // this block does nothing at all — that is the check on the first line.
@@ -1065,6 +1150,10 @@ Sidereal · Lahiri ayanāṃśa · Whole Sign · North-Indian<br>
     if (scrollTo) {
       const el = document.getElementById(scrollTo);
       if (el) {
+        // Opening a technical section directly means opening its category
+        // first; otherwise the CSS is still hiding the thing we scroll to.
+        const cat = window.sideraCategoryOf && window.sideraCategoryOf(scrollTo);
+        if (cat && window.sideraShowCategory) window.sideraShowCategory(cat);
         el.scrollIntoView({ block: "start" });
         target.focus({ preventScroll: true });
         window.dispatchEvent(new CustomEvent("sidera:viewshown", {detail: target}));
@@ -1082,7 +1171,18 @@ Sidereal · Lahiri ayanāṃśa · Whole Sign · North-Indian<br>
     const h = (location.hash || "").replace(/^#/, "");
     if (!h || h === "top") return show("view-arrival");
     if (byId.has("view-domain-" + h)) return show("view-domain-" + h);
-    if (h === "explore") return show("view-explore");
+    // #cat-periods opens Explore AT that category — a bookmark, a reload or
+    // a shared link has to land where a click lands.
+    if (h.startsWith("cat-")) {
+      show("view-explore");
+      if (window.sideraShowCategory) window.sideraShowCategory(h.slice(4));
+      return;
+    }
+    if (h === "explore") {
+      show("view-explore");
+      if (window.sideraShowCategory) window.sideraShowCategory("index");
+      return;
+    }
     const el = document.getElementById(h);
     if (el && el.closest("#view-explore")) return show("view-explore", h);
     if (el && el.closest(".view")) return show(el.closest(".view").id, h);

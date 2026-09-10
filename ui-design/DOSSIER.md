@@ -248,3 +248,70 @@ to 5.03:1 for links and small text. Every pair is recomputed from
 Ink for the frame and the diagonals; the single bronze line is the diamond
 that makes it a North-Indian plate rather than a grid. Both are set in CSS,
 not as presentation attributes, so the two readings can restate them.
+
+
+---
+
+## Revision 2026-09-10 — the collision, the hierarchy, and the index
+
+### The arrival collision was a name, not a layout
+
+The headline and the identity strip rendered **on top of the pinned plate**.
+The cause was a class/id collision, not grid overflow: the leaf's second
+section is `class="chartof" id="glance"` while a *different* section is
+`class="glance"`, so the rule `.leaf > .glance` placed the wrong one and grid
+**auto-placement** dropped the headline block into column 1 — under the plate.
+It was only visible once the page had scrolled, which is why every screenshot
+to that point had missed it.
+
+Every child of the leaf is placed explicitly now
+(`.leaf > *:not(.plate) { grid-column: 2 }`), which holds for any section
+added later. `TestNothingOverlaps` walks four widths × four scroll positions
+across four views and compares every visible text box against every other.
+
+Two false-positive classes had to be handled before the gate meant anything:
+a closed `<details>` lays its content out and hides it with
+`content-visibility`, and an inline element that wraps returns a bounding box
+spanning every line it touches. The gate uses **per-line rects** and walks
+every closed-details ancestor. A sticky element **with an opaque background**
+is treated as a deliberate overlay — which still catches the plate, because
+the plate is sticky with no background.
+
+The ☾, ॐ and 36 watermark glyphs are **gone**. They were the only elements
+drawn on top of text by design, and the rule is now that nothing overlaps.
+
+### The type hierarchy was upside down
+
+The fold title rendered *smaller* than the verdict body, and the verdict was
+set so large it ran three or four words to the line.
+
+| | before | after |
+|---|---|---|
+| fold title | 27–36px | **clamp(44px, 7.2vw, 72px)** |
+| verdict | 34–52px | **clamp(22px, 2.35vw, 30px)**, 52ch, 1.35 |
+| folio numeral | in flow, behind the title | upper corner, clear of the type |
+
+### Explore is an index
+
+Eight categories — The Charts · Periods · The Sky Now · Combinations ·
+Tables · Match · Ask · Learn — each with a one-line description at 16px.
+Opening one shows that category and hides every other; **no fold presents two
+categories at once**. Inside a category, body text is 16px and tables 15px
+with real row spacing.
+
+The sections were **not moved**: they carry a `data-cat` and the CSS does the
+showing. Moving them would have cut through the Jinja conditionals that wrap
+several of them, which is exactly what a first attempt did — four sections
+stopped rendering entirely.
+
+### Verdicts name something
+
+`voice.py` gained a **vagueness** list. "Work and money is one of the stronger
+parts of your chart — the planet that rules it is strong" passed every
+existing gate and told the reader nothing about their own chart. A verdict now
+names at least one graha and, where a dated influence is running, says when:
+
+> **Work and money asks real work: Saturn, the planet of labour, sits at its
+> weakest. The north node's period holds it until Aug 2029.**
+
+Budgets are unchanged — 15 words, not 20. Specific *and* short.

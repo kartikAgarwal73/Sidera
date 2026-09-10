@@ -61,6 +61,17 @@ PLAIN_PLANET = {"Rahu": "the north node", "Ketu": "the south node",
                 "Sun": "the Sun", "Moon": "the Moon"}
 
 
+def _year(iso: str | None) -> str:
+    """'2027-02-08T…' → 'Feb 2027'. A window the ledger produced, never one
+    this module invented."""
+    if not iso:
+        return "its end"
+    try:
+        return datetime.fromisoformat(iso).strftime("%b %Y")
+    except ValueError:
+        return "its end"
+
+
 def _planet(name: str) -> str:
     return PLAIN_PLANET.get(name, name)
 
@@ -164,6 +175,23 @@ def _dignity_phrase(dignity: str) -> str:
     return dignity
 
 
+# The same four conditions with the Sanskrit taken out, for the top layer.
+# "moolatrikona" is precise and it is exactly the kind of word the plain
+# register exists to keep out of a first sentence.
+PLAIN_DIGNITY = {
+    "exalted": "exalted",
+    "own sign": "in its own sign",
+    "moolatrikona": "in its best sign",
+    "debilitated": "at its weakest",
+    "neutral": "neutrally placed",
+}
+
+
+def _plain_dignity(dignity: str) -> str:
+    return PLAIN_DIGNITY.get(dignity.split(" (")[0].strip(),
+                             dignity.split(" (")[0].strip())
+
+
 def _dignity_of(fact) -> str:
     return (fact.value.get("lord_dignity") or fact.value.get("dignity")
             or "") or ""
@@ -204,7 +232,8 @@ def read(chart: Chart, when: datetime, domain_id: str,
                 # Only the MAIN house earns a place in the first breath. A
                 # strong lord of a supporting house is real and is in the
                 # expander; leading with it would bury the actual subject.
-                plain=("the planet that rules it is strong" if main else ""),
+                plain=(f"{_planet(v['lord'])} rules it and sits "
+                       f"{_plain_dignity(dignity)}" if main else ""),
                 weight=3 if main else 2))
         elif any(x in dignity for x in WEAK):
             signals.append(Signal(
@@ -214,7 +243,8 @@ def read(chart: Chart, when: datetime, domain_id: str,
                 f"matters ask more effort of you than they would otherwise",
                 ids, rule,
                 brief=f"a {dignity} {ordinal(house)} lord",
-                plain=("the planet that rules it is weak" if main else ""),
+                plain=(f"{_planet(v['lord'])} rules it and sits "
+                       f"{_plain_dignity(dignity)}" if main else ""),
                 weight=3 if main else 2))
         benefics = [p for p in v["aspected_by"] if p in NATURAL_BENEFICS]
         malefics = [p for p in v["aspected_by"] if p in NATURAL_MALEFICS]
@@ -269,14 +299,16 @@ def read(chart: Chart, when: datetime, domain_id: str,
                 "support",
                 f"{where} and is {_dignity_phrase(dignity.split(' (')[0])}",
                 ids, rule, brief=f"{karaka} strong",
-                plain=(f"{who} is strong" if first else ""),
+                plain=(f"{who} sits {_plain_dignity(dignity)}"
+                       if first else ""),
                 weight=3 if first else 1))
         elif any(x in dignity for x in WEAK):
             signals.append(Signal(
                 "strain",
                 f"{where} but is {_dignity_phrase(dignity.split(' (')[0])}",
                 ids, rule, brief=f"{karaka} debilitated",
-                plain=(f"{who} is weak" if first else ""),
+                plain=(f"{who} sits {_plain_dignity(dignity)}"
+                       if first else ""),
                 weight=3 if first else 1))
         elif v["house"] in (6, 8, 12):
             signals.append(Signal(
@@ -310,8 +342,9 @@ def read(chart: Chart, when: datetime, domain_id: str,
         ("rule.varga.confirms", "rule.varga.purpose"),
         brief=(f"the {domain.varga} repeats it" if here
                else f"the {domain.varga} does not confirm it"),
-        plain=("a second chart confirms it" if here
-               else "a second chart does not confirm it"),
+        plain=(f"the second chart puts {_planets(here)} over it" if here
+               else f"the second chart leaves it to "
+                    f"{_planet(vf.value['lord'])} alone"),
         weight=3))
 
     # --- step 4, dasha: is this domain what the period is about? ----------
@@ -339,9 +372,11 @@ def read(chart: Chart, when: datetime, domain_id: str,
                      f"planet.{lord.lower()}"),
                     ("rule.dasha.lordship", "rule.dasha.placement"),
                     brief=f"the {lord} {role} touches it",
-                    plain=("the long stretch you are running touches it"
+                    plain=(f"{_planet(lord)}'s period holds it until "
+                           f"{_year(cv.get('md_end'))}"
                            if role == "mahadasha"
-                           else "the shorter period inside it touches it"),
+                           else f"{_planet(lord)}'s stretch inside it runs to "
+                                f"{_year(cv.get('ad_end'))}"),
                     weight=3 if role == "mahadasha" else 2))
 
     # --- step 5, transits: occupancy AND drishti, with dates --------------
@@ -372,10 +407,19 @@ def read(chart: Chart, when: datetime, domain_id: str,
                    else f"{_planet(planet)} is working on it{until}"),
             weight=2 if occupied else 1))
 
+    # The main house's own lord, named — the fact every domain has, kept as a
+    # last resort so no verdict can fall back to a phrase with no chart in it.
+    mv = facts[f"natal.{domain.main_house}L"].value
+    headline = Signal(
+        "support", "", (f"natal.{domain.main_house}L",),
+        plain=(f"{_planet(mv['lord'])} rules it from {mv['lord_sign']}"),
+        weight=0)
+
     return DomainReading(domain=domain,
-                         verdict=_verdict_and_spent(domain, signals)[0],
-                         teaser=_teaser(domain, signals),
-                         paragraphs=_paragraphs(domain, signals),
+                         verdict=_verdict_and_spent(domain, signals,
+                                                    headline)[0],
+                         teaser=_teaser(domain, signals, headline),
+                         paragraphs=_paragraphs(domain, signals, headline),
                          caveat=_caveat(signals),
                          signals=tuple(signals))
 
@@ -390,18 +434,31 @@ def read(chart: Chart, when: datetime, domain_id: str,
 # no sentence template that can produce one. Answering first changed the ORDER
 # of speech, not what may be said.
 def _balance(supports, strains) -> tuple[str, str]:
-    """(technical label, plain verdict clause)."""
+    """(technical label, plain verdict clause).
+
+    The clauses are short on purpose and none of them is a filler phrase:
+    "is one of the stronger parts of your chart" passed every rule in
+    voice.py and told the reader nothing about their own chart, so it — and
+    its four siblings — are on the vagueness ban-list now. A verdict states a
+    judgement AND the named fact behind it, in one breath.
+    """
     up = sum(s.weight for s in supports)
     down = sum(s.weight for s in strains)
     if up >= down * 2 and up:
-        return "Well supported", "is one of the stronger parts of your chart"
+        return "Well supported", "runs strong"
     if down >= up * 2 and down:
-        return "Asks real work", "is one of the harder parts of your chart"
+        return "Asks real work", "asks real work"
     if up > down:
-        return "Mixed", "is more helped than hindered"
+        return "Mixed", "leans your way"
     if down > up:
-        return "Mixed", "is more contested than helped"
-    return "Mixed", "carries real support and real friction in equal measure"
+        return "Mixed", "runs uphill"
+    return "Mixed", "cuts both ways"
+
+
+def _named(items):
+    """The sharpest signal whose plain form names a graha."""
+    pool = [s for s in items if s.plain and voice.names_a_planet(s.plain)]
+    return sorted(pool, key=lambda s: -s.weight)[0] if pool else None
 
 
 def _sharpest(items, plain_only=False):
@@ -415,8 +472,9 @@ def _top(items, n, plain_only=True):
     return sorted(pool, key=lambda s: -s.weight)[:n]
 
 
-def _verdict_and_spent(domain: Domain,
-                       signals: list[Signal]) -> tuple[str, list[Signal]]:
+def _verdict_and_spent(domain: Domain, signals: list[Signal],
+                       headline: Signal | None = None
+                       ) -> tuple[str, list[Signal]]:
     """The first breath: 1–2 sentences a stranger understands.
 
     No throat-clearing, no house numbers, no Sanskrit, and the actual answer
@@ -435,33 +493,40 @@ def _verdict_and_spent(domain: Domain,
                 f"on it either way."), []
 
     _, clause = _balance(supports, strains)
-    # One concrete reason, on whichever side is doing the most work. A verdict
-    # with no reason is an assertion; a verdict with four is the old problem.
-    driver = _sharpest(strains if "contested" in clause or "harder" in clause
-                       else supports, plain_only=True)
+    # One concrete reason, on whichever side is doing the most work — and it
+    # must NAME a planet. A verdict that says "the planet that rules it is
+    # strong" is short, plain, answer-first and completely uninformative;
+    # naming the graha is what makes it about this chart.
+    side = strains if clause in ("asks real work", "runs uphill") else supports
+    driver = _named(side) or _named(supports) or _named(strains) or headline
     first = f"{subject} {clause}"
-    if driver and voice.words(f"{first} — {driver.plain}.") <= voice.TEASER_WORDS:
-        first += f" — {driver.plain}"
-        used = [driver]
-    else:
-        used = []          # the bare verdict still fits, and still answers
+    used = []
+    if driver is not None:
+        candidate = f"{first}: {driver.plain}"
+        if voice.words(candidate + ".") <= voice.TEASER_WORDS:
+            first = candidate
+            used = [driver]
     out = first + "."
 
-    top_live = _sharpest(live, plain_only=True)
+    # Where a domain has a dated influence running, the verdict says WHEN —
+    # a reader can act on "until Jun 2027" and cannot act on "right now".
+    dated = [s for s in live if s.plain and voice.names_a_date(s.plain)]
+    top_live = _named(dated) or _sharpest(dated or live, plain_only=True)
     if top_live:
-        out += f" Right now, {top_live.plain}."
+        out += f" {top_live.plain[0].upper()}{top_live.plain[1:]}."
         used.append(top_live)
     return out, used
 
 
-def _teaser(domain: Domain, signals: list[Signal]) -> str:
+def _teaser(domain: Domain, signals: list[Signal],
+            headline: Signal | None = None) -> str:
     """The card's one line — the reading's own first breath, trimmed.
 
     Deliberately not written separately. A card that promised one thing and
     a view that said another would be two readings of one chart, and the
     card is the more-read of the two.
     """
-    verdict, _ = _verdict_and_spent(domain, signals)
+    verdict, _ = _verdict_and_spent(domain, signals, headline)
     return voice.trim_to(verdict, voice.TEASER_WORDS)
 
 
@@ -474,7 +539,8 @@ CAVEAT_LIVE = "A transit is a season with an end date, not a verdict."
 CAVEAT_STILL = "This reads the chart's condition, not what will happen."
 
 
-def _paragraphs(domain: Domain, signals: list[Signal]) -> tuple[str, ...]:
+def _paragraphs(domain: Domain, signals: list[Signal],
+                headline: Signal | None = None) -> tuple[str, ...]:
     """The visible synthesis: the verdict, then the working, within budget.
 
     Everything cut here is one tap away in the expanders below, unchanged and
@@ -485,7 +551,7 @@ def _paragraphs(domain: Domain, signals: list[Signal]) -> tuple[str, ...]:
     strains = [s for s in signals if s.kind == "strain"]
     live = [s for s in signals if s.kind in ("period", "live")]
 
-    verdict, spent = _verdict_and_spent(domain, signals)
+    verdict, spent = _verdict_and_spent(domain, signals, headline)
     said = {id(x) for x in spent}
     supports = [s for s in supports if id(s) not in said]
     strains = [s for s in strains if id(s) not in said]

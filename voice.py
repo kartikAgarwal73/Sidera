@@ -82,6 +82,57 @@ HEDGE_STACK = (
     r"(?:tends? to )?(?:may|might) (?:sometimes|occasionally) (?:tend|seem)",
 )
 
+# --- vagueness --------------------------------------------------------------
+# A verdict can be short, plain and answer-first and STILL say nothing. "Work
+# and money is one of the stronger parts of your chart — the planet that rules
+# it is strong" passes every rule above and tells the reader not one fact
+# about their own chart. Being unspecific is its own failure mode, and it
+# needs its own list.
+VAGUE = (
+    r"one of the (?:stronger|weaker|harder|better|easier) parts",
+    r"the planet that rules it is (?:strong|weak)",
+    r"its ruling planet is (?:strong|weak)",
+    r"a second chart (?:confirms|does not confirm) it",
+    r"more (?:helped than hindered|contested than helped)",
+    r"is (?:well )?(?:supported|contested) (?:here|overall)",
+)
+_VAGUE_RE = tuple(re.compile(p, re.IGNORECASE) for p in VAGUE)
+
+# The nine grahas, in the plain register the top layer uses. A verdict that
+# names one of these is talking about THIS chart; one that does not is
+# talking about charts in general.
+PLANETS = ("Sun", "Moon", "Mars", "Mercury", "Jupiter", "Venus", "Saturn",
+           "north node", "south node")
+_PLANET_RE = re.compile(
+    r"\b(?:" + "|".join(PLANETS) + r")\b", re.IGNORECASE)
+# "until Jun 2027", "in June 2027", "from Dec 2026" — a window the ledger gave.
+_DATE_RE = re.compile(
+    r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4}\b")
+
+
+def find_vagueness(text: str) -> list[str]:
+    """Phrases that fill a verdict without saying anything about the chart."""
+    return [m.group(0) for rx in _VAGUE_RE for m in rx.finditer(text or "")]
+
+
+def names_a_planet(text: str) -> list[str]:
+    return [m.group(0) for m in _PLANET_RE.finditer(text or "")]
+
+
+def names_a_date(text: str) -> list[str]:
+    return [m.group(0) for m in _DATE_RE.finditer(text or "")]
+
+
+def is_concrete(text: str) -> bool:
+    """Does this sentence name something the reader could look up?
+
+    One named graha is the floor. It is a low bar deliberately — the point is
+    to make "your career planet, Mercury, is exalted" pass and "the planet
+    that rules it is strong" fail.
+    """
+    return bool(names_a_planet(text)) and not find_vagueness(text)
+
+
 _THROAT_RE = tuple(re.compile(p, re.IGNORECASE) for p in THROAT_ANYWHERE)
 _OPENER_RE = tuple(re.compile(r"^\W*(?:" + p + r")", re.IGNORECASE)
                    for p in THROAT_OPENERS)

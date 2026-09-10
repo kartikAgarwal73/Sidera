@@ -1,5 +1,80 @@
 # PROGRESS
 
+## The collision, the hierarchy, the index, and verdicts that name something ✅ (2026-09-10)
+
+Four findings from a live walk. All four fixed, each with a gate.
+
+### 1. The arrival collision was a NAME, not a layout
+
+The headline and identity strip rendered on top of the pinned plate. Measured
+rather than reasoned about: `.identity` sat at `x=160` — column 1, under the
+plate — while `.glance` sat at `x=748`.
+
+**The cause was a class/id collision.** The leaf's second section is
+`class="chartof" id="glance"`; a *different* section is `class="glance"`. The
+rule `.leaf > .glance` placed the wrong one, so the headline block was never
+placed and grid **auto-placement** dropped it into the plate's column. It only
+showed once the page scrolled, which is why every screenshot had missed it.
+
+Every leaf child is placed explicitly now. That is the second time a name
+collision has bitten this file — `.pane` was the first.
+
+`TestNothingOverlaps` walks 4 widths × 4 scroll positions × 4 views. Getting
+it to mean anything took three passes: a closed `<details>` lays its content
+out and hides it with `content-visibility` (37 phantom collisions); an inline
+element that wraps returns a bounding box spanning every line it touches (4
+more); and a sticky bar with an opaque background is a deliberate overlay, not
+a collision — a rule that still catches the plate, which is sticky with no
+background. **Verified red: restoring the old rule fails it with 50
+overlaps.**
+
+The ☾, ॐ and 36 watermarks are gone — the only elements drawn on top of text
+by design. I offered to cut them two rounds ago; the "nothing overlaps" rule
+settles it.
+
+### 2. The type hierarchy was upside down
+
+| | before | after |
+|---|---|---|
+| fold title | 27–36px | **clamp(44px, 7.2vw, 72px)** |
+| verdict | 34–52px | **clamp(22px, 2.35vw, 30px)** at 52ch, 1.35 |
+| folio numeral | in flow, behind the title | upper corner, clear |
+
+### 3. Explore is an index, not a dump
+
+Eight categories, each with a one-line description at 16px, each opening into
+its own fold. No fold shows two categories at once; inside one, body is 16px
+and tables 15px with real row spacing.
+
+**The sections were not moved.** They carry a `data-cat` and the CSS does the
+showing — a first attempt that moved the blocks cut through the Jinja
+conditionals wrapping several of them and four sections stopped rendering.
+
+Two bugs of my own on the way: I used `data-cat` for both "this section
+belongs to X" and "this link opens X", so the hide rule hid the index's own
+rows and it rendered with nothing on it; and two untagged blocks leaked onto
+the index. A gate now asserts nothing in Explore is untagged.
+
+### 4. Verdicts name something
+
+`voice.py` gained a **vagueness** list. *"Work and money is one of the
+stronger parts of your chart — the planet that rules it is strong"* passed
+every existing gate and said nothing. A verdict now names at least one graha
+and, where a dated influence runs, says when:
+
+> **Work and money asks real work: Saturn, the planet of labour, sits at its
+> weakest. The north node's period holds it until Aug 2029.**
+
+Budgets unchanged — that is 15 words against a 20-word cap. Dates are checked
+against the ledger, the same rule the agent's validator enforces.
+
+Three writing bugs found by looking: `"the the north node period"` (the plain
+form already carries its article), `"moolatrikona"` reaching the plain layer
+(Sanskrit, banned there), and the balance clause itself being the vaguest
+thing on the page.
+
+`pytest` → **462 passed** (external 70 · invariant 302 · characterization 80).
+
 ## The light paper almanac, and the scroll choreography ✅ (2026-09-09)
 
 An approved Claude Design mockup moved the app to **light paper** and asked

@@ -1803,7 +1803,13 @@ class TestUIRevisionWalkthrough:
     def test_design_handoff_glance_pattern(self, page):
         # 4b/5a: kicker date line, statement, ghost ☾, three chips, panel.
         assert 'class="glance"' in page
-        assert "☾" in page
+        # Re-baselined 2026-09-10 (characterization): the ☾ watermark is
+        # gone. It was drawn on top of the kicker and the day's statement at
+        # every width from 360 to 1600 — the only element on the page that
+        # overlapped text by design — and the new rule is that nothing
+        # overlaps, ever. What design 4b actually requires is a one-statement
+        # hero, which the assertions around this one still pin.
+        assert "☾" not in page
         assert 'class="statement"' in page
         assert page.count('class="gchip') == 3
         for pane in ("gpane-chart", "gpane-transits", "gpane-dasha"):
@@ -1821,10 +1827,20 @@ class TestUIRevisionWalkthrough:
         assert 'class="growlist"' in page
 
     def test_a_navigation_and_disclosure(self, page):
+        """Re-pinned 2026-09-10: the sticky nav moves between the eight
+        CATEGORIES now, not between fourteen sections.
+
+        Explore was a single scroll of everything at once — the complaint
+        that prompted this — so it became an index, and a nav of fourteen
+        section anchors was the thing that made the dump navigable rather
+        than fixing it. Every one of those sections still exists and still
+        lives under Explore; `TestExploreIndex` asserts each is reachable and
+        that no two categories are ever on screen together.
+        """
         assert 'class="secnav"' in page
-        for anchor in ("#glance", "#plate", "#dashas", "#lifeline",
-                       "#weather", "#doshas", "#myths", "#yogas", "#ask",
-                       "#patha", "#grahas", "#learnpath"):
+        for anchor in ("#explore", "#cat-charts", "#cat-periods", "#cat-sky",
+                       "#cat-combinations", "#cat-tables", "#cat-ask",
+                       "#cat-learn"):
             assert f'href="{anchor}"' in page, anchor
         # progressive disclosure: antardashas, gocara table, doshas and
         # myth cards are all summary-first now
@@ -2294,7 +2310,7 @@ def match_page(client):
 class TestMatchUI:
     def test_match_section_renders(self, match_page):
         assert 'id="match"' in match_page
-        assert 'href="#match"' in match_page          # nav link appears
+        assert 'href="#cat-match"' in match_page      # its category appears
         assert "Guṇa Milan · aṣṭakūṭa" in match_page
         for kuta in ("Varṇa", "Vaśya", "Tārā", "Yoni", "Graha Maitrī",
                      "Gaṇa", "Bhakūṭa", "Nāḍī"):
@@ -3270,7 +3286,7 @@ class TestAgentEndpoint:
         """Graceful degradation: the section explains itself and the rest of
         the dashboard is unaffected."""
         assert 'id="agent"' in page
-        assert 'href="#agent"' in page
+        assert 'href="#cat-ask"' in page     # the agent lives under Ask
         assert "ANTHROPIC_API_KEY" in page and "not configured" in page
         assert 'id="agentq"' not in page          # no dead input offered
 
@@ -3279,7 +3295,7 @@ class TestAgentEndpoint:
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-not-a-real-key")
         page = client.post("/", data=GATE_FORM).get_data(as_text=True)
         assert 'id="agent"' in page
-        assert 'href="#agent"' in page
+        assert 'href="#cat-ask"' in page     # the agent lives under Ask
         assert page.count('class="sugq"') == 3      # three suggested questions
         assert "Facts and rules used" in page        # the Why? pattern
         assert "thumbdown" in page
@@ -4878,6 +4894,9 @@ class TestDomainRestructure:
                        page.index("<!-- /view-explore -->")]
         for section in self.TECHNICAL:
             assert f'id="{section}"' in explore, section
+            # …and each one now declares which category it belongs to, which
+            # is what lets Explore show one category at a time.
+            assert re.search(rf'id="{section}"[^>]*data-cat="', explore), section
         assert 'id="secnav"' in explore
         assert "view-domain-" not in explore
 
@@ -5614,13 +5633,36 @@ class TestEditorialDossier:
         assert sizes["title"] / sizes["head"] >= 1.3, sizes
         assert sizes["head"] / sizes["body"] >= 1.2, sizes
 
-    def test_the_verdict_is_the_largest_type_on_a_domain_page(self, page):
-        """The answer is the biggest thing set, because it is the answer."""
+    def test_the_fold_title_leads_and_the_verdict_reads(self, page):
+        """Re-pinned 2026-09-10. This used to require the VERDICT to be the
+        largest type, and that is exactly what went wrong: the fold title
+        rendered smaller than the verdict body, and the verdict was set so
+        large it ran three or four words to the line — shouting, not reading.
+
+        The title is the dominant element now; the verdict is a printed
+        pull-quote, large but at a measure you can read along.
+        """
         css = self._css()
-        for cls, token in (("dverdict", "--t-verdict"),
-                           ("dsynth", "--t-body")):
-            block = css[css.index(f".{cls} {{"):]
-            assert token in block[:block.index("}")], cls
+
+        def clamp(selector):
+            block = css[css.index(selector + " {"):]
+            block = block[:block.index("}")]
+            lo, _, hi = re.search(
+                r"font-size:\s*clamp\(([\d.]+)px,\s*([\d.]+)vw,\s*([\d.]+)px\)",
+                block).groups()
+            return float(lo), float(hi)
+
+        t_lo, t_hi = clamp(".domainread .chartof-name")
+        v_lo, v_hi = clamp(".dverdict")
+        assert (t_lo, t_hi) >= (44, 72), (t_lo, t_hi)
+        assert 22 <= v_lo and v_hi <= 30, (v_lo, v_hi)
+        assert t_lo > v_hi, "the title must dominate the verdict at every size"
+        # …and the verdict is a pull-quote measure, not a billboard.
+        block = css[css.index(".dverdict {"):]
+        block = block[:block.index("}")]
+        measure = int(re.search(r"max-width:\s*(\d+)ch", block).group(1))
+        assert 45 <= measure <= 60, measure
+        assert "line-height: 1.35" in block
 
     # --- pagination as identity ---------------------------------------------
 
@@ -5990,8 +6032,12 @@ class TestScrollChoreography:
         block = block[:block.index("}")]
         assert "position: sticky" in block
         assert "align-self: start" in block
-        assert "grid-row: 1 / span 2" in block, (
+        assert "grid-row: 1 / -1" in block, (
             "the pin must span the whole leaf, or it releases early")
+        # And EVERY other child is placed explicitly. Auto-placement is what
+        # dropped the headline and the identity strip into column 1, under
+        # the pinned plate — a collision nobody saw until the page scrolled.
+        assert ".leaf > *:not(.plate) { grid-column: 2;" in css
 
     def test_the_pin_is_desktop_only_and_the_phone_gets_the_plate_first(self):
         """At 390px the plate leads, unpinned — a pinned plate on a phone
@@ -6240,3 +6286,358 @@ class TestReducedMotionInARealBrowser:
         dropping it would take the plate away from the reading it belongs
         beside, which is a content loss dressed up as an accessibility win."""
         assert quiet["platePosition"] == "sticky"
+
+
+# Leaf text nodes with their boxes, filtered to what is ACTUALLY on screen.
+# The filtering is most of the work: a closed <details> lays its content out
+# and hides it with content-visibility rather than display:none, and a naive
+# pass reported 37 collisions that no reader could have seen.
+_VISIBLE_TEXT_BOXES = r"""(sel) => {
+  const boxes = [];
+  document.querySelectorAll(sel + ' *').forEach(el => {
+    if (el.children.length) return;                 // leaf nodes only
+    const t = (el.textContent || '').trim();
+    if (!t) return;
+    const cs = getComputedStyle(el);
+    if (cs.visibility === 'hidden' || cs.display === 'none') return;
+    if (parseFloat(cs.opacity) < 0.05) return;
+    if (el.closest('[hidden]')) return;
+    for (let d = el.closest('details:not([open])'); d;
+         d = d.parentElement && d.parentElement.closest('details:not([open])')) {
+      const sum = d.querySelector(':scope > summary');
+      if (!sum || !sum.contains(el)) return;
+    }
+    if (el.closest('.gpane.hidden, .pane.hidden')) return;
+    // A sticky or fixed bar WITH AN OPAQUE BACKGROUND is a deliberate
+    // overlay — a sticky nav covering the rows it scrolls over is doing its
+    // job, not colliding. The distinction is the background: the pinned
+    // chart plate is sticky and has NONE, which is exactly why its overlap
+    // with the reading column was a real bug and is still caught.
+    let overlay = false;
+    for (let a = el; a && a !== document.body; a = a.parentElement) {
+      const s2 = getComputedStyle(a);
+      if ((s2.position === 'sticky' || s2.position === 'fixed') &&
+          s2.backgroundColor && !/rgba\(0, 0, 0, 0\)|transparent/
+            .test(s2.backgroundColor)) { overlay = true; break; }
+    }
+    if (overlay) return;
+    // PER-LINE rects, not the bounding box. An inline element that wraps
+    // returns a bounding box spanning every line it touches, which overlaps
+    // a sibling's box while no glyph overlaps anything — a false positive
+    // that reported "2011-2029" colliding with the phrase after it.
+    const cls = (el.className || el.tagName).toString().slice(0, 32);
+    for (const r of el.getClientRects()) {
+      if (r.width < 2 || r.height < 2) continue;
+      boxes.push({t: t.slice(0, 44), x: r.left, y: r.top,
+                  w: r.width, h: r.height, cls: cls, el: el});
+    }
+  });
+  const hits = [];
+  for (let i = 0; i < boxes.length; i++)
+    for (let j = i + 1; j < boxes.length; j++) {
+      const a = boxes[i], b = boxes[j];
+      if (a.el === b.el) continue;                 // two lines of one element
+      const ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+      const oy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+      if (ox > 2 && oy > 2)
+        hits.push(`"${a.t}" [${a.cls}] over "${b.t}" [${b.cls}] ` +
+                  `(${Math.round(ox)}x${Math.round(oy)}px)`);
+    }
+  return {count: boxes.length, hits: hits};
+}"""
+
+
+class TestNothingOverlaps:
+    """No two pieces of text may share screen space. At any width. Ever.
+
+    This exists because a real collision shipped and no screenshot caught it:
+    the arrival leaf's headline and identity strip were dropped into the
+    pinned plate's column by grid AUTO-PLACEMENT, and the pile-up only became
+    visible once the page was scrolled. Every screenshot to that point had
+    been taken at scroll 0.
+
+    So the gate walks four widths at four scroll positions and compares every
+    visible text box against every other one.
+    """
+
+    WIDTHS = (390, 768, 1280, 1600)
+    SCROLLS = (0, 500, 1200, 2200)
+
+    @classmethod
+    @pytest.fixture(scope="class")
+    def swept(cls):
+        pw = pytest.importorskip("playwright.sync_api",
+                                 reason="playwright not installed")
+        import threading
+        from werkzeug.serving import make_server
+        from app import app
+        srv = make_server("127.0.0.1", 0, app, threaded=True)
+        port = srv.socket.getsockname()[1]
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        found = {}
+        try:
+            with pw.sync_playwright() as p:
+                browser = TestMaskedBirthFieldsInARealBrowser._launch(p, pytest)
+                pg = browser.new_context(
+                    viewport={"width": 1280, "height": 1000}).new_page()
+                pg.goto(f"http://127.0.0.1:{port}/")
+                # A chart whose strings are LONGER than the reference one: a
+                # long name in the headline, a long place. Short text hides
+                # collisions that long text finds.
+                form = dict(GATE_FORM)
+                form.update({"name": "Aparajita Vishwanathan",
+                             "place": "Sydney, New South Wales, Australia"})
+                for k, v in form.items():
+                    pg.evaluate(
+                        "([k,v]) => { const e = document.querySelector("
+                        "`[name=\"${k}\"]`); if (e) e.value = v; }", [k, v])
+                with pg.expect_navigation():
+                    pg.evaluate("document.querySelector('#cast').submit()")
+                pg.wait_for_load_state("load")
+                pg.wait_for_timeout(2200)          # webfonts change metrics
+                # Resize rather than reload: one font wait for the whole sweep.
+                for width in cls.WIDTHS:
+                    pg.set_viewport_size({"width": width, "height": 1000})
+                    pg.wait_for_timeout(160)
+                    for view, sel in (("arrival", "#view-arrival"),
+                                      ("career", "#view-domain-career"),
+                                      ("explore", "#view-explore"),
+                                      # …and inside a category, where the
+                                      # dense tables live.
+                                      ("periods", "#view-explore")):
+                        if view != "arrival":
+                            pg.evaluate("(h) => { location.hash = h; }",
+                                        {"career": "#career",
+                                         "explore": "#explore",
+                                         "periods": "#cat-periods"}[view])
+                            pg.wait_for_timeout(320)
+                        for scroll in cls.SCROLLS:
+                            pg.evaluate("(y) => window.scrollTo(0, y)", scroll)
+                            pg.wait_for_timeout(90)
+                            r = pg.evaluate(_VISIBLE_TEXT_BOXES, sel)
+                            found[(width, view, scroll)] = r
+                    pg.evaluate("() => { location.hash = '#top'; }")
+                    pg.wait_for_timeout(260)
+                browser.close()
+        finally:
+            srv.shutdown()
+        return found
+
+    def test_the_sweep_actually_looked_at_something(self, swept):
+        """A sweep that measured nothing would pass silently."""
+        assert swept, "nothing swept"
+        views = {view for (_, view, _) in swept}
+        assert views == {"arrival", "career", "explore", "periods"}, views
+        # A low floor on purpose: this guards against a sweep that measured
+        # NOTHING, not against a sparse page. A domain fold at scroll 0 is
+        # meant to be sparse — it is a full-viewport verdict moment.
+        for key, r in swept.items():
+            assert r["count"] >= 8, (key, r["count"])
+
+    def test_no_text_overlaps_any_other_text(self, swept):
+        problems = []
+        for (width, view, scroll), r in sorted(swept.items()):
+            for hit in r["hits"]:
+                problems.append(f"{width}px {view} @y={scroll}: {hit}")
+        assert problems == [], (
+            f"{len(problems)} overlapping text boxes:\n  "
+            + "\n  ".join(problems[:12]))
+
+    def test_the_pinned_column_never_reaches_the_reading_column(self, swept):
+        """The specific failure, pinned by name.
+
+        `.leaf > .glance` named the wrong section — the headline block is
+        `class="chartof" id="glance"` while a DIFFERENT section is
+        `class="glance"` — so the headline and identity strip were never
+        placed and auto-placement put them in column 1, under the plate.
+        Every child is placed explicitly now.
+        """
+        css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
+        assert ".leaf > *:not(.plate) { grid-column: 2;" in css
+        assert ".leaf > .glance" not in css, (
+            "naming a section by a class it does not carry is what caused "
+            "the collision in the first place")
+
+
+class TestVerdictsAreSpecific:
+    """A verdict can be short, plain, answer-first — and say nothing.
+
+    "Work and money is one of the stronger parts of your chart — the planet
+    that rules it is strong" passed every gate in TestEditorialDoctrine and
+    told the reader not one fact about their own chart. Being unspecific is
+    its own failure mode and needs its own gate.
+    """
+
+    @classmethod
+    @pytest.fixture(scope="class")
+    def readings(cls, chart):
+        import domainread
+        return domainread.read_all(chart, AGENT_WHEN)
+
+    def test_every_teaser_names_a_planet(self, readings):
+        import voice
+        for r in readings:
+            named = voice.names_a_planet(r.teaser)
+            assert named, (
+                f"{r.domain.id}: no graha named — this is about charts in "
+                f"general, not this one\n  {r.teaser}")
+
+    def test_every_verdict_names_a_planet(self, readings):
+        import voice
+        for r in readings:
+            assert voice.names_a_planet(r.verdict), (r.domain.id, r.verdict)
+
+    def test_no_verdict_uses_a_filler_phrase(self, readings):
+        import voice
+        for r in readings:
+            hits = voice.find_vagueness(r.visible)
+            assert not hits, f"{r.domain.id}: {hits}\n  {r.visible}"
+
+    def test_a_dated_influence_is_dated_in_the_verdict(self, readings):
+        """Where the domain has a live dated influence, the verdict says
+        WHEN. A reader can act on 'until Jun 2027' and cannot act on 'right
+        now'."""
+        import voice
+        for r in readings:
+            live_dates = [s for s in r.signals
+                          if s.kind == "live" and voice.names_a_date(s.plain)]
+            if not live_dates:
+                continue
+            assert voice.names_a_date(r.verdict), (
+                f"{r.domain.id} has a dated influence running and the "
+                f"verdict does not say when: {r.verdict}")
+
+    def test_the_dates_are_the_ledger_s_own(self, chart, readings):
+        """Never a month this module invented — the same rule the agent's
+        validator enforces, applied to the deterministic reading."""
+        import voice
+        from chartfacts import build_facts
+        ledger = " ".join(f.statement for f in build_facts(chart, AGENT_WHEN))
+        for r in readings:
+            for token in voice.names_a_date(r.visible):
+                assert token in ledger, (
+                    f"{r.domain.id}: '{token}' is not a date this chart "
+                    f"produced")
+
+    def test_the_ban_list_catches_the_real_offenders(self):
+        """The exact sentences that prompted this gate."""
+        import voice
+        for sentence in (
+                "Work and money is one of the stronger parts of your chart.",
+                "Marriage is one of the harder parts of your chart.",
+                "The planet that rules it is strong.",
+                "Its ruling planet is weak.",
+                "A second chart confirms it.",
+                "Home and family is more helped than hindered."):
+            assert voice.find_vagueness(sentence), f"not caught: {sentence}"
+
+    def test_the_ban_list_spares_specific_prose(self):
+        import voice
+        for sentence in (
+                "Saturn rules it and sits at its weakest.",
+                "Your career planet, Mercury, is exalted.",
+                "The Moon, the planet of the mind, sits in its best sign.",
+                "Saturn is on it until Jun 2027.",
+                "The second chart puts Mars and Jupiter over it."):
+            assert not voice.find_vagueness(sentence), sentence
+
+    def test_specific_did_not_cost_short(self, readings):
+        """The budgets are unchanged: specific AND short."""
+        import voice
+        for r in readings:
+            assert voice.words(r.teaser) <= voice.TEASER_WORDS, r.teaser
+            assert voice.words(r.visible) <= voice.SYNTHESIS_WORDS, r.domain.id
+
+
+class TestExploreIndex:
+    """Explore was one scroll of everything at once. It is an index now."""
+
+    CATEGORIES = ("charts", "periods", "sky", "combinations", "tables",
+                  "match", "ask", "learn")
+    TECHNICAL = ("dashas", "lifeline", "weather", "doshas", "myths", "yogas",
+                 "ask", "agent", "patha", "grahas", "learnpath")
+
+    def test_the_index_lists_every_category_with_a_description(self, page):
+        rows = re.findall(
+            r'<a class="catrow" href="#cat-(\w+)"[^>]*>\s*'
+            r'<span class="catrow-title">([^<]+)</span>\s*'
+            r'<span class="catrow-desc">([^<]+)</span>', page, re.S)
+        assert [r[0] for r in rows] == list(self.CATEGORIES), rows
+        for cid, title, desc in rows:
+            assert len(desc.split()) >= 8, (cid, desc)
+            assert desc.strip().endswith("."), (cid, desc)
+
+    def test_every_technical_section_declares_its_category(self, page):
+        for section in self.TECHNICAL:
+            m = re.search(rf'<section[^>]*id="{section}"[^>]*>', page)
+            assert m, section
+            cat = re.search(r'data-cat="(\w+)"', m.group(0))
+            assert cat and cat.group(1) in self.CATEGORIES, (section, m.group(0))
+
+    def test_only_one_category_can_be_on_screen(self):
+        """The rule the redesign exists to enforce."""
+        css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
+        # Sections, notes and the gocara block are hidden by default — but
+        # NOT the index's own links, which carry data-cat to say what they
+        # open. Hiding both made the index render with no rows on it.
+        assert "#view-explore section[data-cat]," in css
+        assert "#view-explore .note[data-cat]," in css
+        for cat in self.CATEGORIES:
+            assert (f'#view-explore[data-showing="{cat}"] '
+                    f'section[data-cat="{cat}"]') in css, cat
+
+    def test_the_index_hides_itself_once_a_category_is_open(self):
+        css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
+        assert "#view-explore[data-showing] .exindex { display: none; }" in css
+
+    def test_nothing_in_explore_is_set_below_reading_size(self):
+        """'Tiny fonts' was half the complaint. Index entries are >=16px and
+        so is the body of every category."""
+        css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
+        for selector, floor in ((".catrow-desc", 16), (".catrow-title", 16)):
+            block = css[css.index(selector + " {"):]
+            block = block[:block.index("}")]
+            size = float(re.search(r"font-size:\s*([\d.]+)px", block).group(1))
+            assert size >= floor, (selector, size)
+        body = css[css.index("#view-explore[data-showing] { font-size:"):]
+        assert float(re.search(r"([\d.]+)px", body[:60]).group(1)) >= 16
+        rows = css[css.index("#view-explore[data-showing] .rows {"):]
+        assert float(re.search(r"([\d.]+)px", rows[:80]).group(1)) >= 15
+
+    def test_nothing_leaks_onto_the_index(self):
+        """Every block inside Explore declares a category — or it renders on
+        the index page, which is exactly what happened to the gocara table
+        and the "weather, not verdict" note the first time."""
+        page = (HERE / "templates" / "index.html").read_text(encoding="utf-8")
+        seg = page[page.index('<div class="view" id="view-explore"'):
+                   page.index("<!-- /view-explore -->")]
+        # The index's own furniture is allowed; everything else must be filed.
+        allowed = ("exindex", "cats", "catrow", "mark", "kicker", "folio",
+                   "backlink", "secnav", "chartof-name")
+        untagged = []
+        for m in re.finditer(
+                r'<(?:section|div)\s+class="(ledger|note)"[^>]*>', seg):
+            if "data-cat" not in m.group(0):
+                untagged.append(m.group(0)[:70])
+        assert untagged == [], untagged
+
+    def test_a_deep_link_to_a_section_opens_its_category(self):
+        """The arrival page's Ask card jumps straight to #ask. Without this
+        the browser would scroll to something the CSS is hiding."""
+        page = (HERE / "templates" / "index.html").read_text(encoding="utf-8")
+        assert "window.sideraCategoryOf" in page
+        assert "window.sideraShowCategory" in page
+        js = page[page.index("const cat = window.sideraCategoryOf"):]
+        assert "sideraShowCategory(cat)" in js[:200]
+
+    def test_a_category_url_opens_that_category(self):
+        """#cat-periods must work as a bookmark, a reload and a shared link,
+        not only as a click."""
+        page = (HERE / "templates" / "index.html").read_text(encoding="utf-8")
+        js = page[page.index("function fromHash()"):]
+        js = js[:js.index("document.addEventListener")]
+        assert 'h.startsWith("cat-")' in js
+        assert 'sideraShowCategory(h.slice(4))' in js
+        # …and plain #explore returns to the index rather than leaving
+        # whichever category was last open showing.
+        assert 'sideraShowCategory("index")' in js

@@ -181,6 +181,16 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
         "invariant", "product rule: a reader who asks for no motion is served "
                      "the finished page — every reveal at its final value, "
                      "nothing left invisible, and the pin kept"),
+    "TestVerdictsAreSpecific": (
+        "invariant", "product rule: a verdict names at least one graha and, "
+                     "where a dated influence runs, says when — specific "
+                     "AND short"),
+    "TestExploreIndex": (
+        "invariant", "product rule: Explore is a grouped index, one category "
+                     "on screen at a time, nothing below reading size"),
+    "TestNothingOverlaps": (
+        "invariant", "product rule: no two pieces of text may share screen "
+                     "space at any width or scroll position"),
     "TestPaperPalette": (
         "invariant", "product rule: two readings, one bronze split by role, "
                      "and every text pair recomputed to WCAG AA from "

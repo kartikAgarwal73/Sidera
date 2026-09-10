@@ -134,14 +134,15 @@ body {
 
 /* --- birth form --- */
 .hero { position: relative; padding: 46px 0 6px; }
-/* The printer's device — a watermark, not an ornament. It sits whole on the
-   page rather than cropping off the corner, and at an opacity that lets the
-   type stay the only thing being read. */
-.ghost {
-  position: absolute; top: 6px; right: 0; font-family: var(--font-heading);
-  font-size: 116px; line-height: 1; color: var(--ghost); opacity: .55;
-  pointer-events: none; user-select: none;
-}
+/* THE WATERMARK GLYPHS ARE GONE (ॐ, ☾, 36).
+   They were the only elements on the page drawn ON TOP of text, and the
+   overlap gate found them at every width from 360 to 1600. A watermark at
+   13% opacity is defensible right up until the rule is "nothing overlaps,
+   ever" — at which point it is the accessory to remove. Nothing else in the
+   design depended on them; the folio numeral behind a domain title is a
+   different device and stays, because the title is set to clear it.
+   `.ghost` is kept as a no-op so any stray markup degrades to nothing. */
+.ghost { display: none; }
 /* The cast form is the title page: the name large and unhurried, one line
    of setting beneath it, and the fields ruled like a printed form. */
 .hero h1 {
@@ -265,7 +266,6 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 
 /* --- glance (design 4b/5a: statement + chips + swap panel) --- */
 .glance { position: relative; padding: 30px 0 20px; }
-.glance-ghost { top: 2px; right: 14px; font-size: 120px; }
 .statement {
   position: relative; font-family: var(--font-heading); font-weight: 400;
   font-size: var(--t-verdict); line-height: 1.18; color: var(--ink);
@@ -648,7 +648,6 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 
 /* --- Guṇa Milan (design 2d) --- */
 .gmhead { position: relative; text-align: center; padding: 18px 0 8px; }
-.gmghost { top: -6px; left: 0; right: 0; font-size: 130px; text-align: center; }
 .gmnames { position: relative; font-family: var(--font-heading); font-size: 22px; }
 .gmsub {
   position: relative; font-size: 10.5px; letter-spacing: .06em;
@@ -904,11 +903,23 @@ button.cast.recast { margin-top: 4px; }
    the reader should be able to leave after this one paragraph and have got
    what they came for. */
 .domainread { padding-top: 4px; }
+/* THE HIERARCHY, THE RIGHT WAY UP.
+   The fold title was SMALLER than the verdict body, and the verdict was set
+   so large it ran three or four words to the line — shouting, not reading.
+   The title is the dominant element now; the verdict is a printed
+   pull-quote: large, but at a measure you can actually read along. */
+.domainread .chartof-name {
+  font-size: clamp(44px, 7.2vw, 72px);
+  line-height: 1.02; letter-spacing: -.015em;
+  max-width: 14ch; text-wrap: balance;
+}
 .dverdict {
-  font-family: var(--font-heading); font-size: var(--t-verdict);
-  line-height: 1.18; color: var(--ink);
-  margin: 18px 0 0; max-width: 26ch;
-  text-wrap: balance;
+  font-family: var(--font-heading);
+  /* 45-60ch at 22-30px: a pull-quote measure, not a billboard. */
+  font-size: clamp(22px, 2.35vw, 30px);
+  line-height: 1.35; color: var(--ink);
+  margin: 22px 0 0; max-width: 52ch;
+  text-wrap: pretty;
 }
 .dsynth {
   font-size: var(--t-body); line-height: 1.72;
@@ -992,17 +1003,24 @@ button.cast.recast { margin-top: 4px; }
   .leaf {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-rows: auto auto;
+    grid-auto-rows: min-content;
     column-gap: 56px;
     width: min(1120px, 94vw);
     position: relative; left: 50%; transform: translateX(-50%);
   }
+  /* EVERY child is placed explicitly. Nothing is left to auto-placement:
+     the leaf's second section is `class="chartof" id="glance"` while a
+     DIFFERENT section is `class="glance"`, so a rule naming `.glance` placed
+     the wrong one and auto-placement dropped the headline and the identity
+     strip into column 1 — underneath the pinned plate. The symptom was text
+     printing over text, and only once the page was scrolled.
+     `*:not(.plate) → column 2` cannot make that mistake again, and it holds
+     for any section added later. */
   .leaf > .plate {
-    grid-column: 1; grid-row: 1 / span 2;
+    grid-column: 1; grid-row: 1 / -1;
     position: sticky; top: 20px; align-self: start;
   }
-  .leaf > .glance { grid-column: 2; grid-row: 1; padding-top: 0; }
-  .leaf > .domaingrid { grid-column: 2; grid-row: 2; }
+  .leaf > *:not(.plate) { grid-column: 2; padding-top: 0; }
   /* Inside the pinned column the plate no longer breaks out of the reading
      column — it IS a column. */
   .leaf .kundli { width: 100%; left: auto; transform: none; }
@@ -1017,10 +1035,13 @@ button.cast.recast { margin-top: 4px; }
    container it hung at the top of the screenful while the title centred
    below, leaving 200px of nothing between them. In flow with a negative
    bottom margin the group travels together at any viewport height. */
+/* The folio numeral, in the upper corner as the brief asked — BEHIND the
+   type in stacking order and clear of it in space. In flow under the title
+   it read as a collision once the title grew to display size; the title and
+   the verdict are measure-capped, so the corner is empty and stays empty. */
 .ghostno {
-  position: relative; z-index: 0; display: block; align-self: flex-start;
-  font-family: var(--font-heading); font-size: 168px; line-height: .78;
-  margin: 0 0 -.30em -.055em;
+  position: absolute; top: -6px; right: -4px; z-index: 0;
+  font-family: var(--font-heading); font-size: 128px; line-height: .9;
   color: rgba(var(--ink-rgb), .12);
   pointer-events: none; user-select: none;
   font-variant-numeric: lining-nums tabular-nums;
@@ -1033,6 +1054,12 @@ button.cast.recast { margin-top: 4px; }
   position: relative;
   min-height: 68vh; display: flex; flex-direction: column;
   justify-content: center; padding: 20px 0 12px;
+}
+/* Keep the display type out of the numeral's corner at narrow widths, where
+   14ch of a 44px title is wider than the room beside it. */
+@media (max-width: 560px) {
+  .ghostno { font-size: 92px; top: -2px; }
+  .domainread .chartof-name { max-width: 11ch; }
 }
 .reveal-rise {
   opacity: 0; transform: translateY(var(--rise));
@@ -1096,3 +1123,93 @@ button.cast.recast { margin-top: 4px; }
   .reveal-rise, .working { opacity: 1 !important; transform: none !important; }
   .verdictmoment { min-height: 0; }
 }
+
+
+/* ============================================================
+   EXPLORE — AN INDEX, NOT A DUMP
+   Eight categories. Opening one shows that category and hides every other,
+   so no fold ever presents two categories' content at once. The sections
+   keep their place in the markup and carry a data-cat; the CSS does the
+   showing, because moving them would have cut through the Jinja
+   conditionals that wrap several of them.
+   ============================================================ */
+/* Sections only. `data-cat` on an <a> means "opens this category"; on a
+   section it means "belongs to it" — hiding both made the index render
+   with no rows on it at all. */
+#view-explore section[data-cat],
+#view-explore .note[data-cat],
+#view-explore div[data-cat] { display: none; }
+#view-explore[data-showing] .exindex { display: none; }
+/* On the index the nav is redundant — the index IS the navigation — and it
+   ran off the right edge besides. It appears once a category is open, to
+   move between them without going back. */
+#view-explore:not([data-showing]) #secnav { display: none; }
+#view-explore[data-showing] #secnav { margin-bottom: 6px; }
+#view-explore[data-showing="charts"] section[data-cat="charts"],
+#view-explore[data-showing="charts"] .note[data-cat="charts"],
+#view-explore[data-showing="charts"] div[data-cat="charts"],
+#view-explore[data-showing="periods"] section[data-cat="periods"],
+#view-explore[data-showing="periods"] .note[data-cat="periods"],
+#view-explore[data-showing="periods"] div[data-cat="periods"],
+#view-explore[data-showing="sky"] section[data-cat="sky"],
+#view-explore[data-showing="sky"] .note[data-cat="sky"],
+#view-explore[data-showing="sky"] div[data-cat="sky"],
+#view-explore[data-showing="combinations"] section[data-cat="combinations"],
+#view-explore[data-showing="combinations"] .note[data-cat="combinations"],
+#view-explore[data-showing="combinations"] div[data-cat="combinations"],
+#view-explore[data-showing="tables"] section[data-cat="tables"],
+#view-explore[data-showing="tables"] .note[data-cat="tables"],
+#view-explore[data-showing="tables"] div[data-cat="tables"],
+#view-explore[data-showing="match"] section[data-cat="match"],
+#view-explore[data-showing="match"] .note[data-cat="match"],
+#view-explore[data-showing="match"] div[data-cat="match"],
+#view-explore[data-showing="ask"] section[data-cat="ask"],
+#view-explore[data-showing="ask"] .note[data-cat="ask"],
+#view-explore[data-showing="ask"] div[data-cat="ask"],
+#view-explore[data-showing="learn"] section[data-cat="learn"],
+#view-explore[data-showing="learn"] .note[data-cat="learn"],
+#view-explore[data-showing="learn"] div[data-cat="learn"] { display: block; }
+
+.exindex { padding-top: 4px; }
+/* The index rows: a contents page for the technical half. Nothing here is
+   below 16px — the old explore set its links at 12.5px and its tables at
+   13px, which is what made it unreadable. */
+.cats { border-top: 1px solid var(--divider); margin-top: 16px; }
+.catrow {
+  display: grid; grid-template-columns: 1fr auto;
+  grid-template-areas: "title more" "desc desc";
+  column-gap: 16px; row-gap: 6px;
+  padding: 18px 0 19px; border-bottom: 1px solid var(--divider);
+  text-decoration: none; color: inherit;
+}
+.catrow-title {
+  grid-area: title; font-family: var(--font-heading);
+  font-size: 23px; line-height: 1.15; color: var(--ink);
+}
+.catrow-desc {
+  grid-area: desc; font-size: 16px; line-height: 1.6;
+  color: var(--ink-60); max-width: 58ch;
+}
+.catrow-more {
+  grid-area: more; font-size: var(--t-mark); letter-spacing: .12em;
+  font-variant-caps: all-small-caps; color: var(--ink-50);
+  white-space: nowrap; padding-top: 6px;
+}
+.catrow:hover .catrow-title, .catrow:hover .catrow-more {
+  color: var(--accent-ink);
+}
+
+/* Inside a category, everything is set to be read rather than scanned. */
+#view-explore[data-showing] { font-size: 16px; }
+#view-explore[data-showing] .rows { font-size: 15px; }
+#view-explore[data-showing] .row { padding: 10px 0; line-height: 1.6; }
+#view-explore[data-showing] .yogadetail,
+#view-explore[data-showing] .xpbody,
+#view-explore[data-showing] .agentread,
+#view-explore[data-showing] .ratehint { font-size: 16px; line-height: 1.7; }
+#view-explore[data-showing] .gtable { font-size: 15px; }
+#view-explore[data-showing] .gtable td,
+#view-explore[data-showing] .gtable th { padding: 9px 10px 9px 0; }
+#view-explore[data-showing] .yoganame { font-size: 19px; }
+#view-explore[data-showing] .wcard-head { font-size: 15.5px; }
+#view-explore[data-showing] .notebody { font-size: 16px; line-height: 1.65; }
