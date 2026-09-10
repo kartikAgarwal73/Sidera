@@ -17,6 +17,115 @@
 </head>
 <body>
 
+{#- ===================================================================
+    THE PLATE — one macro, every division.
+
+    Before this existed each plate wrote its own <g> of grahas, which is
+    how the mini plate ended up labelling in a different way from the
+    full one. A graha carries four things and this is where they are
+    decided, once:
+
+      GLYPH + ABBREVIATION   ☉Su. The glyph is what a printed plate uses
+                             and stays recognisable when the plate is
+                             small; the letters remove all doubt. The
+                             legend under every plate teaches both.
+      INK WEIGHT             a natural benefic is set light, a natural
+                             malefic dense. Weight, not hue: the palette
+                             has one accent and it means "look here",
+                             not "this one is bad".
+      ℞                      retrograde.
+      ⊙                      combust — within the Sun's orb, burnt. In
+                             the accent, because it is the Sun's mark.
+
+    The lagna is NOT a graha and never sits in the same row as one: it
+    gets its own mark, in the accent, on every plate.
+=================================================================== -#}
+{% macro grahalayer(houses, size, glyphs=true, marks=true,
+                    degrees=false) -%}
+{#- The template DRAWS; it does not decide. Which marks a cell can carry,
+    how they are arranged and where the block hangs are all computed in
+    `app.plate_layout`, because that is where the house polygons are and
+    the whole question is geometric. A layout arrived at in Jinja could
+    only ever be a guess about width. -#}
+<g class="grahas {{ 'grahas-deg' if degrees else 'grahas-compact' }}"
+   text-anchor="middle" style="font-size: {{ size }}px">
+  {%- for h in houses %}
+  {%- set L = h.deg_layout if degrees else h.compact_layout %}
+  {%- if L %}
+  {%- set lead = DEG_LEADING if degrees else COMPACT_LEADING %}
+  <text x="{{ L.at[0] }}"
+        y="{{ L.at[1] - lead * ((L.rows | length) - 1) / 2 }}"
+        {% if h.crowded %}class="crowded"{% endif %}>
+    {%- for row in L.rows -%}
+    <tspan x="{{ L.at[0] }}"{% if not loop.first %} dy="{{ lead }}"{% endif %}>
+      {%- for i in row -%}
+      {%- set g = h.grahas[i] -%}
+      <tspan class="gm {{ 'gm-lagna' if g.is_lagna else 'gm-' ~ g.nature }}{% if g.combust %} gm-burnt{% endif %}"
+             {% if not loop.first %}dx="2"{% endif %}
+        >{% if glyphs and L.glyph %}{{ g.glyph }}{% endif %}{{ g.abbr }}{% if L.degrees and g.deg %} {{ g.deg }}{% endif %}</tspan
+        >{% if marks and g.retro %}<tspan class="gm-retro">℞</tspan>{% endif -%}
+      {%- if marks and g.combust %}<tspan class="gm-combust">⊙</tspan>{% endif -%}
+      {%- endfor -%}
+    </tspan>
+    {%- endfor -%}
+  </text>
+  {%- endif %}{% endfor %}
+</g>
+{%- endmacro %}
+
+{#- A thumbnail carries GLYPHS AND NOTHING ELSE — or dots.
+
+    Measured: two-letter abbreviations in the 132px gallery plate rendered
+    at 3.9 effective pixels, a texture pretending to be information. One
+    glyph at 26 user units reads at 13, which is the floor.
+
+    Where even that will not fit — house 12 holds four grahas in a triangle
+    whose top edge is the plate border — the cell shows one dot per graha
+    instead. A dot has no legibility floor and says the true thing a
+    thumbnail can say: occupied, by this many. `app.plate_layout` decides
+    which, per cell, from the polygons. -#}
+{% macro glyphonly(houses) -%}
+<g class="minigrahas" text-anchor="middle" style="font-size: {{ MINI_SIZE }}px">
+  {%- for h in houses %}
+  {%- if h.mini_layout %}
+  <text x="{{ h.mini_layout.at[0] }}"
+        y="{{ h.mini_layout.at[1] - MINI_LEADING * ((h.mini_layout.rows | length) - 1) / 2 }}">
+    {%- for row in h.mini_layout.rows -%}
+    <tspan x="{{ h.mini_layout.at[0] }}"{% if not loop.first %} dy="{{ MINI_LEADING }}"{% endif %}>
+      {%- for i in row %}{{ h.grahas[i].glyph }}{% endfor -%}
+    </tspan>
+    {%- endfor -%}
+  </text>
+  {%- elif h.mini_dots -%}
+  {%- for d in h.mini_dots %}<circle class="minidot" cx="{{ d[0] }}" cy="{{ d[1] }}" r="5"/>{% endfor -%}
+  {%- endif %}{% endfor %}
+</g>
+{%- endmacro %}
+
+{#- The legend that makes the marks above readable to someone meeting them
+    for the first time. One per screen that shows a plate, never per plate. -#}
+{% macro platelegend(names=true) -%}
+<div class="platekey">
+  {%- if names %}
+  <span class="platekey-row">
+    {%- for g, ab, name in [("☉","Su","Sun"), ("☽","Mo","Moon"),
+                            ("♂","Ma","Mars"), ("☿","Me","Mercury"),
+                            ("♃","Ju","Jupiter"), ("♀","Ve","Venus"),
+                            ("♄","Sa","Saturn"), ("☊","Ra","Rāhu"),
+                            ("☋","Ke","Ketu")] -%}
+    <span class="platekey-item"><span class="platekey-gl">{{ g }}</span>{{ ab }} · {{ name }}</span>
+    {%- endfor -%}
+  </span>
+  {%- endif %}
+  <span class="platekey-row platekey-marks">
+    <span class="platekey-item"><b>Asc</b> the lagna</span>
+    <span class="platekey-item"><span class="gm-retro">℞</span> retrograde</span>
+    <span class="platekey-item"><span class="gm-combust">⊙</span> combust — inside the Sun's orb</span>
+    <span class="platekey-item">heavier ink · a natural malefic</span>
+  </span>
+</div>
+{%- endmacro %}
+
 <header class="topbar">
   <span class="brand">Sidera</span>
   <span class="topbar-right">
@@ -35,6 +144,14 @@
   <a href="#charts" data-view="view-charts">Your charts</a>
   <a href="#explore" data-view="view-explore">Explore</a>
   <a href="#ask" data-view="view-explore" data-scroll="ask">Ask</a>
+  {# NUMEROLOGY IS NOT BUILT. Not a stub, not a placeholder view — there is
+     no numerology code in this repository at all. It is listed anyway, and
+     listed as unavailable, which is the same honesty the unbuilt divisional
+     charts get: a reader can see what the app does not yet do instead of
+     wondering whether they missed it. `aria-disabled` and no href, so it is
+     not focusable and cannot be clicked into a view that does not exist. #}
+  <span class="tab-soon" aria-disabled="true">Numerology
+    <span class="tab-soonmark">in preparation</span></span>
 </nav>
 {% endif %}
 
@@ -216,6 +333,8 @@
   <div style="text-align:right;margin-top:8px"><button class="learn" data-lesson="plate">ⓘ how to read this plate</button> <button class="learn" data-lesson="d9">ⓘ read your D9</button></div>
   <label class="degtoggle"><input type="checkbox" id="degToggle" checked>
     Show degrees <span class="opt">· D1</span></label>
+  <label class="degtoggle"><input type="checkbox" id="savToggle">
+    Aṣṭakavarga <span class="opt">· support per house, D1</span></label>
 
   {% for key, houses, sub in [("d1", data.kundli_d1, data.lagna_sign ~ " rising"),
                               ("d9", data.kundli_d9, "D9 lagna " ~ data.d9_lagna),
@@ -230,23 +349,32 @@
       <path class="plate-diamond" fill="none" stroke-width="1"
             d="M150 3 L297 150 L150 297 L3 150 Z"/>
       <g class="signnum" text-anchor="middle">
-        {% for h in houses %}<text x="{{ h.num_pos[0] }}" y="{{ h.num_pos[1] }}"{% if h.crowded %} class="crowded"{% endif %}>{{ h.sign_num }}</text>{% endfor %}
-      </g>
-      <g class="grahas grahas-compact" text-anchor="middle">
-        {% for h in houses %}{% if h.line1 %}
-        <text x="{{ h.pl_pos[0] }}" y="{{ h.pl_pos[1] }}">{{ h.line1 }}{% if h.line2 %}<tspan x="{{ h.pl_pos[0] }}" dy="14">{{ h.line2 }}</tspan>{% endif %}</text>
-        {% endif %}{% endfor %}
+        {# A cell whose marks stack onto two or more rows gives up its sign
+           numeral: a numeral under a graha mark is unreadable, and the sign
+           is in the graha table either way. #}
+        {% for h in houses %}{% if not h.hide_signnum %}<text x="{{ h.num_pos[0] }}" y="{{ h.num_pos[1] }}"{% if h.crowded %} class="crowded"{% endif %}>{{ h.sign_num }}</text>{% endif %}{% endfor %}
       </g>
       {% if key == 'd1' %}
-      <g class="grahas grahas-deg" text-anchor="middle">
-        {% for h in houses %}{% if h.detail_lines %}
-        <text x="{{ h.deg_pos[0] }}" y="{{ h.deg_pos[1] - 6 * (h.detail_lines | length - 1) }}"{% if h.crowded %} class="crowded"{% endif %}>
-          {%- for line in h.detail_lines -%}
-          <tspan x="{{ h.deg_pos[0] }}" {% if not loop.first %}dy="12.5"{% endif %}>{{ line }}</tspan>
-          {%- endfor -%}
-        </text>
-        {% endif %}{% endfor %}
+      {# THE SARVĀṢṬAKAVARGA TOTAL PER HOUSE, in the sign numeral's slot —
+         and instead of it, never beside it. A North-Indian cell already
+         carries a numeral and a graha stack; measured, a third number
+         collided with one or the other in every arrangement tried, and
+         shrinking it to fit would put it under the legibility floor. So it
+         is the reader's choice, the same way the degrees are.
+
+         D1 only: the Aṣṭakavarga tables are defined against the birth
+         chart and mean nothing rotated into a division. #}
+      <g class="savnum" text-anchor="middle">
+        {% for h in houses %}{% if h.sav and not h.hide_signnum %}<text x="{{ h.num_pos[0] }}" y="{{ h.num_pos[1] }}"{% if h.crowded %} class="crowded"{% endif %}>{{ h.sav }}</text>{% endif %}{% endfor %}
       </g>
+      {% endif %}
+      </g>
+      {{ grahalayer(houses, size=COMPACT_SIZE) }}
+      {% if key == 'd1' %}
+      {# The same marks, with the degree each one stands at. Same macro, so
+         the glyph, the ink weight, ℞ and ⊙ cannot differ between the two
+         layers — which they did while this group wrote its own text. #}
+      {{ grahalayer(houses, size=DEG_SIZE, degrees=true) }}
       {% endif %}
       {% if key == 'd1' %}
       {# Today's transits, ticked around the outside — the sky now, against
@@ -268,11 +396,15 @@
     </div>
   </div>
   {% endfor %}
+  {# The graha chips below already pair every abbreviation with its name and
+     open its working — a second name list here would be the same legend
+     printed twice. Only the marks are new. #}
+  {{ platelegend(names=false) }}
 
   <!-- Phase 8: tap a graha to see its working -->
   <div class="chips" id="chips">
     {% for name, px in data.explorer.items() %}
-    <button class="chip-planet" data-planet="{{ name }}">{{ px.abbr }} · {{ name }}</button>
+    <button class="chip-planet" data-planet="{{ name }}"><span class="chip-gl">{{ px.glyph }}</span>{{ px.abbr }} · {{ name }}</button>
     {% endfor %}
   </div>
   <div class="xcard" id="xcard" hidden>
@@ -336,11 +468,7 @@
         </g>
         <path class="plate-diamond" fill="none" stroke-width="1.8"
               d="M150 3 L297 150 L150 297 L3 150 Z"/>
-        <g class="minigrahas" text-anchor="middle">
-          {% for h in data.kundli_d1 %}{% if h.line1 %}
-          <text x="{{ h.pl_pos[0] }}" y="{{ h.pl_pos[1] }}">{{ h.line1 }}{% if h.line2 %}<tspan x="{{ h.pl_pos[0] }}" dy="15">{{ h.line2 }}</tspan>{% endif %}</text>
-          {% endif %}{% endfor %}
-        </g>
+        {{ glyphonly(data.kundli_d1) }}
       </svg>
       <div class="gcaption">{{ data.lagna_sign }} {{ data.lagna_dms }} · Candra in {{ data.moon_nak.name }} p.{{ data.moon_nak.pada }}
         <button class="learn" data-lesson="lagna">ⓘ 60s</button></div>
@@ -497,11 +625,10 @@
         </g>
         <path class="plate-diamond" fill="none" stroke-width="2.6"
               d="M150 3 L297 150 L150 297 L3 150 Z"/>
-        <g class="minigrahas" text-anchor="middle">
-          {% for h in v.houses %}{% if h.line1 %}
-          <text x="{{ h.pl_pos[0] }}" y="{{ h.pl_pos[1] }}">{{ h.line1 }}</text>
-          {% endif %}{% endfor %}
-        </g>
+        {# GLYPHS ONLY at thumbnail size. Two-letter abbreviations in a
+           132px plate rendered at 3.9 effective px — a texture pretending
+           to be information. A glyph at 30 user units reads at 13. #}
+        {{ glyphonly(v.houses) }}
       </svg>
       <span class="gcard-code">{{ v.code }} {{ v.name }}</span>
       <span class="gcard-sum">{{ v.summary }}</span>
@@ -525,9 +652,14 @@
 </section>
 </div><!-- /view-charts -->
 
+{% set plateno = namespace(n=0) %}
 {% for v in data.vargas %}{% if v.live %}
+{% set plateno.n = plateno.n + 1 %}
+{# Numbered among the plates that EXIST. `loop.index` counts the slots, so
+   with D2 and D3 in preparation the built plates were folioed 1, 5, 6 — a
+   page sequence with holes in it, which is not a sequence. #}
 <div class="view" id="view-varga-{{ v.key }}" hidden>
-<p class="folio"><span class="folio-p">P. 03·{{ loop.index }}</span> · {{ v.code }} {{ v.name }}<br>
+<p class="folio"><span class="folio-p">P. 03·{{ plateno.n }}</span> · {{ v.code }} {{ v.name }}<br>
   <span class="folio-of">Fold 3 of 4</span></p>
 <a class="backlink" href="#charts" data-view="view-charts">← Your charts</a>
 <section class="domainread">
@@ -547,18 +679,15 @@
     <path class="plate-diamond" fill="none" stroke-width="1"
           d="M150 3 L297 150 L150 297 L3 150 Z"/>
     <g class="signnum" text-anchor="middle">
-      {% for h in v.houses %}<text x="{{ h.num_pos[0] }}" y="{{ h.num_pos[1] }}">{{ h.sign_num }}</text>{% endfor %}
+      {% for h in v.houses %}{% if not h.hide_signnum %}<text x="{{ h.num_pos[0] }}" y="{{ h.num_pos[1] }}">{{ h.sign_num }}</text>{% endif %}{% endfor %}
     </g>
-    <g class="grahas" text-anchor="middle">
-      {% for h in v.houses %}{% if h.line1 %}
-      <text x="{{ h.pl_pos[0] }}" y="{{ h.pl_pos[1] }}">{{ h.line1 }}{% if h.line2 %}<tspan x="{{ h.pl_pos[0] }}" dy="14">{{ h.line2 }}</tspan>{% endif %}</text>
-      {% endif %}{% endfor %}
-    </g>
+    {{ grahalayer(v.houses, size=COMPACT_SIZE) }}
   </svg>
   <div class="platecaption">
     <span class="plateno">{{ v.code }}</span> {{ v.lagna }} rising
     <span class="platecast">cast {{ data.today.strftime("%-d %B %Y") }} · Lahiri ayanāṃśa</span>
   </div>
+  {{ platelegend() }}
 </section>
 </div><!-- /view-varga-{{ v.key }} -->
 {% endif %}{% endfor %}
@@ -794,10 +923,14 @@
   {% endfor %}
 </section>
 
-<!-- Phase 10: doshas, always with their cancellation checks -->
+<!-- Phase 10: doshas, always with their cancellation checks.
+     THE HOME SECTION for every phenomenon the cancellation machinery runs
+     on. The myth-vs-record framing of the same phenomenon is folded into
+     the entry below rather than printed again under "Myths" — see
+     doshas.combinations(). -->
 <section class="ledger" id="doshas" data-cat="combinations">
   <div class="kicker">Doshas · checks always run <button class="learn" data-lesson="dosha">ⓘ 60s</button></div>
-  {% for d in data.doshas %}
+  {% for row in data.combinations.doshas %}{% set d = row.dosha %}
   <details class="yoga">
     <summary class="yogahead">
       <span class="yoganame">{{ d.name }}</span>
@@ -810,6 +943,14 @@
     {% endif %}
     {% if d.next_window %}<p class="yoganote">Next window opens {{ d.next_window }} — dated in advance, never a surprise.</p>{% endif %}
     {% for c in d.cancellations %}<p class="yoganote">✓ {{ c }}</p>{% endfor %}
+    {% if row.myth %}
+    <div class="mythfold">
+      <p class="yogadetail"><span class="xplabel">Myth</span>{{ row.myth }}</p>
+      <p class="yogadetail"><span class="xplabel">Classical record</span>{{ row.classical_record }}
+        <span class="chip chip-{{ row.confidence | lower }}">{{ row.confidence }}</span></p>
+      <p class="yoganote">{{ row.citation }}</p>
+    </div>
+    {% endif %}
     {% if d.checks_run %}
     <details><summary>Checks run</summary>
       <p class="yogarule">{% for c in d.checks_run %}· {{ c }}<br>{% endfor %}</p>
@@ -820,10 +961,11 @@
   {% endfor %}
 </section>
 
-<!-- Phase 10: myth-busters -->
+<!-- Phase 10: myth-busters — everything with no home in Doshas, plus a
+     cross-reference to the ones that have. -->
 <section class="ledger" id="myths" data-cat="combinations">
   <div class="kicker">Myth vs classical record</div>
-  {% for m in data.mythbusters %}
+  {% for m in data.combinations.myths %}
   <details class="yoga">
     <summary class="yogahead">
       <span class="yoganame">{{ m.placement }}</span>
@@ -834,6 +976,12 @@
     <p class="yoganote">{{ m.citation }}</p>
   </details>
   {% endfor %}
+  {% if data.combinations.crossrefs %}
+  <p class="crossref">Also answered above, with their cancellation checks
+    and dates:
+    {% for x in data.combinations.crossrefs %}<a href="#{{ x.anchor }}"
+      >{{ x.name }}</a>{% if not loop.last %} · {% endif %}{% endfor %}.</p>
+  {% endif %}
 </section>
 
 <!-- Gocara / transits -->
@@ -864,16 +1012,40 @@
   <p class="schoolstamp">Rāhu and Ketu reach: {{ data.school_node_reach }}</p>
 </section>
 
-<!-- Yogas -->
+<!-- Yogas — verdict first, then the working.
+     Each entry answers four questions in that order: is it real (formed in
+     D1, and confirmed or weakened in the divisional charts), what does it
+     classically give, WHEN does it act, and where in life. Everything here
+     is composed by yogaread.py and every claim carries the rule it rests
+     on and the ledger fact it was computed from. -->
 <section class="ledger" id="yogas" data-cat="combinations">
   <div class="kicker">Yogas <button class="learn" data-lesson="yoga">ⓘ 60s</button></div>
-  {% for y, xp in data.yogas %}
+  {% for r, xp in data.yogas %}
+  {% set y = r.yoga %}
   <div class="yoga">
     <div class="yogahead">
       <span class="yoganame">{{ y.name }}</span>
       <span class="yogakind">{{ y.kind }}</span>
     </div>
-    <p class="yogadetail">{{ xp.fact }}</p>
+    {# THE ANSWER, in two sentences: whether it is real, and when it acts. #}
+    <p class="yverdict">{{ r.verdict }}</p>
+    <div class="yfacts">
+      <div class="yfact"><span class="xplabel">Gives</span>{{ r.gives }}</div>
+      <div class="yfact"><span class="xplabel">Where</span>{{ r.where }}</div>
+      {% for t in r.varga_tests %}
+      <div class="yfact"><span class="xplabel">{{ t.varga }}</span>{{ t.verdict }}</div>
+      {% endfor %}
+      {% if r.running %}
+      <div class="yfact"><span class="xplabel">Now</span>The {{ r.running.lord }}
+        period is running, to {{ r.running.end.strftime("%b %Y") }}.</div>
+      {% elif r.next_up %}
+      <div class="yfact"><span class="xplabel">Next</span>The {{ r.next_up.lord }}
+        period, {{ r.next_up.window }}.</div>
+      {% endif %}
+      {% for c in r.contacts %}
+      <div class="yfact"><span class="xplabel">Today</span>{{ c }}</div>
+      {% endfor %}
+    </div>
     {% for n in y.notes %}<p class="yoganote">{{ n }}</p>{% endfor %}
     {% if y.cancelled %}<p class="yoganote">Held in check: {{ y.cancellation | join("; ") }}</p>{% endif %}
     <button class="whybtn" data-planets="{{ y.planets | join(',') }}"
@@ -883,6 +1055,15 @@
       <p class="yogarule"><span class="xplabel">Mechanism</span>{{ xp.mechanism }}</p>
       <p class="yogarule"><span class="xplabel">Meaning</span>{{ xp.meaning }}
         <span class="chip chip-{{ xp.confidence | lower }}">{{ xp.confidence }}</span></p>
+      {% for t in r.varga_tests %}
+      <p class="yogarule"><span class="xplabel">{{ t.varga }} · read for {{ t.read_for }}</span>{{ t.detail }}</p>
+      {% endfor %}
+      {% if r.activations %}
+      <p class="yogarule"><span class="xplabel">Periods of its planets</span>
+        {% for a in r.activations %}{{ a.lord }} {{ a.level }} · {{ a.window }} · {{ a.state }}{% if not loop.last %}<br>{% endif %}{% endfor %}</p>
+      {% endif %}
+      <p class="yogarule"><span class="xplabel">Rests on</span>{{ r.rule_ids | join(" · ") }}</p>
+      <p class="yogarule"><span class="xplabel">Computed from</span>{{ r.fact_ids | join(" · ") }}</p>
     </details>
   </div>
   {% endfor %}
@@ -1004,6 +1185,60 @@
 </section>
 
 <!-- Nakshatra / graha table -->
+{# Aṣṭakavarga — the answer, then the grid.
+   Verdict first: the four numbers a reader can act on. The 12×8 table is a
+   reference, and references belong behind a fold. #}
+<section class="ledger" id="ashtakavarga" data-cat="tables">
+  <div class="kicker">Aṣṭakavarga · support by house</div>
+  <p class="yverdict">{{ data.ashtakavarga.verdict }}</p>
+  <div class="yfacts">
+    <div class="yfact"><span class="xplabel">Strongest</span>
+      {% for h, v in data.ashtakavarga.strongest %}the {{ h | ordinal }} at {{ v }}{% if not loop.last %}, {% endif %}{% endfor %}
+      — {% for h, v in data.ashtakavarga.strongest %}{{ data.ashtakavarga.rows[h - 1].matters }}{% if not loop.last %}, {% endif %}{% endfor %}.</div>
+    <div class="yfact"><span class="xplabel">Thinnest</span>
+      {% for h, v in data.ashtakavarga.thinnest %}the {{ h | ordinal }} at {{ v }}{% if not loop.last %}, {% endif %}{% endfor %}
+      — {% for h, v in data.ashtakavarga.thinnest %}{{ data.ashtakavarga.rows[h - 1].matters }}{% if not loop.last %}, {% endif %}{% endfor %}.</div>
+    <div class="yfact"><span class="xplabel">Total</span>{{ data.ashtakavarga.sav_total }}
+      across the twelve houses, which is the same in every chart — the
+      distribution is what differs.</div>
+  </div>
+  {# One line of caveat, at the end of the answer. The full statement of
+     what is deferred and why is inside the fold with the grid it applies
+     to — the doctrine's rule about caveats holds here too. #}
+  <p class="yoganote">Raw bindus: the classical reductions are not applied.</p>
+  <details class="fold">
+    <summary>The full grid · every graha, every house</summary>
+    <p class="yogarule">{{ data.ashtakavarga.note }}</p>
+    <div class="tablewrap">
+      <table class="gtable avgrid">
+        <thead>
+          <tr><th>House</th><th>Sign</th>
+            {% for p in data.ashtakavarga.bodies %}<th>{{ p[:2] }}</th>{% endfor %}
+            <th>SAV</th></tr>
+        </thead>
+        <tbody>
+          {% for r in data.ashtakavarga.rows %}
+          <tr class="av-{{ r.band }}">
+            <td>{{ r.house | ordinal }}</td><td>{{ r.sign }}</td>
+            {% for p in data.ashtakavarga.bodies %}<td class="num">{{ r.bav[p] }}</td>{% endfor %}
+            <td class="num avsav">{{ r.sav }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr><td colspan="2">Totals</td>
+            {% for p in data.ashtakavarga.bodies %}<td class="num">{{ data.ashtakavarga.totals[p] }}</td>{% endfor %}
+            <td class="num avsav">{{ data.ashtakavarga.sav_total }}</td></tr>
+        </tfoot>
+      </table>
+    </div>
+    <p class="yogarule">The lagna has a row of its own, totalling
+      {{ data.ashtakavarga.lagna_total }}. It is reported separately and is
+      not part of the Sarvāṣṭakavarga — adding it would give 386 where every
+      text says 337.</p>
+  </details>
+</section>
+
 <section class="ledger" id="grahas" data-cat="tables">
   <div class="kicker">Grahas · nakṣatras · dignity <button class="learn" data-lesson="nakshatra">ⓘ 60s</button> <button class="learn" data-lesson="dignity">ⓘ dignity</button></div>
   <div class="scrollwrap"><table class="gtable">
@@ -1384,6 +1619,11 @@ if (navlinks.length) {
 const degToggle = document.getElementById("degToggle");
 if (degToggle) degToggle.addEventListener("change", () =>
   document.getElementById("plate").classList.toggle("showdeg", degToggle.checked));
+// The Aṣṭakavarga totals take the sign numeral's slot rather than sitting
+// beside it — see the note on the group in the plate above.
+const savToggle = document.getElementById("savToggle");
+if (savToggle) savToggle.addEventListener("change", () =>
+  document.getElementById("plate").classList.toggle("showsav", savToggle.checked));
 
 // glance chips (design 4b/5a): exclusive selection, instant panel swap
 document.querySelectorAll(".gchip").forEach(chip =>

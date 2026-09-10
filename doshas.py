@@ -46,6 +46,10 @@ WEATHER_FRAMING = (
 
 @dataclass(frozen=True)
 class Dosha:
+    #: The PHENOMENON this entry is about, canonically — (what, condition).
+    #: Two entries with the same subject are the same thing said twice, and
+    #: `combinations()` refuses to print both. See its docstring.
+    subject: tuple[str, str]
     name: str
     formed: bool          # does the textbook pattern appear at all?
     active: bool          # still standing after the cancellation checks?
@@ -79,6 +83,7 @@ def detect_mangal(chart: Chart) -> Dosha:
             "12 from the Lagna.")
     if not formed:
         return Dosha(
+            subject=("Mars", f"house-{mars.house}"),
             name="Mangal dosha", formed=False, active=False, rule=rule,
             detail=f"Mars occupies house {mars.house} — the pattern does "
                    "not form.",
@@ -114,6 +119,7 @@ def detect_mangal(chart: Chart) -> Dosha:
         passed.append(f"The Moon joins Mars. [{check}]")
 
     return Dosha(
+        subject=("Mars", f"house-{mars.house}"),
         name="Mangal dosha", formed=True, active=not passed, rule=rule,
         detail=f"Mars occupies house {mars.house} ({mars.sign}) — the "
                "textbook pattern appears, so the cancellation checks run "
@@ -140,6 +146,7 @@ def detect_kaal_sarpa(chart: Chart) -> Dosha:
     outside = side_a if len(side_a) <= len(side_b) else side_b
     if not formed:
         return Dosha(
+            subject=("nodes", "kaal-sarpa"),
             name="Kaal Sarpa", formed=False, active=False, rule=rule,
             detail="Planets stand on both sides of the nodal axis ("
                    + ", ".join(outside) + " break the hemicycle) — the "
@@ -154,6 +161,7 @@ def detect_kaal_sarpa(chart: Chart) -> Dosha:
     nearest = min(margins, key=margins.get)
     furthest = max(margins, key=margins.get)
     return Dosha(
+        subject=("nodes", "kaal-sarpa"),
         name="Kaal Sarpa", formed=True, active=True, rule=rule,
         detail=f"All seven grahas stand within one hemicycle of the nodal "
                f"axis — the {head}→{tail} arc. {nearest} sits closest to "
@@ -198,6 +206,7 @@ def sade_sati_status(chart: Chart, now: datetime) -> Dosha:
             progress = (now - start).total_seconds() / \
                 (end - start).total_seconds()
         return Dosha(
+            subject=("Saturn", "sade-sati"),
             name="Sade Sati", formed=True, active=True, rule=rule,
             detail=f"Saturn is in the {phase} phase, transiting "
                    f"{SIGNS[sat_sign]} relative to your Moon in "
@@ -219,6 +228,7 @@ def sade_sati_status(chart: Chart, now: datetime) -> Dosha:
         t = ing.when
     dist = _sign_distance(moon_sign, sat_sign)
     return Dosha(
+        subject=("Saturn", "sade-sati"),
         name="Sade Sati", formed=False, active=False, rule=rule,
         detail=f"Not running: Saturn transits {SIGNS[sat_sign]}, the "
                f"{_ordinal(dist)} sign from your Moon — outside the "
@@ -338,6 +348,10 @@ def transit_weather(chart: Chart, snapshot: TransitSnapshot) -> list[dict]:
 
 @dataclass(frozen=True)
 class MythBuster:
+    #: Same canonical (what, condition) as `Dosha.subject`. It is what makes
+    #: "Mars in house 8 (Mangal dosha pattern)" and "Mars in the 8th house"
+    #: recognisable as ONE phenomenon rather than two entries.
+    subject: tuple[str, str]
     placement: str
     myth: str
     classical_record: str
@@ -353,6 +367,7 @@ def myth_busters(chart: Chart, now: datetime) -> list[MythBuster]:
     mangal = detect_mangal(chart)
     if mangal.formed:
         out.append(MythBuster(
+            subject=("Mars", f"house-{mars.house}"),
             placement=f"Mars in house {mars.house} (Mangal dosha pattern)",
             myth="Popular reading: marriage is blocked for anyone with "
                  "this placement.",
@@ -373,6 +388,7 @@ def myth_busters(chart: Chart, now: datetime) -> list[MythBuster]:
     if dignity(chart, "Mars") == "debilitated":
         nb = detect_neecha_bhanga(chart)
         out.append(MythBuster(
+            subject=("Mars", "debilitated"),
             placement="Debilitated Mars (Cancer)",
             myth="Popular reading: a debilitated planet simply fails.",
             classical_record="Debilitation is a hypothesis with named "
@@ -405,6 +421,7 @@ def myth_busters(chart: Chart, now: datetime) -> list[MythBuster]:
         else:
             clause = ""
         out.append(MythBuster(
+            subject=("Mars", "house-8"),
             placement="Mars in the 8th house",
             myth="Popular reading: an 8th-house Mars is uniformly harmful.",
             classical_record="The 8th is the house of research, longevity "
@@ -418,6 +435,7 @@ def myth_busters(chart: Chart, now: datetime) -> list[MythBuster]:
     ks = detect_kaal_sarpa(chart)
     if ks.formed:
         out.append(MythBuster(
+            subject=("nodes", "kaal-sarpa"),
             placement="Kaal Sarpa (all grahas inside the nodal arc)",
             myth="Popular reading: the whole life is bound and nothing "
                  "arrives on time until an expensive remedy is performed.",
@@ -435,6 +453,7 @@ def myth_busters(chart: Chart, now: datetime) -> list[MythBuster]:
     kem = detect_kemadruma(chart)
     if kem and kem[0].cancelled:
         out.append(MythBuster(
+            subject=("Moon", "kemadruma"),
             placement="Kemadruma pattern (unaccompanied Moon)",
             myth="Popular reading: an unaccompanied Moon means a life of "
                  "isolation.",
@@ -449,6 +468,7 @@ def myth_busters(chart: Chart, now: datetime) -> list[MythBuster]:
     sade = sade_sati_status(chart, now)
     if sade.active or sade.next_window:
         out.append(MythBuster(
+            subject=("Saturn", "sade-sati"),
             placement="Sade Sati (Saturn's 7½-year Moon transit)",
             myth="Popular reading: seven and a half years of unbroken "
                  "hardship.",
@@ -470,3 +490,74 @@ def myth_busters(chart: Chart, now: datetime) -> list[MythBuster]:
 def doshas_all(chart: Chart, now: datetime) -> list[Dosha]:
     return [detect_mangal(chart), detect_kaal_sarpa(chart),
             sade_sati_status(chart, now)]
+
+
+# --- one entry per phenomenon -------------------------------------------------
+
+def combinations(chart: Chart, now: datetime) -> dict:
+    """The Combinations fold, de-duplicated: ONE entry per phenomenon.
+
+    THE PROBLEM THIS SOLVES, from a live walk of the app:
+
+      * "Mars in house 8 (Mangal dosha pattern)" and "Mars in the 8th house"
+        printed as two separate myth-vs-record entries. They are one
+        placement, described twice, and a reader comparing them finds two
+        classical records for the same fact.
+      * Sade Sati printed in Doshas AND in Myths, in full, twice.
+
+    THE RULE. Every entry declares a canonical `subject` — (what, condition).
+    A subject has exactly one HOME:
+
+      Doshas   is home to anything the cancellation machinery runs on. That
+               is where the checks, the dates and the progress live, and a
+               myth-vs-record framing of the same subject is folded INTO
+               that entry rather than repeated beside it.
+      Myths    is home to everything else, and shows a cross-reference for
+               each subject that lives in Doshas.
+
+    Nothing is deleted: a myth card whose subject is homed in Doshas has its
+    myth and its classical record carried into the dosha entry, so the fold
+    says everything it used to say, once.
+    """
+    doshas = doshas_all(chart, now)
+    homed = {d.subject: d for d in doshas}
+
+    # Two myth cards about the same subject are one card. The first wins the
+    # framing; the second contributes whatever its record adds.
+    merged: dict[tuple[str, str], list[MythBuster]] = {}
+    for card in myth_busters(chart, now):
+        merged.setdefault(card.subject, []).append(card)
+
+    dosha_rows, myth_rows, crossrefs = [], [], []
+    for d in doshas:
+        cards = merged.pop(d.subject, [])
+        dosha_rows.append({
+            "dosha": d,
+            # The myth-vs-record framing, folded in. Empty for a dosha no
+            # one has built a myth around.
+            "myth": cards[0].myth if cards else None,
+            "classical_record": " ".join(c.classical_record for c in cards)
+                                if cards else None,
+            "citation": cards[0].citation if cards else None,
+            "confidence": cards[0].confidence if cards else None,
+        })
+        if cards:
+            crossrefs.append({
+                "placement": cards[0].placement,
+                "name": d.name,
+                "anchor": "doshas",
+            })
+
+    for subject, cards in merged.items():
+        first = cards[0]
+        myth_rows.append({
+            "subject": subject,
+            "placement": first.placement,
+            "myth": first.myth,
+            "classical_record": " ".join(c.classical_record for c in cards),
+            "citation": first.citation,
+            "confidence": first.confidence,
+        })
+
+    return {"doshas": dosha_rows, "myths": myth_rows,
+            "crossrefs": crossrefs}

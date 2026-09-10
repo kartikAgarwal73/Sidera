@@ -35,7 +35,8 @@ from ask import ChartContext, ask_all
 from pancanga import pancanga_for
 from gunamilan import fraction, guna_milan
 from reading import read_day
-from doshas import WEATHER_FRAMING, doshas_all, myth_busters, transit_weather
+from doshas import (WEATHER_FRAMING, combinations, doshas_all,
+                    transit_weather)
 from lessons import CONTEXT_LESSONS, LESSONS
 from engine import SIGNS, PLANETS, BirthData, compute_chart
 from explain import DASHA_THEME, explain_dashboard, explain_yoga, ordinal
@@ -48,10 +49,14 @@ from transits import (
     upcoming_ingresses,
 )
 from vargas import dasamsa, navamsa
+import vargas
 import agent
 import chartfacts
 import today
-from yogas import detect_all, dignity, dignity_grade, sign_lord
+import yogaread
+import ashtakavarga as av_mod
+from yogas import (combust, detect_all, dignity, dignity_grade,
+                   natural_nature, sign_lord)
 
 app = Flask(__name__)
 app.template_filter("ordinal")(ordinal)  # '3' → '3rd', app-wide
@@ -65,7 +70,14 @@ def _plate_geometry():
     Injected rather than duplicated in the template so the browser's
     highlight layer and the server's placement layer cannot disagree.
     """
-    return {"house_poly": HOUSE_POLY, "house_center": HOUSE_CENTER}
+    # The plate's type sizes travel with it. They were duplicated as
+    # literals in the template, so raising MINI_SIZE here changed what
+    # `plate_layout` reserved room for and not one pixel of what was drawn —
+    # the glyphs stayed at 26 units and stayed under the legibility floor.
+    return {"house_poly": HOUSE_POLY, "house_center": HOUSE_CENTER,
+            "DEG_SIZE": DEG_SIZE, "DEG_LEADING": DEG_LEADING,
+            "COMPACT_SIZE": COMPACT_SIZE, "COMPACT_LEADING": COMPACT_LEADING,
+            "MINI_SIZE": MINI_SIZE, "MINI_LEADING": MINI_LEADING}
 
 
 @app.route("/favicon.ico")
@@ -201,20 +213,26 @@ VARGA_SLOTS = (
     ("d1", "D1", "Rāśi",
      "The birth chart itself — every other chart is read against this one.",
      True),
+    ("d2", "D2", "Horā",
+     "Wealth and what is kept, split between the Sun's half and the Moon's.",
+     False),
+    ("d3", "D3", "Drekkāṇa",
+     "Siblings, courage and the reach of one's own effort.",
+     False),
+    ("d7", "D7", "Saptāṃśa",
+     "Children, and what the chart carries forward past this life.",
+     False),
     ("d9", "D9", "Navāṃśa",
      "Marriage, and the inner strength of every planet in the birth chart.",
      True),
     ("d10", "D10", "Daśāṃśa",
      "Work, standing, and the field a career actually takes place in.",
      True),
-    ("d2", "D2", "Horā",
-     "Wealth and what is kept, split between the Sun's half and the Moon's.",
-     False),
-    ("d7", "D7", "Saptāṃśa",
-     "Children, and what the chart carries forward past this life.",
-     False),
     ("d12", "D12", "Dvādaśāṃśa",
      "The parents, and what was inherited before anything was chosen.",
+     False),
+    ("d16", "D16", "Ṣoḍaśāṃśa",
+     "Vehicles, comforts, and the pleasures a life is furnished with.",
      False),
     ("d30", "D30", "Triṃśāṃśa",
      "Where the chart is tested, and which planet does the testing.",
@@ -224,6 +242,13 @@ VARGA_SLOTS = (
      False),
 )
 
+# The `True`/`False` above is the DESIGN intent — which divisions this app
+# means to plot. Whether one actually can is `vargas.SUPPORTED`, and the two
+# are reconciled at render time rather than trusted to stay in step: a slot
+# marked live that has no computation would draw an empty plate, and a
+# computation that landed while the flag said False would stay invisible.
+# `TestEveryComputedVargaIsPlotted` fails on either.
+
 
 def _and_list(names: list[str]) -> str:
     """'Venus', 'Venus and Saturn', 'Venus, Saturn and Mars'."""
@@ -232,7 +257,7 @@ def _and_list(names: list[str]) -> str:
     return ", ".join(names[:-1]) + " and " + names[-1]
 
 
-def plate_reading(key: str, chart, d9, d10) -> str:
+def plate_reading(key: str, chart) -> str:
     """One line of reading for a plate, composed from that plate alone.
 
     A gallery of charts with no reading is a filing cabinet. Each of these
@@ -254,6 +279,7 @@ def plate_reading(key: str, chart, d9, d10) -> str:
                 f"chart — and it stands in {matters(chart.planets[lord].house)}.")
 
     if key == "d9":
+        d9 = vargas.varga_chart(chart, "D9")
         lord = sign_lord(d9.lagna_sign_index)
         kept = [p for p in PLANETS if d9.planets[p].vargottama]
         head = (f"{d9.lagna_sign} rises in the ninth division, so "
@@ -274,6 +300,7 @@ def plate_reading(key: str, chart, d9, d10) -> str:
                     f"{'it was' if len(rest) == 1 else 'they were'} born in.")
         return f"{head} — and no planet keeps the sign it was born in."
 
+    d10 = vargas.varga_chart(chart, "D10")
     tenth = [plain(p) for p in PLANETS if d10.planets[p].house == 10]
     head = (f"{d10.lagna_sign} rises in the tenth division, so "
             f"{plain(sign_lord(d10.lagna_sign_index))} sets the field the "
@@ -285,26 +312,74 @@ def plate_reading(key: str, chart, d9, d10) -> str:
     return f"{head} — and nothing stands in its house of visible work."
 
 
-def varga_gallery(chart, d9, d10) -> list[dict]:
-    """The gallery index: three plates that exist, five slots that do not."""
-    built = {
-        "d1": (chart.lagna.sign_index,
-               {p: chart.planets[p].house for p in PLANETS}),
-        "d9": (d9.lagna_sign_index, {p: d9.planets[p].house for p in PLANETS}),
-        "d10": (d10.lagna_sign_index,
-                {p: d10.planets[p].house for p in PLANETS}),
-    }
+def varga_gallery(chart) -> list[dict]:
+    """The gallery index — every division, cast where this build can cast it.
+
+    Generic over `vargas.SUPPORTED`, so a new division needs no change here:
+    add its sign function to the registry and its plate is drawn, its slot
+    stops saying "in preparation", and it gets a page of its own.
+    """
+    marks = planet_marks(chart)
     out = []
-    for key, code, name, summary, live in VARGA_SLOTS:
+    for key, code, name, summary, intended in VARGA_SLOTS:
+        live = key == "d1" or vargas.is_supported(code)
         row = {"key": key, "code": code, "name": name, "summary": summary,
-               "live": live}
+               "live": live, "intended": intended}
         if live:
-            sign_index, houses = built[key]
-            row["houses"] = kundli_houses(sign_index, houses)
+            if key == "d1":
+                sign_index = chart.lagna.sign_index
+                houses = {p: chart.planets[p].house for p in PLANETS}
+            else:
+                vc = vargas.varga_chart(chart, code)
+                sign_index = vc.lagna_sign_index
+                houses = {p: vc.planets[p].house for p in PLANETS}
+            row["houses"] = kundli_houses(sign_index, houses, marks=marks)
             row["lagna"] = SIGNS[sign_index]
-            row["reading"] = plate_reading(key, chart, d9, d10)
+            row["reading"] = plate_reading(key, chart)
         out.append(row)
     return out
+
+
+def ashtakavarga_view(chart) -> dict:
+    """The Aṣṭakavarga fold: the answer, then the grid.
+
+    Rotated to HOUSES here and once only. The module works per sign, which
+    is how the tables are defined and how the oracle exports them; every
+    number a reader sees is per house, which is the only frame in which
+    "your 10th" means anything. Doing the rotation in one named place is
+    what stops a table being rotated twice.
+    """
+    av = av_mod.ashtakavarga(chart)
+    by_house = av.sav_by_house
+    strongest = av_mod.strongest(av)
+    thinnest = av_mod.thinnest(av)
+    rows = []
+    for h in range(1, 13):
+        score = by_house[h]
+        rows.append({
+            "house": h,
+            "sign": av.sign_of_house(h),
+            "sav": score,
+            "band": ("strong" if score >= av_mod.STRONG_FLOOR
+                     else "thin" if score <= av_mod.THIN_CEILING
+                     else "middling"),
+            "matters": HOUSE_MATTERS[h].split(",")[0].strip(),
+            "bav": {p: av.by_house(av.bav_by_sign[p])[h]
+                    for p in av_mod.BODIES},
+        })
+    return {
+        "verdict": av_mod.verdict(av),
+        "rows": rows,
+        "bodies": av_mod.BODIES,
+        "totals": {p: sum(av.bav_by_sign[p]) for p in av_mod.BODIES},
+        "sav_total": av.sav_total,
+        "lagna_total": sum(av.lagna_bav_by_sign),
+        "note": av_mod.REDUCTIONS_NOTE,
+        "strongest": strongest,
+        "thinnest": thinnest,
+        # The number for each house, keyed by house, for the D1 plate.
+        "by_house": by_house,
+    }
 
 
 def transit_ticks(chart, when) -> list[dict]:
@@ -340,6 +415,16 @@ TICK_POS = {
 ABBR = {
     "Sun": "Su", "Moon": "Mo", "Mars": "Ma", "Mercury": "Me",
     "Jupiter": "Ju", "Venus": "Ve", "Saturn": "Sa", "Rahu": "Ra", "Ketu": "Ke",
+}
+
+# The astronomical glyphs, which are what a printed plate actually carries.
+# They travel WITH the two-letter abbreviations rather than replacing them:
+# the glyph is recognisable at a glance and at small sizes, the letters are
+# unambiguous, and the legend under every plate teaches both. ☊/☋ are the
+# ascending and descending nodes — Rāhu and Ketu.
+GLYPH = {
+    "Sun": "☉", "Moon": "☽", "Mars": "♂", "Mercury": "☿",
+    "Jupiter": "♃", "Venus": "♀", "Saturn": "♄", "Rahu": "☊", "Ketu": "☋",
 }
 
 # --- North-Indian plate geometry — ONE source of truth ------------------------
@@ -407,6 +492,195 @@ DEG_POS = {
 }
 
 
+def cell_span(house: int, y: float) -> tuple[float, float] | None:
+    """How wide a house cell is at a given height, in plate user units.
+
+    The four narrow triangles taper: house 3 is 73 units across at its
+    widest and 20 at y=130. A degree label is set at a fixed size and does
+    not taper, so whether it fits is a question about THIS number, and it
+    is the question `kundli_houses` has to answer before it decides to draw
+    degrees in a cell at all.
+    """
+    poly = HOUSE_POLY[house]
+    xs, n = [], len(poly)
+    for i in range(n):
+        x1, y1 = poly[i]
+        x2, y2 = poly[(i + 1) % n]
+        if (y1 > y) != (y2 > y):
+            xs.append((x2 - x1) * (y - y1) / (y2 - y1) + x1)
+    return (min(xs), max(xs)) if len(xs) >= 2 else None
+
+
+# Advance widths in ems, MEASURED in the browser at the size the plate uses
+# rather than guessed: an estimate that ran 20% generous dropped cells to
+# compact marks that had room, and one that ran short would draw a label
+# across a house boundary, which is a wrong chart. Digits are tabular here,
+# so their advance is a constant.
+#
+#   ☽ ♄ ♂ ♃ ☉  12.55 units at size 14 = .897em   (☿ .61, ♀ .73 — narrower)
+#   0-9          8.90                  = .636em
+#   °            7.00                  = .500em
+#   ′            3.38                  = .241em
+#   M           12.07                  = .862em  (the widest letter)
+#
+# "letter" is .78 rather than .70 because of the capital in Mo/Ma/Me: at
+# .70 the estimate for "Mo 22°23′" came in 0.25 units UNDER the real box.
+#
+# Each figure below is rounded UP from the measurement, so the estimate errs
+# toward "does not fit". `test_no_label_overflows_its_cell_in_a_browser`
+# measures the real boxes and fails if this ever drifts optimistic.
+_EM = {"glyph": 0.92, "digit": 0.65, "°": 0.52, "′": 0.26, " ": 0.28,
+       "letter": 0.78}
+
+
+def _label_width(text: str, size: float) -> float:
+    total = 0.0
+    for ch in text:
+        if ch in _EM:
+            total += _EM[ch]
+        elif ch.isdigit():
+            total += _EM["digit"]
+        elif ord(ch) > 0x2000:      # an astronomical glyph
+            total += _EM["glyph"]
+        else:
+            total += _EM["letter"]
+    return size * total
+
+
+def _rows_fit(house: int, anchor: tuple[float, float],
+              rows: list[str], size: float, leading: float) -> bool:
+    """Would these rows, centred on the anchor, all stay inside the cell?"""
+    cx, cy = anchor
+    top = cy - leading * (len(rows) - 1) / 2
+    for i, text in enumerate(rows):
+        y = top + leading * i
+        half = _label_width(text, size) / 2
+        # The baseline row and the row the ascenders reach into.
+        for probe in (y, y - size * 0.72):
+            span = cell_span(house, probe)
+            if span is None or cx - half < span[0] or cx + half > span[1]:
+                return False
+    return True
+
+
+def _pack(house: int, anchor: tuple[float, float], items: list[str],
+          size: float, leading: float) -> list[list[int]] | None:
+    """Distribute `items` over as few rows as fit inside the cell.
+
+    Returns the item indices per row, or None if no arrangement fits. Tried
+    from one row upward, distributing as evenly as possible: a cell that can
+    take three marks side by side should, and one that cannot should stack
+    rather than run through its own diagonal.
+    """
+    n = len(items)
+    for count in range(1, n + 1):
+        per = -(-n // count)                    # ceil
+        groups = [list(range(i, min(i + per, n)))
+                  for i in range(0, n, per)]
+        if len(groups) != count:
+            continue
+        texts = [" ".join(items[i] for i in g) for g in groups]
+        if _rows_fit(house, anchor, texts, size, leading):
+            return groups
+    return None
+
+
+def _dot_positions(house: int, count: int) -> list[tuple[float, float]]:
+    """`count` dots, in a row (or two) at the cell centroid."""
+    cx, cy = cell_centroid(house)
+    per = min(count, 3)
+    rows = -(-count // per)
+    out = []
+    n = count
+    for r in range(rows):
+        here = min(per, n)
+        n -= here
+        y = cy + 14 * (r - (rows - 1) / 2)
+        for i in range(here):
+            out.append((cx + 13 * (i - (here - 1) / 2), y))
+    return out
+
+
+def cell_centroid(house: int) -> tuple[float, float]:
+    poly = HOUSE_POLY[house]
+    return (sum(p[0] for p in poly) / len(poly),
+            sum(p[1] for p in poly) / len(poly))
+
+
+def plate_layout(house: int, anchor: tuple[float, float],
+                 grahas: list[dict], size: float, leading: float,
+                 with_degrees: bool,
+                 glyph_only: bool = False) -> dict | None:
+    """How this cell's marks are actually laid out — or None if they cannot
+    be.
+
+    THE PLATE'S ONE CORRECTNESS PROPERTY is that a mark never leaves the
+    cell it belongs to; a label drawn across a diagonal says the graha is in
+    a house it is not in. The anchor tables guarantee where a stack is HUNG.
+    They cannot see how WIDE it is, and width is what actually left the
+    cell: three marks side by side in house 9 measured 104 units in a cell
+    73 across.
+
+    So the arrangement is decided here, geometrically, and the template only
+    draws what it is handed. Richest form first — glyph, letters and degree
+    — falling back a step at a time rather than all the way to nothing:
+
+        ☉Su 29°09′   glyph, abbreviation, degree
+        Su 29°09′    the glyph is the widest character; drop it first
+        ☉Su          the degree needs the most room; drop it next
+        Su           letters alone always fit
+    """
+    if glyph_only:
+        # A thumbnail: one glyph per graha and nothing else. Letters at that
+        # scale measured under four rendered pixels.
+        groups = _pack(house, anchor, [g["glyph"] for g in grahas],
+                       size, leading)
+        if groups is None:
+            groups = _pack(house, cell_centroid(house),
+                           [g["glyph"] for g in grahas], size, leading)
+            anchor = cell_centroid(house)
+        if groups is None:
+            return None
+        return {"form": "glyph-only", "glyph": True, "degrees": False,
+                "at": anchor, "rows": groups}
+
+    forms = []
+    if with_degrees:
+        forms.append(("glyph-deg", [g["glyph"] + g["abbr"]
+                                    + (" " + g["deg"] if g["deg"] else "")
+                                    for g in grahas], True, True))
+        forms.append(("deg", [g["abbr"] + (" " + g["deg"] if g["deg"] else "")
+                              for g in grahas], False, True))
+    forms.append(("glyph", [g["glyph"] + g["abbr"] for g in grahas],
+                  True, False))
+    forms.append(("plain", [g["abbr"] for g in grahas], False, False))
+    # RICHNESS OUTRANKS POSITION. The form loop is outside the anchor loop
+    # on purpose: dropping a graha's degree is a real loss of information,
+    # while moving its label 18 units down inside its own cell costs
+    # nothing. With the loops the other way round the table anchor's poorer
+    # form won, and four of six occupied houses lost their degrees to a
+    # nudge that would have fitted them.
+    #
+    # The anchors are tuned for one or two marks; a triangle simply has more
+    # room lower down, and moving the whole block there keeps it inside the
+    # cell, which is the only property that matters.
+    for name, items, glyph, deg in forms:
+        for point in (anchor, cell_centroid(house)):
+            # A degree stack is one graha to a row by definition; the
+            # compact marks may share a row.
+            if deg:
+                if _rows_fit(house, point, items, size, leading):
+                    return {"form": name, "glyph": glyph, "degrees": True,
+                            "at": point,
+                            "rows": [[i] for i in range(len(grahas))]}
+                continue
+            groups = _pack(house, point, items, size, leading)
+            if groups is not None:
+                return {"form": name, "glyph": glyph, "degrees": False,
+                        "at": point, "rows": groups}
+    return None
+
+
 def house_at(x: float, y: float) -> int | None:
     """Which house cell a point falls in. Shared by the tests and by any
     caller that needs to reason about the plate geometrically."""
@@ -432,25 +706,61 @@ def _deg_min(degree_in_sign: float) -> str:
 
 def kundli_houses(lagna_sign_index: int, house_of: dict[str, int],
                   degrees: dict[str, tuple[float, bool]] | None = None,
-                  lagna_degree: float | None = None) -> list[dict]:
+                  lagna_degree: float | None = None,
+                  marks: dict[str, dict] | None = None,
+                  sav: dict[int, int] | None = None) -> list[dict]:
     """Per-house render data for the North-Indian SVG plate.
 
-    `degrees` maps planet → (degree_in_sign, retrograde) and yields the
+    `degrees` maps planet -> (degree_in_sign, retrograde) and yields the
     detail labels ('Ju 15°33′', 'Sa 9°29′ R'). Divisional charts pass None —
     varga positions are sign-level, so degree labels apply to D1 only.
+
+    `marks` maps planet -> {'nature', 'combust'} from `planet_marks()`. It is
+    what lets a plate be READ rather than merely plotted: a graha carries its
+    glyph, its two-letter abbreviation, whether it is retrograde and whether
+    it is burnt, and it is set in the ink weight of its own nature. Passing
+    None gives the plain marks, which is what an unread thumbnail wants.
     """
     labels: dict[int, list[str]] = {h: [] for h in range(1, 13)}
     detail: dict[int, list[str]] = {h: [] for h in range(1, 13)}
+    grahas: dict[int, list[dict]] = {h: [] for h in range(1, 13)}
     labels[1].append("As")
     if lagna_degree is not None:
         detail[1].append(f"As {_deg_min(lagna_degree)}")
+    # THE LAGNA LEADS ITS OWN HOUSE. It is not a graha, so it carries no
+    # glyph, no nature and no burnt mark — but it does sit in the same
+    # stack, at the head of it, in the accent. Drawn as a separate floating
+    # mark it landed on top of house 1's sign numeral at every width.
+    grahas[1].append({
+        "planet": "Lagna", "abbr": "Asc", "glyph": "",
+        "deg": _deg_min(lagna_degree) if lagna_degree is not None else None,
+        "retro": False, "combust": False, "nature": "lagna",
+        "is_lagna": True,
+    })
     for name in PLANETS:
         h = house_of[name]
         labels[h].append(ABBR[name])
+        mark = (marks or {}).get(name, {})
+        retro = False
+        deg = None
         if degrees is not None:
-            deg, retro = degrees[name]
+            deg_val, retro = degrees[name]
+            deg = _deg_min(deg_val)
             detail[h].append(
-                f"{ABBR[name]} {_deg_min(deg)}" + (" R" if retro else ""))
+                f"{ABBR[name]} {_deg_min(deg_val)}" + (" R" if retro else ""))
+        grahas[h].append({
+            "planet": name,
+            "abbr": ABBR[name],
+            "glyph": GLYPH[name],
+            "deg": deg,
+            # ℞ is the retrograde mark and ⊙ the burnt one; both are printed
+            # in the margin of the label rather than mixed into its letters,
+            # so a graha reads as one word with a diacritic on it.
+            "retro": retro,
+            "combust": bool(mark.get("combust")),
+            "nature": mark.get("nature", "benefic"),
+            "is_lagna": False,
+        })
 
     houses = []
     for h in range(1, 13):
@@ -459,7 +769,6 @@ def kundli_houses(lagna_sign_index: int, house_of: dict[str, int],
         if len(row) > 3:  # wrap crowded houses onto two lines
             mid = (len(row) + 1) // 2
             line1, line2 = row[:mid], row[mid:]
-        x, y = PLANET_POS[h]
         houses.append({
             "house": h,
             "sign_num": (lagna_sign_index + h - 1) % 12 + 1,
@@ -469,15 +778,98 @@ def kundli_houses(lagna_sign_index: int, house_of: dict[str, int],
             "line1": "·".join(line1),
             "line2": "·".join(line2),
             "detail_lines": detail[h],
+            "grahas": grahas[h],
+            # The Sarvāṣṭakavarga total for this house, printed in the
+            # cell's outward corner beside the sign numeral — the number is
+            # about the HOUSE, so it belongs on the plate rather than only
+            # in a table. D1 only: the tables are defined against the birth
+            # chart and mean nothing rotated into a division.
+            # The Sarvāṣṭakavarga total for this house. It rides WITH the
+            # sign numeral, in one text node — "5 · 27" — rather than as a
+            # third mark in the cell. Given its own anchor it collided with
+            # the numeral and with the graha stack in every crowded cell,
+            # and a plate has no room for a third number per house.
+            "sav": (sav or {}).get(h),
             # Three stacked degree labels fill a narrow triangle completely.
             # The sign number underneath them is then unreadable, so it is
             # dropped WHILE THE DEGREE LAYER IS ON — the compact view still
             # shows it, and the sign is never lost (it is in the graha
             # table). Better one legible number fewer than two illegible
             # overlapping texts.
-            "crowded": len(detail[h]) >= 3,
+            "crowded": len(grahas[h]) >= 3,
         })
+
+    # HOW EACH CELL IS LAID OUT — decided here, where the polygons are,
+    # and handed to the template ready to draw. See `plate_layout`.
+    for row in houses:
+        if not row["grahas"]:
+            row["deg_layout"] = row["compact_layout"] = None
+            continue
+        row["deg_layout"] = plate_layout(
+            row["house"], row["deg_pos"], row["grahas"],
+            DEG_SIZE, DEG_LEADING, with_degrees=degrees is not None)
+        row["compact_layout"] = plate_layout(
+            row["house"], row["pl_pos"], row["grahas"],
+            COMPACT_SIZE, COMPACT_LEADING, with_degrees=False)
+        # The two small plates — the glance mini and the gallery thumbnail
+        # — are the same figure at a quarter of the size, so their marks
+        # need their own arrangement AND their own type size. 26 user units
+        # renders at 13 on the 132px thumbnail and 17 on the 200px mini,
+        # both of which clear the floor; the 15-unit compact marks render
+        # at 6.6 and 10.
+        row["mini_layout"] = plate_layout(
+            row["house"], row["pl_pos"], row["grahas"],
+            MINI_SIZE, MINI_LEADING, with_degrees=False, glyph_only=True)
+        # Which cells must give up their sign numeral: a stack of two or
+        # more rows reaches the numeral's corner, and a numeral under a
+        # graha mark is unreadable. The sign is never lost — it is in the
+        # graha table, and the compact view shows it whenever it fits.
+        row["hide_signnum"] = bool(
+            (row["deg_layout"] and len(row["deg_layout"]["rows"]) >= 3)
+            or (row["compact_layout"]
+                and len(row["compact_layout"]["rows"]) >= 2))
+        # A cell that cannot take even glyphs at a legible size gets DOTS:
+        # one per graha, in the accent, at the cell centroid. House 12 holds
+        # four grahas in a triangle 73 units tall whose top edge is the
+        # plate border — two rows of 26-unit glyphs do not go in it at any
+        # anchor, and shrinking them to fit would put them under the
+        # legibility floor, which is the thing being fixed.
+        #
+        # A dot is not a compromise on truth: it says exactly what a 132px
+        # figure can say — this house is occupied, by this many — and the
+        # plate it opens says the rest.
+        row["mini_dots"] = (
+            _dot_positions(row["house"], len(row["grahas"]))
+            if row["mini_layout"] is None else [])
     return houses
+
+
+# The degree layer's type size and leading, in plate user units. Named
+# because `degrees_fit` and the template must agree about them exactly — a
+# fit computed at one size and drawn at another is worse than no fit test.
+DEG_SIZE = 14.0
+DEG_LEADING = 10.0
+COMPACT_SIZE = 15.0
+COMPACT_LEADING = 17.0
+# 32 user units. The gallery thumbnail draws its 300-unit viewBox at 140px
+# nominal — but the grid squeezes it to about 125 at 390px, a scale of .417,
+# so 26 units rendered at 11 effective pixels and 29 at 12.1. 32 clears the
+# floor at the squeezed size, which is the size that has to clear it.
+MINI_SIZE = 32.0
+MINI_LEADING = 34.0
+
+
+def planet_marks(chart) -> dict[str, dict]:
+    """What each graha IS, for the plate: its nature and whether it is burnt.
+
+    Computed once per request and handed to every plate, so the D1, the D9
+    and the thumbnails cannot disagree about which grahas are malefic.
+    Nature and combustion are properties of the BIRTH chart — a divisional
+    chart is sign-level here and has no degrees to burn with.
+    """
+    return {name: {"nature": natural_nature(chart, name),
+                   "combust": combust(chart, name)}
+            for name in PLANETS}
 
 
 def _fmt(dt: datetime) -> str:
@@ -502,7 +894,13 @@ def planet_explorer(chart) -> dict:
             })
         out[name] = {
             "abbr": ABBR[name],
+            "glyph": GLYPH[name],
             "house": pos.house,
+            # The chips ARE the plate's name legend, so they carry what the
+            # plate marks: the glyph, and the two states a reader has to be
+            # able to look up when they meet ℞ or ⊙ on the figure.
+            "combust": combust(chart, name),
+            "nature": natural_nature(chart, name),
             "label": f"{pos.sign} {pos.dms}",
             "retro": pos.retrograde,
             "dignity": dignity_grade(chart, name) or dignity(chart, name),
@@ -518,6 +916,7 @@ def build_dashboard(profile: Profile) -> dict:
     birth = profile.birth
     chart = compute_chart(birth)
     d9, d10 = navamsa(chart), dasamsa(chart)
+    marks = planet_marks(chart)
     timeline = vimshottari(chart)
     now = datetime.now(timezone.utc)
     snapshot = transit_snapshot(chart, now)
@@ -603,11 +1002,19 @@ def build_dashboard(profile: Profile) -> dict:
             {p: chart.planets[p].house for p in PLANETS},
             degrees={p: (chart.planets[p].degree_in_sign,
                          chart.planets[p].retrograde) for p in PLANETS},
-            lagna_degree=chart.lagna.degree_in_sign),
+            lagna_degree=chart.lagna.degree_in_sign,
+            marks=marks,
+            sav=av_mod.ashtakavarga(chart).sav_by_house),
         "kundli_d9": kundli_houses(
-            d9.lagna_sign_index, {p: d9.planets[p].house for p in PLANETS}),
+            d9.lagna_sign_index, {p: d9.planets[p].house for p in PLANETS},
+            marks=marks),
         "kundli_d10": kundli_houses(
-            d10.lagna_sign_index, {p: d10.planets[p].house for p in PLANETS}),
+            d10.lagna_sign_index, {p: d10.planets[p].house for p in PLANETS},
+            marks=marks),
+        # Nature and combustion are properties of the BIRTH chart, so the
+        # same table serves every plate — the D9 cannot disagree with the D1
+        # about which grahas are burnt.
+        "marks": marks,
         "d9_lagna": d9.lagna_sign,
         "d10_lagna": d10.lagna_sign,
         "vargottama": [p["name"] for p in planets if p["vargottama"]],
@@ -625,11 +1032,17 @@ def build_dashboard(profile: Profile) -> dict:
         "weather_framing": WEATHER_FRAMING,
         "weather": transit_weather(chart, snapshot),
         "doshas": doshas_all(chart, now),
-        "mythbusters": myth_busters(chart, now),
+        # ONE ENTRY PER PHENOMENON. `combinations()` resolves the
+        # overlap between the two lists — see its docstring.
+        "combinations": combinations(chart, now),
         "ask": ask_all(ChartContext(chart, timeline, now)),
         "lessons": LESSONS,
         "context_lessons": CONTEXT_LESSONS,
-        "yogas": [(y, explain_yoga(chart, y)) for y in detect_all(chart)],
+        # A yoga is READ now, not merely detected: whether the divisional
+        # charts confirm it, what it classically gives, when its planets'
+        # periods run, and which houses it touches. See yogaread.py.
+        "yogas": [(r, explain_yoga(chart, r.yoga))
+                  for r in yogaread.read_all(chart, now)],
         # Yogas explain inline on their own cards, so the Paṭha feed
         # covers lagna, grahas, nakshatras, dasha and gocara only.
         "patha": explain_dashboard(chart, timeline, snapshot, []),
@@ -674,7 +1087,10 @@ def build_dashboard(profile: Profile) -> dict:
         # ticks on the outer edge of the plate.
         "transit_ticks": transit_ticks(chart, now),
         # SCREEN 3 — YOUR CHARTS. What is built, and what is honestly not.
-        "vargas": varga_gallery(chart, d9, d10),
+        "vargas": varga_gallery(chart),
+        # MILESTONE 2 — Aṣṭakavarga, raw. Verdict first: the strongest and
+        # thinnest houses named up front, the 12×8 grid folded under.
+        "ashtakavarga": ashtakavarga_view(chart),
         "school_node_reach": schools.chosen("node_reach").school,
         "school_node_position": schools.chosen("node_position").school,
     }

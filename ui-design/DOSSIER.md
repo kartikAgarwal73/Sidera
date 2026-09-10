@@ -414,3 +414,107 @@ Every entry on Today rises 22px into place (8px at ≤560px) over 620ms on
 still turns all of it off and un-pins nothing essential —
 `TestReducedMotionInARealBrowser` measures elements that are actually on
 screen, after the fix that had it passing vacuously against a hidden fold.
+
+---
+
+## The type floors
+
+The lower half of this scale had drifted to 9 and 10px — a texture on a 27"
+display, unreadable on the phone it claimed to be designed for. Four floors,
+and below the display range they are the only sizes that exist:
+
+| token | px | what it sets |
+|---|---|---|
+| `--t-head` | 20 | a section title |
+| `--t-body` | 16 | anything anyone reads a sentence of |
+| `--t-table` | 15 | a cell in an ephemeris table |
+| `--t-label` | 13 | a label, a status chip, a small-caps marker |
+
+`--t-mark` is an alias of `--t-label`: the small-caps section markers are
+named by role all through the stylesheet, and a marker is a label.
+
+**A stylesheet scan cannot enforce this.** Half the small type is SVG, sized
+in user units the viewBox then scales — the same `font-size: 13px` is 7
+rendered pixels in the daśā graph (1000 units drawn at 560) and 24 in the
+plate (300 units drawn at 560). `TestTypeFloors` walks every visible text node
+at 390 and 1280 across fifteen views and multiplies by the element's own CTM
+scale, so what it judges is what the eye receives.
+
+Two consequences worth naming, because both trade information for legibility
+rather than shrinking type past the floor:
+
+- **Degrees at the larger sizes only.** On a 390px screen the plate draws its
+  360-unit viewBox at about 0.95, so a 9-unit degree label rendered at 7.6px.
+  The glyph and abbreviation carry the plate there; the degrees are in the
+  graha table, and on any wider screen they are back on the figure.
+- **A thumbnail carries glyphs, or dots.** Two-letter abbreviations in the
+  140px gallery plate rendered at 3.9px. One glyph at 32 units reads at 13.
+  Where even that will not fit — house 12 holds four grahas in a triangle
+  whose top edge is the plate border — the cell shows one dot per graha. A dot
+  has no legibility floor and says the true thing a thumbnail can say.
+
+## How a graha is marked
+
+Four things, and none of them is a hue. Using red for malefics and green for
+benefics would make the plate a traffic light and carry nothing at all to a
+colour-blind reader.
+
+| mark | means |
+|---|---|
+| `☉Su` | the glyph a printed plate uses, and the letters that remove doubt |
+| ink weight | natural benefic set light, natural malefic dense and full |
+| `℞` | retrograde |
+| `⊙` | combust — inside the Sun's orb, burnt; in the accent, the Sun's own mark |
+| `Asc` | the lagna, at the head of its house's stack, in the accent |
+
+The legend under every plate teaches all five. On arrival the graha chips
+already pair each abbreviation with its name, so the legend there carries only
+the marks — a second name list would be the same legend printed twice.
+
+### The plate learned what fits
+
+The anchor tables say where a stack is *hung*. They cannot see how *wide* it
+is, and width is what left the cell: three marks side by side in house 9
+measured 104 user units in a cell 73 across, and four degree labels in the
+12th ran through the diagonal into house 1. The anchors were right and the
+plate was wrong the whole time — and the anchor-based gates could not see it,
+because the anchor was always inside.
+
+`app.plate_layout` decides the arrangement from the polygons now, richest form
+first and falling back one step at a time:
+
+```
+☉Su 29°09′   glyph, abbreviation, degree
+Su 29°09′    the glyph is the widest character; drop it first
+☉Su          the degree needs the most room; drop it next
+Su           letters alone always fit
+```
+
+…and it moves the block to the cell's centroid before it gives anything up,
+because dropping a degree is a real loss and moving a label 18 units down
+inside its own cell costs nothing. Advance widths are measured in a browser,
+not estimated. `test_no_label_overflows_its_cell_in_a_browser` reads the real
+`getBBox()` and checks all four corners of every label against the polygon it
+belongs to.
+
+## One entry per phenomenon
+
+Every entry in the Combinations fold declares a canonical `subject` —
+`(what, condition)` — with exactly one home. Doshas is home to anything the
+cancellation machinery runs on, because that is where the dates and the checks
+live; the myth-vs-record framing of the same subject is folded into that
+entry, and Myths carries a cross-reference line. Nothing is deleted — a gate
+asserts every classical record is still printed somewhere.
+
+## A yoga entry
+
+Verdict first, in two sentences: whether the combination is real, and when it
+acts. The name is *not* repeated — it is the heading the sentence sits under,
+and repeating it spent a fifth of the budget and put "Yoga", banned from the
+plain register, into every verdict in the app.
+
+Under it, four labelled answers in a two-column grid — **Gives**, **Where**,
+**D9** (and **D10** for a combination touching held resources, visible work or
+gains), **Now** or **Next** — and behind the expander the mechanism, the
+classical meaning, the division-by-division dignities, every period of every
+forming graha, and the rule ids and fact ids the whole entry rests on.

@@ -227,6 +227,104 @@ _VARGA = dict([
        "Implementation limit of this build, not a classical rule"),
 ])
 
+# --- the state of a graha in itself --------------------------------------------
+
+_GRAHA_STATE = dict([
+    _r("rule.graha.combust",
+       "A graha within the classical orb of the Sun in longitude is asta — "
+       "combust, or burnt — and is read as unable to deliver its own "
+       "results plainly while the placement stands. The standard orbs are "
+       "Moon 12°, Mars 17°, Mercury 14°, Jupiter 11°, Venus 10°, Saturn "
+       "15°, with Mercury tightened to 12° and Venus to 8° when retrograde. "
+       "The nodes are shadow points and are never combust.",
+       "Asta (combustion) orbs, Brihat Parashara Hora Shastra; the "
+       "retrograde tightening is carried in Phaladeepika"),
+    _r("rule.graha.nature",
+       "Jupiter and Venus are natural benefics; the Sun, Mars, Saturn, "
+       "Rahu and Ketu natural malefics. Two are conditional: the Moon is "
+       "benefic while waxing and malefic while waning, and Mercury takes "
+       "the nature of the grahas it shares a sign with — benefic when "
+       "alone or in benefic company.",
+       "Naisargika śubha/pāpa classification, Brihat Parashara Hora "
+       "Shastra"),
+    _r("rule.graha.yoga_varga",
+       "A yoga is formed in the birth chart and TESTED in the divisional "
+       "charts. Its forming grahas holding dignity in the D9 is read as "
+       "confirmation that the promise carries; losing dignity there is read "
+       "as a promise thinner than the birth chart makes it look. Career and "
+       "wealth yogas are tested the same way in the D10.",
+       "Varga confirmation method (BPHS Shodasavarga; Phaladeepika)"),
+    _r("rule.graha.yoga_activation",
+       "A yoga formed in the birth chart is latent until a period of one of "
+       "its forming grahas runs. The mahadasha or antardasha of a forming "
+       "graha is when it is read as delivering; a transit of a forming "
+       "graha over another's natal degree is read as a shorter, dated "
+       "prompt of the same combination.",
+       "Dasha as the timing mechanism of a yoga (BPHS dasha chapters; "
+       "Phaladeepika)"),
+])
+
+
+# --- what a yoga classically gives ---------------------------------------------
+#
+# WHY THESE EXIST
+# The app detected yogas and stated what each family means, in prose that
+# cited nothing. A reading that says "gains through adversity" without a rule
+# id behind it is exactly the improvisation this library exists to prevent —
+# the validator could check the FACT and not the MEANING. One rule per
+# family, and `yogaread.GIVES_RULE` maps each plain sentence to one of them.
+
+_YOGA = dict([
+    _r("rule.yoga.mahapurusha",
+       "A Pancha Mahapurusha yoga forms when one of the five non-luminary "
+       "grahas stands in its own or exaltation sign AND in a kendra from "
+       "the lagna. Each is read for the character of its own graha carried "
+       "into the person's bearing: Ruchaka for command and decisiveness, "
+       "Bhadra for analysis and speech, Hamsa for judgement and counsel, "
+       "Malavya for comfort and refinement, Shasha for authority built "
+       "slowly.",
+       "Pancha Mahapurusha yogas, Brihat Parashara Hora Shastra; "
+       "Phaladeepika"),
+    _r("rule.yoga.chandra",
+       "Gaja Kesari forms when Jupiter stands in a kendra counted from the "
+       "Moon, and is read for durable reputation, discerning judgement, and "
+       "resources that recover after a loss.",
+       "Chandra yogas, Brihat Parashara Hora Shastra"),
+    _r("rule.yoga.solar",
+       "Budhaditya forms when the Sun and Mercury share a sign, and is read "
+       "for intelligence joined to authority — analysis, administration and "
+       "being understood. Mercury's combustion is read as a qualification "
+       "of it, not a cancellation.",
+       "Budhaditya yoga, standard compilations"),
+    _r("rule.yoga.dhana",
+       "A Dhana yoga is a connection among the lords of the houses of "
+       "wealth (1, 2, 5, 9, 11) — by conjunction, exchange, mutual aspect, "
+       "or one such lord placed in another such house. It is read as "
+       "earning capacity flowing along the significations of the lords "
+       "actually connected, and not as a quantity of money.",
+       "Dhana yogas, Brihat Parashara Hora Shastra"),
+    _r("rule.yoga.viparita",
+       "Viparita Raja Yoga forms when the lord of a dusthana (6, 8 or 12) "
+       "occupies a dusthana. The two afflictions are read as undoing one "
+       "another: gains arriving through difficulty, and reversals resolving "
+       "in the person's favour.",
+       "Viparita Raja Yoga, Phaladeepika; Uttara Kalamrita"),
+    _r("rule.yoga.neecha_bhanga",
+       "Neecha Bhanga cancels a debilitation when a named condition holds — "
+       "the debilitated graha's dispositor or its exaltation lord in a "
+       "kendra from the lagna or the Moon, or the graha itself in a kendra. "
+       "It is read as strength restored, classically after an early "
+       "setback, rather than as debilitation never having applied.",
+       "Neecha Bhanga Raja Yoga, Brihat Parashara Hora Shastra"),
+    _r("rule.yoga.kemadruma",
+       "Kemadruma forms when no graha other than the Sun stands in the 2nd "
+       "or 12th from the Moon, and none joins it. It is defined together "
+       "with its exceptions and must never be reported without running "
+       "them.",
+       "Kemadruma and its cancellations, Chandra yoga chapters"),
+])
+
+
 # --- what each house carries --------------------------------------------------
 
 HOUSE_MATTERS = {
@@ -253,7 +351,7 @@ _HOUSE = dict(
 
 RULES: dict[str, Rule] = {
     **_DASHA, **_TRANSIT_GENERAL, **_TRANSIT_GRAHA, **_CONTACT, **_VARGA,
-    **_HOUSE,
+    **_GRAHA_STATE, **_YOGA, **_HOUSE,
 }
 
 # The general rule a contact displaces, and the rule that says so. Kept as

@@ -85,6 +85,23 @@ checked instead:
   shown, explained and disabled rather than offered. See also the yoni and
   vaśya notes in `gunamilan.py`.
 
+- **Aṣṭakavarga is raw, and the app says so.** BAV and SAV are computed from
+  the classical benefic-point tables; the reductions — trikoṇa and
+  ekādhipatya śodhana, and the Śodhya Piṇḍa built on them — are *not*
+  applied, because published implementations diverge on the order the two are
+  performed in, and a disputed method printed as an exact number would be
+  worse than no number. Every one of the nineteen ledger facts carries
+  `raw: True`.
+
+  The gate is per SIGN, against an independent implementation, for both
+  fictional charts. That distinction earned itself immediately: four rows of
+  the 56-row table were wrong when first written down and **every classical
+  checksum passed** — Sun 48, Moon 49, Mars 39, Mercury 54, Jupiter 56, Venus
+  52, Saturn 39, total 337 — because a bindu at the wrong offset moves where
+  it lands, not how many there are. The totals count table rows and are the
+  same for every chart; the per-sign distribution is what varies, and it is
+  what the gate compares.
+
 ### The test suite distinguishes two kinds of guarantee
 
 A green suite can mean "still correct" or merely "still the same". Sidera
@@ -136,6 +153,7 @@ Five screens, always one tap apart from a tab row in the masthead:
 | **Your charts** | the divisional plates as a gallery, each with its own reading |
 | **Explore** | eight categories, one open at a time |
 | **Ask** | a question in your own words, answered from the computed chart |
+| *Numerology* | *in preparation — named where it will be, and not built* |
 
 An almanac, set as printed matter: a numbered fold per view with its folio
 top-right — two levels of it, so `P. 02·1` is the first reading and `P. 03·2`
@@ -168,6 +186,24 @@ verdict that rises into place. CSS scroll-driven animation where the browser
 has it, an IntersectionObserver everywhere else, and
 `prefers-reduced-motion: reduce` turns all of it off while keeping the pin —
 asserted in a browser with the preference actually set.
+
+The type has **floors**, not just a scale: 20px for a section title, 16 for
+anything anyone reads a sentence of, 15 for a table cell, 13 for a label.
+Below the display range those are the only sizes that exist, and every one of
+them is named by role in the stylesheet rather than typed as a number. A
+browser gate walks every visible text node at both widths and fails on
+anything under 13 — including SVG text, which is sized in user units the
+viewBox then scales, so the same declaration is 7 rendered pixels in one
+figure and 24 in another.
+
+The plates carry real marks: the glyph a printed plate uses beside the
+two-letter abbreviation, natural malefics set in heavier ink (weight, never
+hue), `℞` for retrograde, `⊙` for combust, and the lagna at the head of its
+own house in the accent. Which of those a cell can hold is decided from the
+polygons — the anchor tables say where a stack is hung and cannot see how wide
+it is, which is how three marks measuring 104 user units ended up in a cell 73
+across. A browser gate reads the real bounding boxes and checks every corner
+against the house it belongs to.
 
 Two faces: **Tiro Devanagari Sanskrit**, drawn by John Hudson to set
 Sanskrit — it carries both the transliteration range and the Devanagari
@@ -377,7 +413,10 @@ dashas.py         nakṣatras and the Vimśottarī tree
 pancanga.py       tithi, nakṣatra, yoga, karaṇa, sunrise/sunset
 vargas.py         D9 / D10 divisional charts
 transits.py       gocara, drishti, ingress finder
-yogas.py          lordships, dignities, yoga detection
+ashtakavarga.py   raw BAV and SAV — the benefic-point tables, per sign
+yogas.py          lordships, dignities, combustion, yoga detection
+yogaread.py       a yoga read: varga confirmation, what it gives, when it
+                  activates, where in life
 doshas.py         doshas with auto-run cancellations, transit weather
 gunamilan.py      aṣṭakūṭa compatibility
 ask.py            question → weighted lenses → verdict (deterministic)

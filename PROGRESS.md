@@ -1,5 +1,213 @@
 # PROGRESS
 
+## Milestone 2 — Aṣṭakavarga, raw ✅ (2026-09-12)
+
+Unblocked by the restructure, and shipped to the scope agreed on 2026-09-03:
+raw BAV and SAV, **reductions deferred**, verdict-first presentation, and the
+SAV numbers on the D1 plate.
+
+### The gate that bit, exactly as the plan predicted it would
+
+The plan recorded, before any code existed, that the 337 checksum "gates the
+56-row table, not the computation" — the per-graha totals are identical for
+every chart because they count rows in the benefic-point tables and depend on
+no birth moment. That turned out to be the whole story of this milestone.
+
+**Four rows of the table were wrong when first written down, and every
+checksum passed.** Sun 48, Moon 49, Mars 39, Mercury 54, Jupiter 56, Venus 52,
+Saturn 39, total 337 — all correct, with a bindu sitting at the wrong offset
+in four places. A misplaced bindu moves where it lands, not how many there
+are. Only the per-sign comparison against PyJHora, across both fictional
+charts, found them:
+
+| table | row | was | is |
+|---|---|---|---|
+| Moon | from Moon | missing 9 | `1 3 6 7 9 10 11` |
+| Moon | from Mars | spurious 9 | `2 3 5 6 10 11` |
+| Moon | from Jupiter | 12 | `1 2 4 7 8 10 11` |
+| Venus | from Mars | 5 | `3 4 6 9 11 12` |
+
+Each correction was checked two further ways before being taken, because
+editing until an oracle agrees is fitting rather than verifying: it is the
+**minimum edit** that reconciles both charts (an exhaustive solver over one,
+two and three rows found nothing smaller and no alternative at that size), and
+each corrected row is the one the standard published enumeration carries.
+
+`test_the_checksum_is_blind_to_a_misplaced_bindu` now demonstrates the point
+rather than asserting it — it moves one bindu, shows every classical total
+still passes, and shows the per-sign comparison fail.
+
+### Presentation
+
+Verdict first, in the founder's own shape:
+
+> **Your strongest houses are the 10th at 38 and the 6th at 31; the thinnest
+> are the 2nd at 24 and the 12th at 25.**
+
+then the strongest and thinnest named with what those houses carry, the total
+with the note that it is the same in every chart, one line of caveat, and the
+12×8 grid folded under it.
+
+**On the plate, the totals take the sign numerals' slot rather than joining
+them.** A North-Indian cell already carries a numeral and a graha stack;
+measured, a third number collided with one or the other in every arrangement
+tried — beside the numeral it grew the label wide enough to reach across a
+diagonal into a neighbouring cell, and below it, it landed on the grahas.
+Shrinking it to fit would have put it under the legibility floor set two days
+ago. So it is a toggle, the way the degrees are: one number to a cell, and the
+reader chooses which.
+
+### The three capture hazards, handled in the types
+
+1. **Per sign, not per house.** Every array in `ashtakavarga.py` is indexed
+   Aries→Pisces, and `by_house` is an explicit call — a table silently rotated
+   once is indistinguishable from one rotated twice. The rotation happens in
+   one named place, `ashtakavarga_view`.
+2. **Raw, before reductions.** Stated in `REDUCTIONS_NOTE`, printed in the
+   app, and carried on every ledger fact as `raw: True` so the agent cannot
+   quote a raw figure as a reduced one.
+3. **Seven BAVs, not eight.** The lagna's row is computed, reported and never
+   summed in. A gate asserts SAV equals the seven, and that seven plus the
+   lagna would be 386.
+
+### The ledger
+
+Nineteen facts as designed — `sav.house.N` ×12 and `bav.<planet>` ×7, each
+carrying a twelve-value array — plus `sav.summary`. Per-planet-per-house ids
+would have needed 84 more and buried the useful facts.
+
+**Still open, and still worth having:** a third source. Two agreeing
+implementations cannot catch a shared misreading of the method. The
+commissioner's BPHS confirmation remains welcome.
+
+**Tests:** 546 passed.
+
+## Type floors, one entry per phenomenon, plates that can be read, and a yoga that answers ✅ (2026-09-12)
+
+Six findings from a founder's walk. All six shipped, each with a gate.
+
+### 1. The type scale had drifted to 9px
+
+103 of 155 `font-size` declarations were under 16px; 53 selectors rendered
+under 13. Four floors now — `--t-head` 20, `--t-body` 16, `--t-table` 15,
+`--t-label` 13 — and every sub-floor size in the stylesheet was rewritten to
+name its role instead of a number, so a future edit that wants smaller has
+to introduce a token rather than type a smaller literal.
+
+**A stylesheet scan could not have settled this.** Half the small type is SVG,
+sized in user units the viewBox then scales: the same `font-size: 13px` was 7
+rendered pixels in the daśā graph (a 1000-unit viewBox drawn at 560) and 24 in
+the plate (300 units drawn at 560). `TestTypeFloors` walks every visible text
+node at 390 and 1280 across fifteen views and multiplies by the element's own
+CTM scale, so it judges what the eye receives. It found, and these are fixed:
+
+| | was | now |
+|---|---|---|
+| gallery thumbnail glyphs | 3.9px | 32 user units → 13.4 |
+| daśā graph labels | 5.6–7.3px | graph draws 1:1; labels at the floor |
+| glance mini plate | 6.5px | plate 200px, glyph-only marks |
+| plate degree labels at 390 | 7.6px | hidden below 560px — glyphs carry it |
+| chips, `th`, kickers, folios | 9–10px | `--t-label`, 13 |
+
+Explore's section titles were 10px small-caps; they are `--t-head` now.
+
+### 2. One entry per phenomenon
+
+"Mars in house 8 (Mangal Dosha pattern)" and "Mars in the 8th house" printed
+as two myth-vs-record entries — one placement, described twice, so a reader
+comparing them found two classical records for the same fact. Sade Sati
+printed in full under Doshas *and* under Myths.
+
+Every entry declares a canonical `subject` — `(what, condition)` — with
+exactly one home. Doshas is home to anything the cancellation machinery runs
+on, because that is where the dates and the checks live; the myth-vs-record
+framing of the same subject is **folded into** that entry, and Myths carries a
+cross-reference line. Nothing was deleted:
+`test_nothing_a_myth_card_said_was_dropped` asserts every classical record is
+still printed somewhere.
+
+### 3. A yoga is read, not just detected
+
+`yogaread.py`. Before this, an entry gave a name, a rule, and a sentence of
+meaning true of the yoga rather than of the reader's chart — and answered
+neither question anyone asks. Four answers now, in order:
+
+> **Thinner than it looks: Mars weakens in the ninth division, so its promise
+> on the body and fortune asks more of you. Its period runs until Feb 2027.**
+
+then **Gives** (one plain sentence, cited to a new `rule.yoga.*` in the rule
+library), **Where** (the houses, in plain words, never by number), **D9** and
+— for a combination touching held resources, visible work or gains — **D10**,
+and **Now/Next** (the periods of its forming grahas, dated off the
+Vimshottari timeline, labelled past, running or ahead).
+
+The ledger gained `yoga.<slug>.varga` and `yoga.<slug>.activation`, so the two
+things a reading asserts about a yoga are checkable. Varga dignity is computed
+from the SIGN only and never returns moolatrikona, which needs a degree this
+build does not hold.
+
+### 4. Numerology was never built
+
+Not a stub, not a route, not a line: `grep -i numerolog` over the whole
+repository returned nothing. It is listed in the tab row and marked *in
+preparation* — the same honesty the unbuilt divisional charts get — and
+`test_nothing_in_the_build_pretends_numerology_exists` fails if a half-built
+module ever makes that tab a lie in the other direction.
+
+### 5. The plates carry real marks
+
+Glyph + abbreviation (`☉Su`), ink weight for natural benefic against natural
+malefic (weight, never hue — the palette has one accent and it means "look
+here"), `℞` for retrograde and `⊙` for combust, with the lagna at the head of
+its own house's stack in the accent. Combustion is new computation:
+`yogas.combust()` with the standard Parāśari orbs and the retrograde
+tightening for Mercury and Venus, cited as `rule.graha.combust`.
+
+**And the plate learned what fits.** The anchor tables say where a stack is
+hung; they cannot see how wide it is, and width is what left the cell — three
+marks side by side in house 9 measured 104 user units in a cell 73 across, and
+four degree labels in the 12th ran through the diagonal into house 1. The
+anchors were right and the plate was wrong the whole time.
+
+`app.plate_layout` now decides the arrangement from the polygons, falling back
+one step at a time — glyph+letters+degree, then letters+degree, then
+glyph+letters, then letters — and packing marks onto as few rows as fit.
+Advance widths are **measured in a browser**, not estimated: an estimate that
+ran 20% generous dropped cells that had room, and one that ran short would
+draw a label into the wrong house.
+`test_no_label_overflows_its_cell_in_a_browser` reads the real `getBBox()` and
+checks all four corners of every label against the polygon it belongs to;
+`test_the_fit_estimate_is_never_optimistic` guards the calibration.
+
+### 6. Every division is wired
+
+D1, D9 and D10 render. D2, D3, D7, D12, D16, D30 and D60 are named, described
+and drawn as dashed empty frames. The gallery is generic over
+`vargas.SUPPORTED`: adding a sign function to that registry is the whole of
+what it takes to light a division up, and
+`test_every_computed_varga_is_plotted` fails if a computation lands and the
+gallery does not plot it.
+
+### Two things worth writing down
+
+**The template drew at a size the layout had not reserved.** The plate's type
+sizes were literals in `app.py`, where the fit is computed, *and* in the
+template, where the text is drawn. Raising `MINI_SIZE` to clear the
+legibility floor changed what `plate_layout` reserved room for and not one
+pixel of what rendered — the glyphs stayed at 26 units and stayed illegible,
+and every gate passed. They come from the context processor now, and
+`test_the_template_draws_at_the_size_the_layout_reserved` fails on a bare
+pixel size in the plate macros.
+
+**`str.replace("", x)` inserts between every character.** A scripted edit took
+`s[s.index(a):s.index(b)]` where `b` occurred *before* `a`, got an empty
+slice, and grew `templates/index.html` from 89KB to 258MB. Recovered exactly
+by splitting on the inserted block and rejoining — 89,000 insertions for
+88,999 characters, which is the arithmetic that proves the reconstruction is
+the original. Anchored edits, not computed slices, for anything structural.
+
+**Tests:** 525 passed.
+
 ## Five screens: Today, Readings, Your charts, Explore, Ask ✅ (2026-09-11)
 
 The dashboard was one long arrival page. It is five peers now, reached from a

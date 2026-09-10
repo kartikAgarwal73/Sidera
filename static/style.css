@@ -54,13 +54,30 @@
   /* THE TYPE SCALE — four sizes with real gaps, not eight with 2px between
      them. The distance between the verdict and the working is the point:
      one is the answer, the other is the evidence, and the setting should
-     say which is which before a word is read. */
+     say which is which before a word is read.
+
+     RE-CALIBRATED 2026-09-12 with FLOORS. The lower half of this scale had
+     drifted down to 9 and 10px — a texture on a designer's 27" display and
+     unreadable on the phone it was supposed to be designed for. Four floors
+     now, and they are the only sizes below the display range that exist:
+
+       --t-head   20px  a section title
+       --t-body   16px  anything anyone reads a sentence of
+       --t-table  15px  a cell in an ephemeris table
+       --t-label  13px  a label, a status chip, a small-caps marker
+
+     `--t-mark` is an ALIAS of --t-label, kept because the small-caps
+     section markers are named by role all through this file. A raw px
+     font-size below 16 is a bug now, and TestTypeFloors fails on one —
+     including the effective size of SVG text, which the viewBox scales. */
   --t-verdict: 34px;
-  --t-title: 27px;
-  --t-head: 19px;
-  --t-body: 15px;
+  --t-title: 30px;
+  --t-head: 20px;
+  --t-body: 16px;
+  --t-table: 15px;
+  --t-label: 13px;
   --t-data: 13px;
-  --t-mark: 10px;
+  --t-mark: 13px;
 
   /* Printed matter breathes. One rhythm, used everywhere. */
   --space-fold: 48px;
@@ -75,7 +92,7 @@
 :root[data-palette="night"] { color-scheme: dark; }
 @media (min-width: 700px) {
   :root {
-    --t-verdict: 52px; --t-title: 36px; --t-head: 21px; --t-body: 15.5px;
+    --t-verdict: 52px; --t-title: 38px; --t-head: 22px; --t-body: 16.5px;
     --space-fold: 76px;
   }
 }
@@ -151,7 +168,7 @@ body {
 }
 @media (min-width: 700px) { .hero h1 { font-size: 58px; } }
 .lede {
-  position: relative; font-size: 13.5px; line-height: 1.7;
+  position: relative; font-size: var(--t-body); line-height: 1.7;
   color: var(--ink-60); max-width: 34ch; margin: 16px 0 0;
 }
 .birthform { padding: 30px 0 10px; display: flex; flex-direction: column; gap: 22px; }
@@ -176,13 +193,13 @@ body {
    ones render in the system locale, so the same keystrokes meant different
    dates to different visitors. See the mask in index.html. */
 .fieldhint {
-  font-size: 9.5px; letter-spacing: .08em; color: var(--ink-50);
+  font-size: var(--t-label); letter-spacing: .08em; color: var(--ink-50);
   margin: 5px 0 0;
 }
 .fieldhint.bad { color: var(--accent-ink); }
 .field input[aria-invalid="true"] { border-bottom-color: var(--accent-ink); }
 
-.opt { font-size: 9px; letter-spacing: .1em; color: var(--ink-50); }
+.opt { font-size: var(--t-label); letter-spacing: .1em; color: var(--ink-50); }
 .placewrap { position: relative; }
 .suggest {
   position: absolute; top: 100%; left: 0; right: 0; z-index: 10;
@@ -190,14 +207,14 @@ body {
   max-height: 264px; overflow-y: auto;
 }
 .suggestion {
-  padding: 10px 14px; font-size: 13px; color: var(--ink-70); cursor: pointer;
+  padding: 10px 14px; font-size: var(--t-body); color: var(--ink-70); cursor: pointer;
   border-bottom: 1px solid var(--hairline);
 }
 .suggestion:last-child { border-bottom: none; }
 .suggestion:hover { background: var(--ghost); color: var(--accent-ink); }
-.placemeta { font-size: 11px; color: var(--accent-ink); margin-top: 6px; font-variant-numeric: tabular-nums; min-height: 14px; }
+.placemeta { font-size: var(--t-label); color: var(--accent-ink); margin-top: 6px; font-variant-numeric: tabular-nums; min-height: 14px; }
 .manual summary {
-  cursor: pointer; font-size: 11px; font-style: italic; color: var(--ink-50);
+  cursor: pointer; font-size: var(--t-body); font-style: italic; color: var(--ink-50);
   text-decoration: underline; text-underline-offset: 3px;
   text-decoration-color: rgba(var(--ink-rgb), .3); list-style: none;
 }
@@ -214,9 +231,15 @@ body {
   font-size: 20px; letter-spacing: .02em; cursor: pointer;
 }
 .cast:hover { color: var(--ink); border-color: var(--ink); }
-.footnote { text-align: left; font-size: 10.5px; letter-spacing: .08em; color: var(--ink-50); margin: 0; }
+/* A footnote to a figure is prose about that figure, so it reads at the
+   body floor — the .08em tracking it carried as a 10px label would be a
+   caricature at 16. */
+.footnote {
+  text-align: left; font-size: var(--t-body); line-height: 1.6;
+  color: var(--ink-60); margin: 0;
+}
 .error { border: none; border-left: 2px solid var(--accent-ink);
-  padding: 2px 0 2px 14px; font-size: 12px; color: var(--accent-ink); }
+  padding: 2px 0 2px 14px; font-size: var(--t-body); color: var(--accent-ink); }
 
 /* --- dashboard --- */
 .secnav {
@@ -227,7 +250,7 @@ body {
 }
 .secnav::-webkit-scrollbar { display: none; }
 .secnav a {
-  flex: none; font-family: var(--font-heading); font-size: 14px;
+  flex: none; font-family: var(--font-heading); font-size: var(--t-body);
   letter-spacing: .03em; color: var(--ink-50); text-decoration: none;
   padding: 4px 12px 12px 0; border-bottom: 1px solid transparent;
 }
@@ -251,10 +274,10 @@ details.yoga > summary::-webkit-details-marker { display: none; }
   letter-spacing: -.004em;
 }
 .chartof-sub {
-  font-size: 11px; letter-spacing: .06em; color: var(--ink-50);
+  font-size: var(--t-label); letter-spacing: .06em; color: var(--ink-50);
   margin-top: 8px; font-variant-numeric: tabular-nums; line-height: 1.65;
 }
-.credit { font-size: 10px; color: var(--ink-50); }
+.credit { font-size: var(--t-label); color: var(--ink-50); }
 .credit a { color: inherit; }
 
 .idline {
@@ -273,7 +296,7 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 }
 .readlink {
   position: relative; display: inline-block; margin-top: 10px;
-  font-style: italic; font-size: 12.5px; color: var(--ink-60);
+  font-style: italic; font-size: var(--t-body); color: var(--ink-60);
   text-decoration: underline; text-underline-offset: 3px;
   text-decoration-color: rgba(var(--ink-rgb), .3);
 }
@@ -283,7 +306,7 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 }
 .gchip {
   text-align: left; padding: 6px 0 9px; cursor: pointer;
-  font-family: var(--font-heading); font-size: 14px;
+  font-family: var(--font-heading); font-size: var(--t-body);
   letter-spacing: .03em; user-select: none; background: transparent;
   border: none; border-bottom: 1px solid transparent; margin-bottom: -1px;
   color: var(--ink-50);
@@ -296,10 +319,16 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 }
 .gpane { width: 100%; padding: 20px 0 4px; text-align: center; }
 .gpane.hidden { display: none; }
-.minikundli { width: 140px; height: 140px; }
-.minikundli .minigrahas text { font-family: var(--font-heading); font-size: 14px; fill: var(--ink-70); }
-.gcaption { font-size: 11px; color: var(--ink-60); margin-top: 6px; font-variant-numeric: tabular-nums; }
-.growlist { text-align: left; font-variant-numeric: tabular-nums; font-size: 12.5px; padding: 0 4px; }
+/* 200px, not 140. At 140 the 300-unit viewBox scales by .47, so a 14-unit
+   label rendered at 6.5 effective px — half the floor. A plate that cannot
+   be read is a decoration; either it is big enough to label or it carries
+   no labels at all. */
+.minikundli { width: 200px; height: 200px; }
+.minikundli .minigrahas text, .minikundli .grahas text {
+  font-family: var(--font-heading); fill: var(--ink-70);
+}
+.gcaption { font-size: var(--t-label); color: var(--ink-60); margin-top: 6px; font-variant-numeric: tabular-nums; }
+.growlist { text-align: left; font-variant-numeric: tabular-nums; font-size: var(--t-table); padding: 0 4px; }
 .grow { display: flex; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--divider); }
 .grow:last-child { border-bottom: none; }
 .grow.accent, .grow.accent .gdate { color: var(--accent-ink); }
@@ -310,9 +339,9 @@ details.yoga > summary::-webkit-details-marker { display: none; }
   border: 1px solid var(--accent); display: grid; place-items: center;
 }
 .gringnum { font-family: var(--font-heading); font-size: 24px; color: var(--accent-ink); font-variant-numeric: tabular-nums; }
-.gringpct { font-size: 10px; color: var(--ink-50); }
+.gringpct { font-size: var(--t-label); color: var(--ink-50); }
 .gdasha-title { font-family: var(--font-heading); font-weight: 600; font-size: 16px; }
-.gdasha-sub { font-size: 11.5px; line-height: 1.5; color: var(--ink-60); margin-top: 3px; }
+.gdasha-sub { font-size: var(--t-body); line-height: 1.5; color: var(--ink-60); margin-top: 3px; }
 
 /* THE PLATE — an engraved figure, not a screen graphic.
    One thin line weight throughout, the labels set in the display face, and
@@ -325,7 +354,7 @@ details.yoga > summary::-webkit-details-marker { display: none; }
   text-align: left; padding: 6px 0 9px; cursor: pointer;
   background: transparent; border: none;
   border-bottom: 1px solid transparent; margin-bottom: -1px;
-  font-family: var(--font-heading); font-size: 14px; letter-spacing: .03em;
+  font-family: var(--font-heading); font-size: var(--t-body); letter-spacing: .03em;
   color: var(--ink-50);
 }
 .tab:hover { color: var(--ink-70); }
@@ -346,6 +375,58 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 .plate-rule { stroke: rgba(var(--ink-rgb), .38); }
 .plate-diamond { stroke: var(--accent); }
 .kundli .signnum text { font-family: var(--font-heading); font-size: 15px; fill: rgba(var(--ink-rgb), .34); }
+/* --- HOW A GRAHA IS MARKED ON A PLATE -----------------------------------
+   Four things, and none of them is a hue. The palette has ONE accent and it
+   means "look here"; using red for malefics and green for benefics would
+   make the plate a traffic light and would carry nothing at all to a
+   colour-blind reader.
+
+     ink weight   a natural benefic is set at the body weight, a natural
+                  malefic denser and at full ink. That is the classical
+                  distinction drawn the way printed matter draws it.
+     ℞            retrograde.
+     ⊙            combust — inside the Sun's orb, burnt. In the accent,
+                  because the mark belongs to the Sun.
+     Asc          the lagna, which is not a graha and never sets like one.
+
+   The legend under every plate teaches all four. */
+.gm { fill: var(--ink); }
+.gm-benefic { font-weight: 400; fill: rgba(var(--ink-rgb), .82); }
+.gm-malefic { font-weight: 600; fill: var(--ink); }
+/* Burnt: the letters stay, the ink recedes — which is what combustion
+   means. It is never the ONLY signal; the ⊙ beside it is. */
+.gm-burnt { fill: rgba(var(--ink-rgb), .55); }
+/* FULL SIZE, not a superscript. These were set at .72em, which put them at
+   9.4 rendered pixels on a phone — a mark nobody can see is not a mark.
+   They are distinguished by the accent and by being glyphs no graha
+   abbreviation contains, which is enough. */
+.gm-retro, .gm-combust { fill: var(--accent-ink); font-weight: 500; }
+/* The lagna, on every plate: at the head of its own house's stack, in the
+   accent and letterspaced. Never a floating mark — drawn as one it landed
+   on top of house 1's sign numeral at every width. */
+.gm-lagna {
+  fill: var(--accent-ink); font-weight: 600; letter-spacing: .08em;
+}
+
+/* The legend. Set as a printed key: the glyph, then what it is. */
+.platekey {
+  margin-top: 12px; padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+  font-size: var(--t-label); color: var(--ink-60); line-height: 2;
+}
+.platekey-row { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+.platekey-marks {
+  margin-top: 4px; padding-top: 6px;
+  border-top: 1px dotted var(--hairline);
+}
+.platekey-gl {
+  font-size: 1.25em; margin-right: 5px; color: var(--ink);
+  vertical-align: -.06em;
+}
+.platekey-marks b { font-weight: 600; color: var(--accent-ink);
+  letter-spacing: .1em; margin-right: 4px; }
+.chip-gl { margin-right: 6px; font-size: 1.2em; vertical-align: -.06em; }
+
 /* The grahas are the ink of this figure, not its accent: an engraved plate
    labels in the same ink it is drawn with. */
 .kundli .grahas text { font-family: var(--font-heading); font-size: 15px; fill: var(--ink); letter-spacing: .01em; }
@@ -353,8 +434,11 @@ details.yoga > summary::-webkit-details-marker { display: none; }
    three stacked degree labels, and at 10px a three-graha stack bled past
    the plate hairline. Shrinking the type is the right lever — the anchor
    must stay inside its own cell, so the text cannot be moved instead. */
+/* 10 USER UNITS. The degree layer only draws at 560px and up now, where
+   the plate scales by at least 1.37 — 10 units is 13.7 rendered pixels at
+   the narrowest of those, which is the floor. */
 .kundli .grahas-deg text {
-  font-family: var(--font-body); font-size: 9px; font-weight: 450;
+  font-family: var(--font-body); font-size: 10px; font-weight: 450;
   font-variant-numeric: tabular-nums; fill: var(--ink-70);
 }
 /* degree toggle: detail labels on D1 by default; unchecking falls back to
@@ -362,9 +446,21 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 .plate .grahas-deg { display: none; }
 .plate.showdeg #pane-d1 .grahas-deg { display: block; }
 .plate.showdeg #pane-d1 .grahas-compact { display: none; }
+/* DEGREES AT THE LARGER SIZES ONLY. On a 390px screen the plate draws its
+   360-unit viewBox at about .95, so a 9-unit degree label rendered at 7.6
+   effective pixels — under the floor and genuinely unreadable. The glyph
+   and abbreviation carry the plate there; the degrees are in the graha
+   table two taps away, and on any wider screen they are back on the figure.
+   Placed AFTER the two rules above and at the same specificity, because a
+   media query wins nothing on its own. */
+@media (max-width: 560px) {
+  .plate.showdeg #pane-d1 .grahas-deg { display: none; }
+  .plate.showdeg #pane-d1 .grahas-compact { display: block; }
+  .degtoggle { display: none; }
+}
 .degtoggle {
   display: flex; justify-content: flex-end; align-items: center; gap: 7px;
-  margin-top: 10px; font-size: 10px; letter-spacing: .12em;
+  margin-top: 10px; font-size: var(--t-label); letter-spacing: .12em;
   text-transform: uppercase; color: var(--ink-50); cursor: pointer;
   user-select: none;
 }
@@ -372,7 +468,7 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 /* The plate caption, set as printed matter sets one: the plate number in
    small caps, the subject, then the imprint line beneath. */
 .platecaption {
-  font-size: 11px; color: var(--ink-60); margin-top: 16px;
+  font-size: var(--t-label); color: var(--ink-60); margin-top: 16px;
   padding-top: 11px; border-top: 1px solid var(--hairline);
   font-variant-numeric: tabular-nums; line-height: 1.7; text-align: left;
 }
@@ -381,7 +477,7 @@ details.yoga > summary::-webkit-details-marker { display: none; }
   color: var(--ink); margin-right: 7px;
 }
 .platecast {
-  display: block; color: var(--ink-50); font-size: 10.5px;
+  display: block; color: var(--ink-50); font-size: var(--t-label);
   letter-spacing: .04em;
 }
 
@@ -393,7 +489,7 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 .chip-planet {
   background: transparent; border: none;
   border-bottom: 1px solid transparent; padding-left: 0; padding-right: 0;
-  color: var(--ink-70); font-family: var(--font-heading); font-size: 12.5px;
+  color: var(--ink-70); font-family: var(--font-heading); font-size: var(--t-body);
   letter-spacing: .04em; padding: 5px 12px; cursor: pointer;
 }
 .chip-planet:hover { border-color: var(--accent-ink); color: var(--accent-ink); }
@@ -403,7 +499,7 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 .xcard-head { display: flex; justify-content: space-between; align-items: baseline; }
 .xcard-title { font-family: var(--font-heading); font-weight: 600; font-size: 16px; color: var(--accent-ink); }
 .xcard-close { background: none; border: none; color: var(--ink-50); font-size: 18px; cursor: pointer; }
-.xcard-body p { font-size: 12px; line-height: 1.65; color: var(--ink-70); margin: 7px 0 0; }
+.xcard-body p { font-size: var(--t-body); line-height: 1.65; color: var(--ink-70); margin: 7px 0 0; }
 #hlgroup .hl-src { fill: rgba(var(--accent-rgb), .16); stroke: var(--accent-ink); stroke-width: .8; }
 #hlgroup .hl-target { fill: rgba(var(--accent-rgb), .09); stroke: var(--accent-ink); stroke-width: .7; stroke-dasharray: 3 3; }
 #hlgroup .hl-step { fill: rgba(var(--ink-rgb), .07); }
@@ -420,7 +516,13 @@ details.yoga > summary::-webkit-details-marker { display: none; }
      not be scrolled away from. */
   stroke-dasharray: 5 4;
 }
-#hlgroup .wirelabel { font-family: var(--font-body); font-size: 9.5px; font-style: italic; fill: var(--accent-ink); }
+/* 9.5 USER UNITS, inside the 300-unit plate that renders around 560px: it
+   draws at roughly 18 effective px, comfortably over the floor. SVG text is
+   judged on what it renders as, never on the attribute. */
+#hlgroup .wirelabel {
+  font-family: var(--font-body); font-size: 9.5px;
+  font-style: italic; fill: var(--accent-ink);
+}
 #hlgroup .pulse-ring {
   fill: none; stroke: var(--accent-ink); stroke-width: 1.6;
   /* Twice, then it holds. It answers a tap — which is the motion worth
@@ -432,15 +534,15 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 .whybtn {
   margin-top: 9px; background: transparent; border: none;
   border-bottom: 1px solid rgba(var(--ink-rgb), .25);
-  color: var(--ink-60); font-family: var(--font-body); font-size: 10.5px;
+  color: var(--ink-60); font-family: var(--font-body); font-size: var(--t-label);
   letter-spacing: .08em; padding: 4px 10px; cursor: pointer;
 }
 .whybtn:hover { border-color: var(--accent-ink); color: var(--accent-ink); }
 
 .note { border: none; border-left: 1px solid var(--divider);
   padding: 2px 0 2px 14px; margin: 14px 0 6px; }
-.notekicker { font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent-ink); }
-.notebody { font-size: 12px; line-height: 1.55; color: var(--ink-70); margin-top: 5px; }
+.notekicker { font-size: var(--t-label); letter-spacing: .14em; text-transform: uppercase; color: var(--accent-ink); }
+.notebody { font-size: var(--t-body); line-height: 1.55; color: var(--ink-70); margin-top: 5px; }
 
 .ledger { padding: 18px 0 6px; }
 /* TABLES, SET AS A PRINTED EPHEMERIS.
@@ -463,12 +565,12 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 /* --- Phase 10: weather cards + progress bars --- */
 .wcard { border-bottom: 1px solid var(--hairline); padding: 12px 0; }
 .wcard.demanding { border-left: 2px solid var(--accent-ink); padding-left: 12px; }
-.wcard-head { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; align-items: baseline; }
-.wcard-note { font-size: 11.5px; font-style: italic; color: var(--ink-50); margin: 7px 0 0; }
+.wcard-head { display: flex; justify-content: space-between; gap: 12px; font-size: var(--t-body); align-items: baseline; }
+.wcard-note { font-size: var(--t-body); font-style: italic; color: var(--ink-50); margin: 7px 0 0; }
 .pbar { height: 4px; background: rgba(var(--ink-rgb), .12); margin-top: 10px; }
 .pfill { height: 100%; background: var(--accent-ink); }
 .pbar-label {
-  display: flex; justify-content: space-between; font-size: 10px;
+  display: flex; justify-content: space-between; font-size: var(--t-label);
   letter-spacing: .06em; color: var(--ink-50); margin-top: 5px;
   font-variant-numeric: tabular-nums;
 }
@@ -478,25 +580,34 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 .lifegraph .band { fill: var(--accent-ink); }
 .lifegraph .band-current { fill: var(--accent-ink); stroke: var(--ink); stroke-width: .8; }
 .lifegraph .bandlabel {
-  font-family: var(--font-heading); font-size: 13px; fill: var(--paper);
+  font-family: var(--font-heading); font-size: var(--t-label); fill: var(--paper);
   text-anchor: middle; font-weight: 600; pointer-events: none;
 }
 .lifegraph .tick { stroke: var(--ink-50); stroke-width: 1; }
-.lifegraph .ticklabel { font-family: var(--font-body); font-size: 10px; fill: var(--ink-50); text-anchor: middle; }
+.lifegraph .ticklabel {
+  font-family: var(--font-body); font-size: var(--t-label);
+  fill: var(--ink-50); text-anchor: middle;
+}
 .lifegraph .here { stroke: var(--ink); stroke-width: 1.4; stroke-dasharray: 3 3; }
 .lifegraph .herelabel {
-  font-family: var(--font-body); font-size: 11px; letter-spacing: .06em;
-  fill: var(--ink); text-anchor: middle;
+  font-family: var(--font-body); font-size: var(--t-label);
+  letter-spacing: .06em; fill: var(--ink); text-anchor: middle;
 }
 .lifegraph .tmarker path { fill: var(--accent-ink); }
-.lifegraph .tmarker text { font-family: var(--font-body); font-size: 9.5px; fill: var(--ink-60); text-anchor: middle; }
+.lifegraph .tmarker text {
+  font-family: var(--font-body); font-size: var(--t-label);
+  fill: var(--ink-60); text-anchor: middle;
+}
 .lifegraph .leader { stroke: rgba(var(--ink-rgb), .3); stroke-width: .7; }
 .graphwrap { overflow-x: auto; }
-.graphwrap .lifegraph { min-width: 560px; }
-.ratehint { font-size: 11.5px; line-height: 1.55; color: var(--ink-50); margin: 6px 0 4px; }
+/* 1000px is the viewBox width, so the graph draws at 1:1 and a 13-unit
+   label is 13 rendered px. At 560 it scaled by .56 and every label on it
+   was under 8px. The wrapper scrolls; that is the deal for a wide figure. */
+.graphwrap .lifegraph { min-width: 1000px; }
+.ratehint { font-size: var(--t-body); line-height: 1.55; color: var(--ink-50); margin: 6px 0 4px; }
 .rated { border-bottom: 1px solid var(--hairline); padding: 10px 0; }
-.rated-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 13px; }
-.rated-theme { font-size: 11.5px; font-style: italic; color: var(--ink-50); margin: 4px 0 0; }
+.rated-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: var(--t-body); }
+.rated-theme { font-size: var(--t-body); font-style: italic; color: var(--ink-50); margin: 4px 0 0; }
 .stars { white-space: nowrap; }
 .star { background: none; border: none; color: var(--ink-50); font-size: 16px; cursor: pointer; padding: 0 1px; }
 .star.lit { color: var(--accent-ink); }
@@ -506,19 +617,64 @@ details.yoga > summary::-webkit-details-marker { display: none; }
   padding: 14px 0 4px; margin-top: 0; }
 .yogahead { display: flex; justify-content: space-between; align-items: baseline; }
 .yoganame { font-family: var(--font-heading); font-size: 17px; }
-.yogakind { font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-50); }
-.yogadetail { font-size: 12px; line-height: 1.6; color: var(--ink-70); margin: 6px 0 0; }
-.yoganote { font-size: 11.5px; line-height: 1.55; font-style: italic; color: var(--accent-ink); margin: 6px 0 0; }
+.yogakind { font-size: var(--t-label); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-50); }
+/* --- A YOGA, READ ------------------------------------------------------
+   The verdict is the entry; the four facts under it are the shape of the
+   answer, each labelled with what it answers. The working — mechanism,
+   classical meaning, the division-by-division dignities, the full list of
+   periods — is behind the expander, per the editorial doctrine. */
+.yverdict {
+  font-family: var(--font-heading); font-size: 19px; line-height: 1.42;
+  color: var(--ink); margin: 8px 0 0; max-width: 54ch;
+}
+.yfacts {
+  margin-top: 12px; padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+}
+/* A label column and a text column, so the four answers line up as a table
+   of contents for the entry rather than as four paragraphs with a word in
+   front of each. */
+.yfact {
+  display: grid; grid-template-columns: 5.5em 1fr; gap: 10px;
+  font-size: var(--t-body); line-height: 1.55; color: var(--ink-70);
+  margin-top: 6px;
+}
+.yfact .xplabel { margin: 0; }
+@media (max-width: 560px) {
+  .yfact { grid-template-columns: 1fr; gap: 1px; }
+}
+/* A sticky category bar sits over the top of whatever is scrolled to.
+   Every entry keeps its own clearance so a jump lands under the bar, not
+   behind it. */
+#view-explore[data-showing] .yoga,
+#view-explore[data-showing] .ledger { scroll-margin-top: 76px; }
+
+.yogadetail { font-size: var(--t-body); line-height: 1.6; color: var(--ink-70); margin: 6px 0 0; }
+.yoganote { font-size: var(--t-body); line-height: 1.55; font-style: italic; color: var(--accent-ink); margin: 6px 0 0; }
 .yoga details { margin-top: 7px; }
 .yoga summary {
-  cursor: pointer; font-size: 10px; letter-spacing: .12em;
+  cursor: pointer; font-size: var(--t-body); letter-spacing: .12em;
   text-transform: uppercase; color: var(--ink-50);
 }
-.yogarule { font-size: 12px; line-height: 1.6; color: var(--ink-60); margin: 6px 0 0; }
+/* The myth-vs-record framing, folded into the dosha entry it is about.
+   Set apart by a rule so it reads as a second register on the same
+   phenomenon, not as a second phenomenon. */
+.mythfold {
+  margin-top: 12px; padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+}
+/* One line pointing at the entries that live in the other section. */
+.crossref {
+  font-size: var(--t-body); line-height: 1.6; color: var(--ink-60);
+  margin: 18px 0 0; padding-top: 12px;
+  border-top: 1px solid var(--hairline);
+}
+.crossref a { color: var(--accent-ink); }
+.yogarule { font-size: var(--t-body); line-height: 1.6; color: var(--ink-60); margin: 6px 0 0; }
 
-.gtable { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px; }
+.gtable { width: 100%; border-collapse: collapse; font-size: var(--t-table); margin-top: 8px; }
 .gtable th {
-  text-align: left; font-weight: 400; font-size: 9px; letter-spacing: .12em;
+  text-align: left; font-weight: 400; font-size: var(--t-label); letter-spacing: .12em;
   text-transform: uppercase; color: var(--ink-50); padding: 5px 8px 5px 0;
   border-bottom: 1px solid var(--divider);
 }
@@ -528,7 +684,7 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 /* --- Ask Your Chart --- */
 .askmeta { display: flex; align-items: baseline; gap: 8px; flex: none; }
 .convpill {
-  font-size: 9px; letter-spacing: .08em; text-transform: uppercase;
+  font-size: var(--t-label); letter-spacing: .08em; text-transform: uppercase;
   padding: 2px 0; border: none; color: var(--ink-50);
   font-variant-caps: all-small-caps; letter-spacing: .14em;
   white-space: nowrap;
@@ -542,8 +698,8 @@ details.yoga > summary::-webkit-details-marker { display: none; }
   padding: 8px 0 8px 12px; margin-top: 12px;
 }
 .lenshead { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-.lensname { font-family: var(--font-heading); font-weight: 600; font-size: 14px; color: var(--accent-ink); }
-.lensblock .row { font-size: 12px; }
+.lensname { font-family: var(--font-heading); font-weight: 600; font-size: var(--t-body); color: var(--accent-ink); }
+.lensblock .row { font-size: var(--t-table); }
 .askcard .yogahead { gap: 10px; flex-wrap: wrap; }
 
 /* --- Paṭha (three-layer explanations) --- */
@@ -553,17 +709,17 @@ details.yoga > summary::-webkit-details-marker { display: none; }
   gap: 14px; padding: 10px 0; cursor: pointer; list-style: none;
 }
 .xp summary::-webkit-details-marker { display: none; }
-.xptitle { font-family: var(--font-heading); font-weight: 600; font-size: 15px; }
-.xpsub { font-size: 11px; color: var(--ink-50); font-variant-numeric: tabular-nums; }
+.xptitle { font-family: var(--font-heading); font-weight: 600; font-size: var(--t-body); }
+.xpsub { font-size: var(--t-label); color: var(--ink-50); font-variant-numeric: tabular-nums; }
 .xp[open] .xptitle { color: var(--accent-ink); }
-.xpbody { font-size: 12px; line-height: 1.65; color: var(--ink-70); margin: 0 0 10px; }
+.xpbody { font-size: var(--t-body); line-height: 1.65; color: var(--ink-70); margin: 0 0 10px; }
 .xplabel {
-  display: inline-block; margin-right: 8px; font-size: 9px;
+  display: inline-block; margin-right: 8px; font-size: var(--t-label);
   letter-spacing: .14em; text-transform: uppercase; color: var(--accent-ink);
 }
 .chip {
   display: inline-block; margin-left: 8px; padding: 1px 8px 2px;
-  font-size: 9px; letter-spacing: .1em; text-transform: uppercase;
+  font-size: var(--t-label); letter-spacing: .1em; text-transform: uppercase;
   border: none; color: var(--ink-50);
   font-variant-caps: all-small-caps; letter-spacing: .14em;
   vertical-align: 1px;
@@ -576,16 +732,16 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 .learn {
   background: none; border: none;
   border-bottom: 1px solid rgba(var(--ink-rgb), .22);
-  color: var(--ink-50); font-family: var(--font-body); font-size: 9px;
+  color: var(--ink-50); font-family: var(--font-body); font-size: var(--t-label);
   letter-spacing: .08em; text-transform: none; padding: 2px 8px;
   cursor: pointer; vertical-align: 1px;
 }
 .learn:hover { border-color: var(--accent-ink); color: var(--accent-ink); }
 .lessonnum {
   display: inline-block; min-width: 26px; font-family: ui-monospace, monospace;
-  font-size: 10px; color: var(--accent-ink); letter-spacing: .06em;
+  font-size: var(--t-label); color: var(--accent-ink); letter-spacing: .06em;
 }
-.lesson-read-mark { color: var(--accent-ink); font-size: 10px; letter-spacing: .1em; }
+.lesson-read-mark { color: var(--accent-ink); font-size: var(--t-label); letter-spacing: .1em; }
 .lmodal {
   position: fixed; inset: 0; z-index: 50; background: rgba(var(--paper-rgb), .78);
   display: grid; place-items: center; padding: 24px;
@@ -596,15 +752,15 @@ details.yoga > summary::-webkit-details-marker { display: none; }
   border-top: 1px solid var(--accent-ink);
   max-width: 520px; width: 100%; padding: 18px 20px; max-height: 80vh; overflow-y: auto;
 }
-.lmodal-card .xpbody { font-size: 13px; }
+.lmodal-card .xpbody { font-size: var(--t-body); }
 
 .again {
   display: inline-block; margin: 16px 0 4px; font-family: var(--font-heading);
-  font-size: 13px; letter-spacing: .06em; color: var(--accent-ink); text-decoration: none;
+  font-size: var(--t-body); letter-spacing: .06em; color: var(--accent-ink); text-decoration: none;
 }
 
 .colophon {
-  text-align: left; font-size: 10.5px; letter-spacing: .06em; line-height: 1.9;
+  text-align: left; font-size: var(--t-label); letter-spacing: .06em; line-height: 1.9;
   color: var(--ink-60); padding: 22px 0 10px; margin-top: var(--space-fold);
   border-top: 1px solid var(--divider);
 }
@@ -632,7 +788,7 @@ details.yoga > summary::-webkit-details-marker { display: none; }
   color: var(--ink);
 }
 .pmeta {
-  font-size: 10px; letter-spacing: .04em; color: var(--ink-50);
+  font-size: var(--t-label); letter-spacing: .04em; color: var(--ink-50);
   margin-top: 7px; font-variant-numeric: tabular-nums;
 }
 
@@ -640,7 +796,7 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 .palpick {
   background: transparent; border: none;
   border-bottom: 1px solid var(--divider); color: var(--ink-50);
-  font-family: var(--font-body); font-size: 9px; letter-spacing: .1em;
+  font-family: var(--font-body); font-size: var(--t-label); letter-spacing: .1em;
   text-transform: uppercase; padding: 3px 6px; margin-right: 10px; cursor: pointer;
   border-radius: 0;
 }
@@ -650,7 +806,7 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 .gmhead { position: relative; text-align: center; padding: 18px 0 8px; }
 .gmnames { position: relative; font-family: var(--font-heading); font-size: 22px; }
 .gmsub {
-  position: relative; font-size: 10.5px; letter-spacing: .06em;
+  position: relative; font-size: var(--t-label); letter-spacing: .06em;
   color: var(--ink-50); margin-top: 3px; font-variant-numeric: tabular-nums;
 }
 .gmring {
@@ -659,23 +815,23 @@ details.yoga > summary::-webkit-details-marker { display: none; }
   display: grid; place-items: center;
 }
 .gmscore { font-family: var(--font-heading); font-size: 34px; color: var(--accent-ink); font-variant-numeric: tabular-nums; }
-.gmmax { font-size: 12px; color: var(--ink-50); }
+.gmmax { font-size: var(--t-label); color: var(--ink-50); }
 .gmverdict {
   position: relative; font-family: var(--font-heading); font-style: italic;
-  font-size: 14px; line-height: 1.5; max-width: 460px; margin: 0 auto;
+  font-size: var(--t-body); line-height: 1.5; max-width: 460px; margin: 0 auto;
 }
 .gmledger { margin-top: 16px; }
 .gmrow { border-bottom: 1px solid var(--hairline); }
 .gmrow > summary {
   display: flex; justify-content: space-between; gap: 12px;
-  padding: 9px 0; cursor: pointer; list-style: none; font-size: 13px;
+  padding: 9px 0; cursor: pointer; list-style: none; font-size: var(--t-body);
 }
 .gmrow > summary::-webkit-details-marker { display: none; }
-.gmkuta { font-family: var(--font-heading); font-weight: 600; font-size: 15px; }
+.gmkuta { font-family: var(--font-heading); font-weight: 600; font-size: var(--t-body); }
 .gmrow.void .gmkuta, .gmrow.void > summary .num { color: var(--accent-ink); }
 .gmrow[open] .gmkuta { color: var(--accent-ink); }
 .gmfoot {
-  font-size: 11px; line-height: 1.55; color: var(--ink-50);
+  font-size: var(--t-label); line-height: 1.55; color: var(--ink-50);
   margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--divider);
 }
 
@@ -683,7 +839,7 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 .readfold { margin-top: 10px; }
 .readfold > summary.readlink { display: inline-block; }
 .readlong {
-  font-size: 13px; line-height: 1.65; color: var(--ink-70);
+  font-size: var(--t-body); line-height: 1.65; color: var(--ink-70);
   margin: 10px 0 0; max-width: 520px;
 }
 
@@ -695,7 +851,7 @@ details.yoga > summary::-webkit-details-marker { display: none; }
   padding: 0 0 9px; border: none;
   border-bottom: 1px solid var(--accent-ink);
   color: var(--accent-ink); font-family: var(--font-heading);
-  font-weight: 600; font-size: 15px; letter-spacing: .06em;
+  font-weight: 600; font-size: var(--t-body); letter-spacing: .06em;
   text-decoration: none;
 }
 .cta:hover { color: var(--ink); border-bottom-color: var(--ink); }
@@ -703,7 +859,7 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 /* --- Ask about this chart: grounded agent panel (v1.1) --- */
 .agentsuggest { display: flex; flex-wrap: wrap; gap: 10px 20px; margin: 16px 0 4px; }
 .sugq {
-  font: inherit; font-size: 13px; color: var(--ink);
+  font: inherit; font-size: var(--t-body); color: var(--ink);
   background: transparent; border: none;
   border-bottom: 1px solid var(--accent-ink);
   padding: 7px 11px; cursor: pointer; text-align: left;
@@ -717,7 +873,7 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 }
 #agentq:focus { outline: none; border-bottom-color: var(--accent); }
 .agentgo { flex: 0 0 auto; margin: 0; padding: 9px 20px; }
-.agentleft { font-size: 12px; color: var(--ink-50); margin: 8px 0 0; }
+.agentleft { font-size: var(--t-body); color: var(--ink-50); margin: 8px 0 0; }
 .agentcard { border-top: 1px solid var(--accent-ink); padding: 16px 0; margin-top: 16px; }
 .agentcard.agenterr { border-top-style: dashed; }
 /* Correspondence: the question set in italic and indented like a quoted
@@ -728,7 +884,7 @@ details.yoga > summary::-webkit-details-marker { display: none; }
   border-left: 1px solid var(--divider);
 }
 .thumbdown {
-  font: inherit; font-size: 12px; color: var(--ink-60); background: transparent;
+  font: inherit; font-size: var(--t-body); color: var(--ink-60); background: transparent;
   border: none; border-bottom: 1px solid var(--hairline);
   padding: 4px 0; cursor: pointer;
   margin-top: 12px;
@@ -748,7 +904,10 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 .plate.showdeg #pane-d1 .signnum text.crowded { display: none; }
 /* …and the stack itself steps down a size, because three lines at 9px are
    wider than the narrow triangles (houses 3, 5, 9, 11) are at that height. */
-.kundli .grahas-deg text.crowded { font-size: 8px; }
+/* NO LONGER SMALLER. A crowded cell used to drop to 8 units, which was
+   under the floor at every width; it tightens its LEADING instead, and the
+   sign numeral under it still steps aside (below). */
+.kundli .grahas-deg text.crowded { font-size: 10px; }
 
 /* --- Computation options -----------------------------------------------
    The reader is asked, in plain English, about the handful of points where
@@ -758,24 +917,24 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 .schoolbox { margin: 22px 0 6px; border-top: 1px solid var(--divider);
   padding-top: 14px; }
 .schoolbox > summary { cursor: pointer; font-family: var(--serif);
-  font-size: 15px; color: var(--ink); }
-.schoolbox > summary .muted { color: var(--faint); font-size: 13px; }
-.schoolintro { color: var(--faint); font-size: 13px; line-height: 1.55;
+  font-size: var(--t-body); color: var(--ink); }
+.schoolbox > summary .muted { color: var(--faint); font-size: var(--t-body); }
+.schoolintro { color: var(--faint); font-size: var(--t-body); line-height: 1.55;
   margin: 10px 0 16px; max-width: 60ch; }
 /* Square corners throughout: the framework's token table lists 0 and 50%
    as the only permitted radii, and test_framework_non_negotiable_tokens
    enforces it. */
 .chip.changed { display: inline-block; margin-left: 8px; padding: 1px 7px;
-  border: none; border-bottom: 1px solid var(--accent); font-size: 11px;
+  border: none; border-bottom: 1px solid var(--accent); font-size: var(--t-label);
   color: var(--accent); letter-spacing: .04em; }
 fieldset.school { border: none; border-top: 1px solid var(--divider);
   padding: 14px 16px 8px; margin: 0 0 16px; }
-fieldset.school legend { font-family: var(--serif); font-size: 15px;
+fieldset.school legend { font-family: var(--serif); font-size: var(--t-body);
   color: var(--ink); padding: 0 6px; }
-fieldset.school .consequence { color: var(--faint); font-size: 12.5px;
+fieldset.school .consequence { color: var(--faint); font-size: var(--t-body);
   line-height: 1.5; margin: 2px 0 12px; max-width: 62ch; }
 fieldset.school.notlive { opacity: .62; }
-fieldset.school .notyet { color: var(--accent); font-size: 12.5px;
+fieldset.school .notyet { color: var(--accent); font-size: var(--t-body);
   line-height: 1.5; margin: -6px 0 12px; max-width: 62ch; }
 .answer { margin: 0 0 12px; }
 /* Radio in its own column; the answer and its "recommended" chip flow as
@@ -785,24 +944,29 @@ fieldset.school .notyet { color: var(--accent); font-size: 12.5px;
   cursor: pointer; }
 .answer input[type=radio] { accent-color: var(--accent); flex: none; }
 .answer .answerline { flex: 1 1 auto; min-width: 0; }
-.answer .answertext { color: var(--ink); font-size: 14px; }
-.answer .rec { display: inline-block; margin-left: 8px; font-size: 11px;
+.answer .answertext { color: var(--ink); font-size: var(--t-body); }
+.answer .rec { display: inline-block; margin-left: 8px; font-size: var(--t-body);
   letter-spacing: .05em; text-transform: uppercase; white-space: nowrap;
   color: var(--accent); border: none; padding: 1px 0;
   font-variant-caps: all-small-caps; letter-spacing: .13em; }
-/* The technical name — deliberately small, deliberately secondary. */
-.answer .schoolname { display: block; margin: 2px 0 0 26px; font-size: 11.5px;
-  color: var(--faint); letter-spacing: .01em; }
+/* The technical name — deliberately secondary. It used to be secondary by
+   being SMALLER (11.5px), which the type floors retired: the way to make
+   something recede is to lighten it and let the label above carry the
+   weight, not to set it under the reading floor. */
+.answer .schoolname { display: block; margin: 2px 0 0 26px; font-size: var(--t-body);
+  color: var(--faint); letter-spacing: .01em; font-style: italic; }
 .answer .whythis { margin: 4px 0 0 26px; }
-.answer .whythis > summary { font-size: 11.5px; color: var(--faint);
+.answer .whythis > summary { font-size: var(--t-body); color: var(--faint);
   cursor: pointer; }
-.answer .whythis p { font-size: 12.5px; line-height: 1.6; color: var(--faint);
+.answer .whythis p { font-size: var(--t-body); line-height: 1.6; color: var(--faint);
   margin: 6px 0 0; max-width: 58ch; }
 /* The choice, printed on the results that depend on it. */
-.schoolsum { font-size: 12.5px; color: var(--faint); margin-top: 6px; }
+.schoolsum { font-size: var(--t-body); color: var(--faint); margin-top: 6px; }
 .schoolsum.moved { color: var(--accent); }
-.schoolstamp { font-size: 11.5px; color: var(--faint); margin: 12px 0 0;
-  letter-spacing: .01em; }
+/* A whole sentence about how the section above was computed — prose, not a
+   label, so it reads at the body floor and recedes by colour. */
+.schoolstamp { font-size: var(--t-body); color: var(--faint); margin: 12px 0 0;
+  letter-spacing: .01em; line-height: 1.55; }
 .schoolmark { color: var(--faint); margin-left: 4px; cursor: help; }
 .schoolform { margin-top: 14px; }
 .schoolbox.onboard { border-top: none; padding-top: 0; margin-top: 14px; }
@@ -827,7 +991,7 @@ button.cast.recast { margin-top: 4px; }
   list-style: none; margin: 16px 0 0; padding: 15px 0 16px;
   border-top: 1px solid var(--divider);
   border-bottom: 1px solid var(--divider);
-  font-size: 12.5px; line-height: 1.85; color: var(--ink-60);
+  font-size: var(--t-body); line-height: 1.85; color: var(--ink-60);
   font-variant-numeric: tabular-nums;
 }
 .identity li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -839,7 +1003,7 @@ button.cast.recast { margin-top: 4px; }
 
 .backlink {
   display: inline-block; margin: 14px 0 4px; padding: 6px 0;
-  font-size: 12.5px; color: var(--accent); text-decoration: none;
+  font-size: var(--t-body); color: var(--accent); text-decoration: none;
 }
 .backlink:hover { text-decoration: underline; }
 
@@ -880,7 +1044,7 @@ button.cast.recast { margin-top: 4px; }
 .dcard:hover .dcard-title { color: var(--accent-ink); }
 .dcard-no {
   grid-area: no; font-family: var(--font-heading);
-  font-size: 15px; color: var(--ink-50);
+  font-size: var(--t-body); color: var(--ink-50);
   font-variant-numeric: tabular-nums lining-nums;
 }
 .dcard-title {
@@ -888,7 +1052,7 @@ button.cast.recast { margin-top: 4px; }
   font-size: var(--t-head); line-height: 1.2; color: var(--ink);
 }
 .dcard-teaser {
-  grid-area: teaser; font-size: 13.5px; line-height: 1.62;
+  grid-area: teaser; font-size: var(--t-body); line-height: 1.62;
   color: var(--ink-60); max-width: 54ch;
 }
 .dcard-more {
@@ -926,7 +1090,7 @@ button.cast.recast { margin-top: 4px; }
   color: var(--ink-70); margin: 22px 0 0; max-width: 60ch;
 }
 .conf {
-  font-size: 11.5px; color: var(--ink-50);
+  font-size: var(--t-label); color: var(--ink-50);
   margin: var(--space-rule) 0 0; padding-top: 14px;
   border-top: 1px solid var(--hairline);
   display: flex; align-items: baseline; gap: 10px; line-height: 1.6;
@@ -956,17 +1120,17 @@ button.cast.recast { margin-top: 4px; }
 .dstep > summary:hover::after { color: var(--accent-ink); }
 /* The plain folds keep the app's existing ▸ marker. */
 .dstep-n {
-  font-family: var(--font-body); font-size: 11px; color: var(--ink-50);
+  font-family: var(--font-body); font-size: var(--t-label); color: var(--ink-50);
   border: none; padding: 0;
   font-variant-numeric: tabular-nums;
 }
 .dstep-do {
-  font-size: 12.5px; line-height: 1.6; color: var(--ink-50);
+  font-size: var(--t-body); line-height: 1.6; color: var(--ink-50);
   margin: 8px 0 10px; max-width: 62ch;
 }
 .dstep .row { align-items: flex-start; gap: 14px; }
 .dstep .row .num {
-  font-size: 10.5px; letter-spacing: 0; text-align: right;
+  font-size: var(--t-table); letter-spacing: 0; text-align: right;
   flex: none; max-width: 42%; word-break: break-word;
 }
 
@@ -1221,19 +1385,34 @@ button.cast.recast { margin-top: 4px; }
 }
 
 /* Inside a category, everything is set to be read rather than scanned. */
-#view-explore[data-showing] { font-size: 16px; }
-#view-explore[data-showing] .rows { font-size: 15px; }
+#view-explore[data-showing] { font-size: var(--t-body); }
+#view-explore[data-showing] .rows { font-size: var(--t-body); }
 #view-explore[data-showing] .row { padding: 10px 0; line-height: 1.6; }
 #view-explore[data-showing] .yogadetail,
 #view-explore[data-showing] .xpbody,
 #view-explore[data-showing] .agentread,
-#view-explore[data-showing] .ratehint { font-size: 16px; line-height: 1.7; }
-#view-explore[data-showing] .gtable { font-size: 15px; }
+#view-explore[data-showing] .ratehint { font-size: var(--t-body); line-height: 1.7; }
+#view-explore[data-showing] .gtable { font-size: var(--t-table); }
 #view-explore[data-showing] .gtable td,
 #view-explore[data-showing] .gtable th { padding: 9px 10px 9px 0; }
-#view-explore[data-showing] .yoganame { font-size: 19px; }
-#view-explore[data-showing] .wcard-head { font-size: 15.5px; }
-#view-explore[data-showing] .notebody { font-size: 16px; line-height: 1.65; }
+#view-explore[data-showing] .wcard-head { font-size: var(--t-body); }
+#view-explore[data-showing] .notebody { font-size: var(--t-body); line-height: 1.65; }
+
+/* A SECTION TITLE IS A TITLE. Inside a category the `.kicker` that opens
+   each ledger is not a marginal label — it is the heading of the section
+   you just opened, and it was set at 10px. Small-caps kept, because the
+   structural signature is a rule with its heading beneath it; the size is
+   the floor the brief names. */
+#view-explore[data-showing] .ledger > .kicker,
+#view-explore[data-showing] .note > .notekicker,
+#view-explore[data-showing] .ledger > details > summary.kicker {
+  font-size: var(--t-head); letter-spacing: .1em; color: var(--ink);
+  display: block; margin-bottom: 4px;
+}
+/* An entry title inside a section sits between the section title and the
+   body — never level with either. */
+#view-explore[data-showing] .yoganame,
+#view-explore[data-showing] .xptitle { font-size: 18px; }
 
 /* ============================================================
    THE FIVE SCREENS — Today · Readings · Your charts · Explore · Ask
@@ -1242,6 +1421,19 @@ button.cast.recast { margin-top: 4px; }
 /* The tab row. Peers, not a hierarchy: Today, Readings and Your charts are
    three ways into the same chart, so they sit on one rule rather than behind
    one another. Same treatment as the plate's own tabs. */
+/* A screen that does not exist yet, named where it will be. Same pattern as
+   the "in preparation" divisional charts: the shape of the thing is shown,
+   and the fact that it is not built is stated rather than hidden. */
+.tab-soon {
+  display: inline-flex; align-items: baseline; gap: 7px; white-space: nowrap;
+  color: var(--ink-50); cursor: default; opacity: .62;
+  padding: 12px 0 13px; margin-bottom: -1px;
+}
+.tab-soonmark {
+  font-family: var(--font-body); font-size: var(--t-label);
+  font-style: italic; letter-spacing: .04em; color: var(--ink-50);
+}
+
 .tabs {
   display: flex; gap: 26px; overflow-x: auto;
   border-bottom: 1px solid var(--divider);
@@ -1249,8 +1441,8 @@ button.cast.recast { margin-top: 4px; }
   scrollbar-width: none;
 }
 .tabs::-webkit-scrollbar { display: none; }
-.tabs a {
-  flex: none; font-family: var(--font-heading); font-size: 16px;
+.tabs a, .tabs .tab-soon {
+  flex: none; font-family: var(--font-heading); font-size: var(--t-body);
   letter-spacing: .02em; color: var(--ink-50); text-decoration: none;
   padding: 12px 0 13px; border-bottom: 1px solid transparent;
   margin-bottom: -1px; white-space: nowrap;
@@ -1291,11 +1483,41 @@ button.cast.recast { margin-top: 4px; }
   color: var(--ink); margin: var(--space-rule) 0 0; max-width: 40ch;
 }
 
+/* The Sarvāṣṭakavarga total for a house, riding with that house's sign
+   numeral. In the accent, so it reads as an annotation on the plate rather
+   than as one of the plate's own numerals — and in the same text node, so
+   the two can never collide. */
+/* THE SARVĀṢṬAKAVARGA TOTALS take the sign numerals' slot — one number to a
+   cell, never two. In the accent, and at the numerals' own size, so the
+   plate reads the same and only the meaning of the number changes; the
+   toggle above the plate says which is showing. */
+.savnum { display: none; }
+.plate.showsav .savnum { display: block; }
+.plate.showsav .signnum { display: none; }
+.kundli .savnum text {
+  font-family: var(--font-body); font-size: 15px; font-weight: 600;
+  fill: var(--accent-ink); font-variant-numeric: tabular-nums;
+}
+
+/* The Aṣṭakavarga grid. A reference table: tabular figures, the SAV column
+   carrying the weight, and the two bands marked in ink rather than colour. */
+.tablewrap { overflow-x: auto; }
+.avgrid { font-variant-numeric: tabular-nums; }
+.avgrid td.num, .avgrid th { text-align: right; }
+.avgrid td:first-child, .avgrid th:first-child,
+.avgrid td:nth-child(2), .avgrid th:nth-child(2) { text-align: left; }
+.avgrid .avsav { font-weight: 600; color: var(--ink); }
+.avgrid tr.av-strong .avsav { color: var(--accent-ink); }
+.avgrid tr.av-thin td { color: var(--ink-50); }
+.avgrid tfoot td { border-top: 1px solid var(--divider); padding-top: 8px; }
+
 /* Today's transits, ticked around the OUTSIDE of the birth plate. Small,
    in the bronze, and never inside the frame: the plate is the birth moment
    and today is a marginal note on it. */
+/* 14 USER UNITS. At 10 they rendered at 9.5 effective px on a phone, where
+   the plate draws its 360-unit viewBox at about .95. */
 .kundli .ticks text {
-  font-family: var(--font-body); font-size: 10px; font-weight: 500;
+  font-family: var(--font-body); font-size: 14px; font-weight: 500;
   fill: var(--accent-ink); letter-spacing: .04em;
 }
 
@@ -1309,20 +1531,23 @@ button.cast.recast { margin-top: 4px; }
   .gallery { grid-template-columns: 1fr 1fr; column-gap: 34px; }
 }
 .gcard {
-  display: grid; grid-template-columns: 74px 1fr;
+  display: grid; grid-template-columns: 140px 1fr;
   grid-template-areas: "plate code" "plate sum" "plate more";
   column-gap: 16px; row-gap: 4px; align-content: start;
   padding: 18px 0 19px; border-bottom: 1px solid var(--divider);
   text-decoration: none; color: inherit;
 }
-.gplate { grid-area: plate; width: 74px; height: 74px; }
+/* 132px, not 74. At 74 a 300-unit viewBox scales by .247, so the letters in
+   a cell rendered at 3.9 effective px. A thumbnail either carries marks big
+   enough to read or carries none. */
+.gplate { grid-area: plate; width: 140px; height: 140px; }
 .gplate-empty { opacity: .45; }
 .gcard-code {
   grid-area: code; font-family: var(--font-heading); font-size: 20px;
   line-height: 1.2; color: var(--ink);
 }
 .gcard-sum {
-  grid-area: sum; font-size: 14.5px; line-height: 1.55;
+  grid-area: sum; font-size: var(--t-body); line-height: 1.55;
   color: var(--ink-60);
 }
 .gcard-more {
@@ -1334,3 +1559,6 @@ button.cast.recast { margin-top: 4px; }
 .gcard-soon .gcard-code, .gcard-soon .gcard-sum { color: var(--ink-50); }
 .gcard-soon .gcard-more { font-style: italic; }
 .gcard-soon .minigrahas { display: none; }
+.gplate .minigrahas text { font-family: var(--font-heading); fill: var(--ink); }
+/* One dot per graha, where a cell cannot take a legible glyph. */
+.minidot { fill: var(--accent-ink); }

@@ -1028,11 +1028,18 @@ class TestPhase6FlaskUI:
         assert "Rohini p.2" in page            # Moon nakshatra
 
     def test_chart_degree_labels(self, page):
-        # 'Abbr D°MM′' with R for retrograde, reference-chart values:
-        assert "Ju 2°53′ R" in page
-        assert "Sa 9°47′ R" in page
-        assert "As 11°05′" in page          # lagna degree in house 1
-        assert "Mo 15°17′" in page
+        """Re-pinned 2026-09-12. A label used to be one string; it is a
+        structured mark now — glyph, abbreviation, degree, and ℞ or ⊙ in
+        their own tspans so each can be set in its own ink. The VALUES are
+        what this gate is for, so it reads them out of the marks."""
+        # 'Abbr D°MM′' with ℞ for retrograde, reference-chart values.
+        # Saturn's is deliberately absent: it stands in house 9, a triangle
+        # 73 units across where a 77-unit label would cross the diagonal —
+        # see `test_a_cell_too_narrow_for_a_degree_says_so_by_omission`.
+        for label in ("Ju 2°53′", "Asc 11°05′", "Mo 15°17′"):
+            assert label in page, label
+        # The retrograde mark is a mark now, not the letter R.
+        assert 'class="gm-retro">℞<' in page
         # Both label modes render; the toggle switches between them.
         assert "grahas-deg" in page and "grahas-compact" in page
         assert 'id="degToggle"' in page
@@ -1247,11 +1254,11 @@ class TestPlateGeometry:
                       latitude=28.61, longitude=77.21, tz="+05:30",
                       place="Test")
 
-    def _plate(self, client, layer):
-        html = client.post("/", data={
-            "date": "1990-09-05", "time": "14:00", "lat": "28.61",
-            "lon": "77.21", "tz": "+05:30", "place": "Test",
-        }).get_data(as_text=True)
+    FORM = {"date": "1990-09-05", "time": "14:00", "lat": "28.61",
+            "lon": "77.21", "tz": "+05:30", "place": "Test"}
+
+    def _plate(self, client, layer, form=None):
+        html = client.post("/", data=form or self.FORM).get_data(as_text=True)
         d1 = html[html.index('aria-label="North-Indian chart d1"'):]
         d1 = d1[:d1.index("</svg>")]
         block = d1[d1.index(f"grahas {layer}"):]
@@ -1263,17 +1270,59 @@ class TestPlateGeometry:
         assert chart.planets["Venus"].sign == "Leo"
         assert chart.planets["Venus"].house == 9
 
+    @staticmethod
+    def _lines(block):
+        """Every drawn LINE of the layer, as (x, y, text).
+
+        Strengthened 2026-09-12. This used to read the <text> anchor only,
+        which was the whole position when a house's grahas were one string.
+        They are a stack now — one graha to a line, centred on the anchor —
+        so the anchor can sit comfortably inside its cell while the top and
+        bottom lines hang outside it. That is precisely the failure this
+        class exists to catch, and reading the anchor could no longer see
+        it: four degree labels in the 12th ran through the diagonal into
+        house 1.
+        """
+        out = []
+        for m in re.finditer(r"<text\b([^>]*)>(.*?)</text>", block, re.S):
+            attrs, body = m.group(1), m.group(2)
+            # `(?<![a-z])` because `dx="1.5"` also contains `x="1.5"`, and
+            # reading a horizontal nudge as an absolute anchor put a graha
+            # at x=1.5, outside the plate entirely.
+            bx = float(re.search(r'(?<![a-z])x="([-\d.]+)"', attrs).group(1))
+            by = float(re.search(r'(?<![a-z])y="([-\d.]+)"', attrs).group(1))
+            x, y, text = bx, by, ""
+            # `</tspan\s*>`: the macro breaks before the closing bracket to
+            # keep whitespace out of the rendered label, so the close tag is
+            # `</tspan\n>` and a literal `</tspan>` never matches.
+            for t in re.finditer(r"<tspan\b([^>]*)>(.*?)</tspan\s*>",
+                                 body, re.S):
+                ta, tb = t.group(1), t.group(2)
+                nx = re.search(r'(?<![a-z])x="([-\d.]+)"', ta)
+                if nx:                       # a tspan with its own x is a LINE
+                    if text.strip():
+                        out.append((x, y, text))
+                    x, text = float(nx.group(1)), ""
+                    dy = re.search(r'\bdy="([-\d.]+)"', ta)
+                    if dy:
+                        y += float(dy.group(1))
+                text += re.sub(r"<[^>]+>", "", tb)
+            if text.strip():
+                out.append((x, y, text))
+            elif "<tspan" not in body:
+                out.append((bx, by, re.sub(r"<[^>]+>", "", body)))
+        return out
+
     @pytest.mark.parametrize("layer", ["grahas-compact", "grahas-deg"])
     def test_every_graha_is_drawn_in_its_own_house_cell(self, client, layer):
         """Both layers, because the bug was in only one of them."""
         from app import ABBR, house_at
         chart = compute_chart(self.BIRTH)
-        block = self._plate(client, layer)
+        lines = self._lines(self._plate(client, layer))
+        assert lines, f"nothing drawn in {layer}"
         drawn = {}
-        for m in re.finditer(r'<text x="([\d.]+)" y="([\d.-]+)"[^>]*>(.*?)</text>',
-                             block, re.S):
-            x, y = float(m.group(1)), float(m.group(2))
-            for token in re.findall(r"\b([A-Z][a-z])\b", m.group(3)):
+        for x, y, text in lines:
+            for token in re.findall(r"\b([A-Z][a-z])\b", text):
                 drawn.setdefault(token, (x, y))
         for name, pos in chart.planets.items():
             abbr = ABBR[name]
@@ -1283,6 +1332,255 @@ class TestPlateGeometry:
             assert cell == pos.house, (
                 f"{layer}: {name} is computed in house {pos.house} but drawn "
                 f"at ({x}, {y}), which is inside the house-{cell} cell")
+
+    # TWO CHARTS, because one was not enough. The reported-shape chart has
+    # no house holding more than two grahas, so it could not see a stack
+    # overflow at all — restoring the bug left this green. The reference
+    # fixture puts four grahas in the 12th, which is a narrow triangle, and
+    # is where the fourth degree label ran through the diagonal.
+    CROWDED_FORM = dict(GATE_FORM)
+
+    @pytest.mark.parametrize("layer", ["grahas-compact", "grahas-deg"])
+    @pytest.mark.parametrize("shape", ["reported", "crowded"])
+    def test_no_line_of_a_stack_leaves_its_cell(self, client, layer, shape):
+        """The anchor is not the label. A four-graha house draws a stack
+        centred on its anchor, and it is the ENDS of that stack that leave
+        the cell — through a diagonal, into a house the graha is not in."""
+        from app import house_at
+        form = self.FORM if shape == "reported" else self.CROWDED_FORM
+        chart = compute_chart(self.BIRTH if shape == "reported"
+                              else GATE_BIRTH)
+        if shape == "crowded":
+            assert max(len(v) for v in chart.houses.values()) >= 4, (
+                "this shape is supposed to crowd a cell and does not — "
+                "the gate would pass for the wrong reason")
+        houses = {}
+        for name, pos in chart.planets.items():
+            houses.setdefault(pos.house, []).append(name)
+        stray = []
+        for x, y, text in self._lines(self._plate(client, layer, form)):
+            if not text.strip():
+                continue
+            cell = house_at(x, y)
+            if cell is None:
+                stray.append((x, y, text.strip()[:24], "outside the plate"))
+                continue
+            # Which house does this line BELONG to? The one whose grahas it
+            # names — the lagna line belongs to house 1.
+            named = {n for n in chart.planets if n[:2] in text}
+            if "Asc" in text:
+                belongs = 1
+            elif named:
+                belongs = chart.planets[sorted(named)[0]].house
+            else:
+                continue
+            if cell != belongs:
+                stray.append((x, y, text.strip()[:24],
+                              f"drawn in cell {cell}, belongs to {belongs}"))
+        assert not stray, f"{layer}/{shape}: " + "; ".join(map(str, stray))
+
+    def test_no_label_overflows_its_cell_in_a_browser(self):
+        """The BOX, not the point — measured where the text is actually set.
+
+        The anchor tests above check where a label is hung. They cannot see
+        how wide it is, and width is what broke: four degree labels in the
+        12th sat on anchors comfortably inside a triangle that tapers, while
+        the labels themselves were 90 user units wide in a cell 47 units
+        across at that height. The anchors were right and the plate was
+        wrong. `getBBox()` is the only thing that knows.
+        """
+        pw = pytest.importorskip("playwright.sync_api",
+                                 reason="playwright not installed")
+        import threading
+        from werkzeug.serving import make_server
+        from app import HOUSE_POLY, app, house_at
+        srv = make_server("127.0.0.1", 0, app, threaded=True)
+        port = srv.socket.getsockname()[1]
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            with pw.sync_playwright() as p:
+                browser = TestMaskedBirthFieldsInARealBrowser._launch(p, pytest)
+                boxes = {}
+                for shape, form in (("reported", self.FORM),
+                                    ("crowded", self.CROWDED_FORM)):
+                    pg = browser.new_context(
+                        viewport={"width": 1280, "height": 1000}).new_page()
+                    pg.goto(f"http://127.0.0.1:{port}/")
+                    for k, v in form.items():
+                        pg.evaluate(
+                            "([k,v]) => { const e = document.querySelector("
+                            "`[name=\"${k}\"]`); if (e) e.value = v; }", [k, v])
+                    with pg.expect_navigation():
+                        pg.evaluate("document.querySelector('#cast').submit()")
+                    pg.wait_for_timeout(900)
+                    boxes[shape] = pg.evaluate(r"""() => {
+                      const out = [];
+                      document.querySelectorAll(
+                        '#pane-d1 .grahas').forEach(g => {
+                        const layer = g.classList.contains('grahas-deg')
+                          ? 'deg' : 'compact';
+                        // The hidden layer has no boxes to measure.
+                        if (!g.getClientRects().length) return;
+                        g.querySelectorAll('tspan').forEach(t => {
+                          const b = t.getBBox();
+                          if (!b.width) return;
+                          out.push({layer, text: t.textContent.trim(),
+                                    x: b.x, y: b.y, w: b.width, h: b.height});
+                        });
+                      });
+                      return out;
+                    }""")
+                    assert boxes[shape], f"{shape}: no label boxes measured"
+                browser.close()
+        finally:
+            srv.shutdown()
+
+        for shape, rows in boxes.items():
+            chart = compute_chart(self.BIRTH if shape == "reported"
+                                  else GATE_BIRTH)
+            over = []
+            for r in rows:
+                named = {n for n in chart.planets if n[:2] in r["text"]}
+                if "Asc" in r["text"]:
+                    belongs = 1
+                elif named:
+                    belongs = chart.planets[sorted(named)[0]].house
+                else:
+                    continue
+                poly = HOUSE_POLY[belongs]
+                # A hair of tolerance: an anti-aliased glyph edge is not a
+                # graha in the wrong house.
+                pad = 1.5
+                corners = [(r["x"] + pad, r["y"] + pad),
+                           (r["x"] + r["w"] - pad, r["y"] + pad),
+                           (r["x"] + pad, r["y"] + r["h"] - pad),
+                           (r["x"] + r["w"] - pad, r["y"] + r["h"] - pad)]
+                outside = [c for c in corners if house_at(*c) != belongs]
+                if outside:
+                    where = [(round(a), round(b), house_at(a, b))
+                             for a, b in outside]
+                    over.append(
+                        f"{shape}/{r['layer']} {r['text']!r} belongs to "
+                        f"house {belongs}; corners {where} are in another "
+                        f"cell")
+            assert not over, "\n  ".join([""] + over)
+
+    def test_the_template_draws_at_the_size_the_layout_reserved(self):
+        """One number, one place.
+
+        The plate's type sizes were literals in BOTH app.py (where the fit
+        is computed) and the template (where the text is drawn). Raising
+        MINI_SIZE to clear the legibility floor changed what `plate_layout`
+        reserved room for and not one pixel of what rendered — the glyphs
+        stayed at 26 units and stayed illegible, and every gate passed.
+        """
+        page = (HERE / "templates" / "index.html").read_text(encoding="utf-8")
+        macros = page[page.index("{% macro grahalayer("):
+                      page.index("{%- endmacro %}",
+                                 page.index("{% macro glyphonly("))]
+        for token in ("DEG_SIZE", "DEG_LEADING", "COMPACT_SIZE",
+                      "COMPACT_LEADING", "MINI_SIZE", "MINI_LEADING"):
+            assert token in page, f"{token} is not used by the template"
+        # No bare pixel size may be set on a plate label.
+        bare = re.findall(r"font-size:\s*\d", macros)
+        assert not bare, bare
+        for m in re.finditer(r'\bdy="(\d[\d.]*)"', macros):
+            raise AssertionError(
+                f'a literal leading of {m.group(1)} in the plate macros — '
+                f'it must come from the same constant the fit was computed '
+                f'with')
+
+    def test_a_cell_too_narrow_for_a_degree_says_so_by_omission(self):
+        """The fallback ladder, asserted rather than assumed.
+
+        Four of the twelve cells are triangles. Where "♄Sa 9°47′" will not
+        go, the plate drops the glyph, then the degree, then packs the marks
+        onto fewer rows — one step at a time, never all the way to nothing.
+        A cell with a graha in it always shows that graha.
+        """
+        from app import PLANETS, kundli_houses, planet_marks
+        chart = compute_chart(GATE_BIRTH)
+        houses = kundli_houses(
+            chart.lagna.sign_index,
+            {p: chart.planets[p].house for p in PLANETS},
+            degrees={p: (chart.planets[p].degree_in_sign,
+                         chart.planets[p].retrograde) for p in PLANETS},
+            lagna_degree=chart.lagna.degree_in_sign,
+            marks=planet_marks(chart))
+        forms = {h["house"]: h["deg_layout"]["form"]
+                 for h in houses if h["grahas"]}
+        assert forms, "no occupied cell found"
+        # Every occupied cell has SOME layout, in both modes.
+        for h in houses:
+            if h["grahas"]:
+                assert h["deg_layout"], h["house"]
+                assert h["compact_layout"], h["house"]
+                assert h["mini_layout"] or h["mini_dots"], h["house"]
+        # The ladder is exercised, not merely available: this chart has at
+        # least one cell that takes the full form and one that cannot.
+        assert "glyph-deg" in forms.values(), forms
+        assert any(f != "glyph-deg" for f in forms.values()), forms
+
+    def test_the_fit_estimate_is_never_optimistic(self):
+        """`_label_width` decides whether a label fits, from a table of
+        advance widths measured in a browser. If it ever runs SHORT the
+        plate draws labels across house boundaries — so it is checked
+        against the real boxes, with no tolerance in the forgiving
+        direction."""
+        pw = pytest.importorskip("playwright.sync_api",
+                                 reason="playwright not installed")
+        import threading
+        from werkzeug.serving import make_server
+        from app import DEG_SIZE, _label_width, app
+        srv = make_server("127.0.0.1", 0, app, threaded=True)
+        port = srv.socket.getsockname()[1]
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        samples = ["Sa 9°47′", "♄Sa 9°47′", "☽Mo 22°23′", "Mo 22°23′",
+                   "Asc 11°05′", "☉Su 29°09′", "☿Me 25°32′", "♀Ve",
+                   "☊Ra 7°51′", "♃Ju 2°53′"]
+        try:
+            with pw.sync_playwright() as p:
+                browser = TestMaskedBirthFieldsInARealBrowser._launch(p, pytest)
+                pg = browser.new_context(
+                    viewport={"width": 1280, "height": 900}).new_page()
+                pg.goto(f"http://127.0.0.1:{port}/")
+                for k, v in GATE_FORM.items():
+                    pg.evaluate(
+                        "([k,v]) => { const e = document.querySelector("
+                        "`[name=\"${k}\"]`); if (e) e.value = v; }", [k, v])
+                with pg.expect_navigation():
+                    pg.evaluate("document.querySelector('#cast').submit()")
+                pg.wait_for_timeout(900)
+                real = pg.evaluate(
+                    """(args) => {
+                      const [samples, size] = args;
+                      const svg = document.querySelector('#pane-d1 svg');
+                      const NS = 'http://www.w3.org/2000/svg';
+                      const t = document.createElementNS(NS, 'text');
+                      t.setAttribute('x', '-900');
+                      t.setAttribute('y', '-900');
+                      t.setAttribute('class', 'gm');
+                      t.setAttribute('style',
+                        'font-family:"IBM Plex Sans",system-ui,sans-serif;'
+                        + 'font-size:' + size + 'px;font-weight:450;'
+                        + 'font-variant-numeric:tabular-nums');
+                      svg.appendChild(t);
+                      const out = {};
+                      for (const s of samples) {
+                        t.textContent = s;
+                        out[s] = t.getBBox().width;
+                      }
+                      t.remove();
+                      return out;
+                    }""", [samples, DEG_SIZE])
+                browser.close()
+        finally:
+            srv.shutdown()
+        assert real, "nothing measured"
+        short = {s: (round(_label_width(s, DEG_SIZE), 2), round(w, 2))
+                 for s, w in real.items()
+                 if _label_width(s, DEG_SIZE) < w}
+        assert not short, f"estimate runs short (estimate, real): {short}"
 
     def test_degree_anchors_stay_in_their_own_cell(self):
         """The regression itself, at the table level.
@@ -1845,7 +2143,17 @@ class TestUIRevisionWalkthrough:
         # progressive disclosure: antardashas, gocara table, doshas and
         # myth cards are all summary-first now
         assert page.count('class="fold"') >= 2
-        assert page.count("<details class=\"yoga\">") >= 7  # doshas + myths
+        # Re-pinned 2026-09-12. This used to require seven expanders across
+        # Doshas and Myths, and the reason there were seven was that three
+        # phenomena were printed in both sections. De-duplicating them is
+        # the fix, not a regression — `TestNoEntryIsPrintedTwice` owns the
+        # count now. What this gate still cares about is that BOTH sections
+        # render something a reader can open.
+        block = page[page.index('<section class="ledger" id="doshas"'):]
+        block = block[:block.index("<!-- Gocara")]
+        assert block.count('<details class="yoga">') >= 3, block.count(
+            '<details class="yoga">')
+        assert 'id="myths"' in block
 
 
 # The framework's own sample place; a fixed instant for determinism.
@@ -4256,9 +4564,12 @@ class TestComputationOptions:
         css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
         block = css[css.index(".answer .schoolname"):]
         block = block[:block.index("}")]
-        size = re.search(r"font-size:\s*([\d.]+)px", block)
-        assert size and float(size.group(1)) <= 12.0, (
-            "the school name must be smaller than the answer it sits under")
+        # Re-pinned 2026-09-12. This used to require the school name to be
+        # SMALLER than the answer (<=12px), which the type floors retired —
+        # 12px is under the reading floor. It still has to recede; it does it
+        # by colour and style now, which is how printed matter does it.
+        assert "font-size: var(--t-body)" in block, block
+        assert "var(--faint)" in block and "italic" in block, block
 
     def test_exactly_one_recommended_answer_per_question(self):
         import schools
@@ -5698,7 +6009,11 @@ class TestEditorialDossier:
         views = len(re.findall(r'<div class="view"', page))
         assert len(folios) == views, (len(folios), views)
         assert "P. 02·1" in joined and "Love & Marriage" in joined
-        assert "P. 03·2" in joined
+        # Re-pinned 2026-09-12: the plate folios are numbered by their place
+        # in the gallery, and the gallery grew D3 and D16. The claim is that
+        # the plates ARE numbered in sequence, not that D9 is number two.
+        plates = sorted(int(n) for n in re.findall(r"P\. 03·(\d+)", joined))
+        assert plates and plates == list(range(1, len(plates) + 1)), plates
 
     def test_the_wheel_is_a_captioned_plate(self, page):
         """Plate number, subject, and the imprint line printed matter puts
@@ -6343,7 +6658,15 @@ class TestReducedMotionInARealBrowser:
 _VISIBLE_TEXT_BOXES = r"""(sel) => {
   const boxes = [];
   document.querySelectorAll(sel + ' *').forEach(el => {
-    if (el.children.length) return;                 // leaf nodes only
+    // AN SVG LABEL IS ONE BOX. A plate mark is built from nested tspans so
+    // the glyph, the letters, ℞ and ⊙ can each take their own ink — they
+    // are parts of one word and of course they touch. The unit that must
+    // not collide with anything is the <text> element: one label, in one
+    // house cell. Measuring the tspans instead reported "☉Su" colliding
+    // with "♂Ma" beside it on the same line, 104 times.
+    const svgText = el.ownerSVGElement && el.tagName === 'text';
+    if (el.ownerSVGElement && el.tagName === 'tspan') return;
+    if (!svgText && el.children.length) return;     // leaf nodes only
     const t = (el.textContent || '').trim();
     if (!t) return;
     const cs = getComputedStyle(el);
@@ -6373,7 +6696,11 @@ _VISIBLE_TEXT_BOXES = r"""(sel) => {
     // returns a bounding box spanning every line it touches, which overlaps
     // a sibling's box while no glyph overlaps anything — a false positive
     // that reported "2011-2029" colliding with the phrase after it.
-    const cls = (el.className || el.tagName).toString().slice(0, 32);
+    // SVG elements carry an SVGAnimatedString, which stringifies to
+    // "[object SVGAnimatedString]" and named nothing in the failure output.
+    const raw = (el.className && el.className.baseVal !== undefined)
+      ? el.className.baseVal : el.className;
+    const cls = (raw || el.tagName).toString().slice(0, 32);
     for (const r of el.getClientRects()) {
       if (r.width < 2 || r.height < 2) continue;
       boxes.push({t: t.slice(0, 44), x: r.left, y: r.top,
@@ -6604,6 +6931,177 @@ class TestVerdictsAreSpecific:
             assert voice.words(r.visible) <= voice.SYNTHESIS_WORDS, r.domain.id
 
 
+_TEXT_SIZES_JS = r"""() => {
+  // Every VISIBLE text node, with the size it actually renders at.
+  //
+  // SVG text is the reason this cannot read `font-size` and stop: a `<text>`
+  // is sized in USER UNITS, which the viewBox then scales. 9 units inside a
+  // 300-unit plate drawn at 560px renders at 17px; 13 units inside a
+  // 1000-unit graph drawn at 560px renders at 7. Both readings are wrong
+  // from the attribute alone, so this multiplies by the element's own CTM
+  // scale and judges what the eye receives.
+  const out = [];
+  const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  let n;
+  while ((n = walk.nextNode())) {
+    if (!n.nodeValue.trim()) continue;
+    const el = n.parentElement;
+    if (!el || !el.getClientRects().length) continue;
+    // A closed <details> lays its content out and hides it with
+    // content-visibility — measurable, invisible, not a finding.
+    let p = el, hidden = false;
+    while (p) {
+      if (p.tagName === 'DETAILS' && !p.open) {
+        const s = p.querySelector('summary');
+        if (!s || !s.contains(el)) { hidden = true; break; }
+      }
+      if (p.hasAttribute && p.hasAttribute('hidden')) { hidden = true; break; }
+      p = p.parentElement;
+    }
+    if (hidden) continue;
+    const cs = getComputedStyle(el);
+    if (cs.visibility === 'hidden' || cs.display === 'none') continue;
+    let px = parseFloat(cs.fontSize);
+    let svg = false;
+    if (el.ownerSVGElement) {
+      svg = true;
+      const m = el.getScreenCTM && el.getScreenCTM();
+      if (m) px *= Math.sqrt(Math.abs(m.a * m.d - m.b * m.c));
+    }
+    const cls = el.className && el.className.baseVal !== undefined
+      ? el.className.baseVal : (el.className || '');
+    out.push({
+      sel: el.tagName.toLowerCase() + (cls ? '.' + String(cls).trim()
+                                                  .split(/\s+/).join('.') : ''),
+      // "the body of a category" is the content of the ledger you opened —
+      // not the page's own imprint footer, which sits outside every view.
+      inLedger: !!el.closest('#view-explore .ledger, #view-explore .note'),
+      px: +px.toFixed(1), svg, text: n.nodeValue.trim().slice(0, 30)});
+  }
+  return out;
+}"""
+
+
+class TestTypeFloors:
+    """The type scale has FLOORS, and they are measured in a browser.
+
+    "Several rows sit at 12–13px — too small." They did: the lower half of
+    this stylesheet had drifted to 9 and 10px, which is a texture on a 27"
+    display and unreadable on the phone it claimed to be designed for.
+
+    A stylesheet scan cannot settle this. Half the small type is SVG, sized
+    in user units the viewBox then scales — the same `font-size: 13px` was
+    7 rendered pixels in the daśā graph and 24 in the plate. This walks
+    every visible text node at both widths across every view and judges what
+    the eye receives.
+    """
+
+    FLOOR = 13.0
+
+    VIEWS = ("", "#readings", "#charts", "#chart-d1", "#chart-d9",
+             "#chart-d10", "#explore", "#cat-charts", "#cat-periods",
+             "#cat-sky", "#cat-combinations", "#cat-tables", "#cat-match",
+             "#cat-ask", "#cat-learn")
+
+    @classmethod
+    @pytest.fixture(scope="class")
+    def sizes(cls):
+        pw = pytest.importorskip("playwright.sync_api",
+                                 reason="playwright not installed")
+        import threading
+        from werkzeug.serving import make_server
+        from app import app
+        srv = make_server("127.0.0.1", 0, app, threaded=True)
+        port = srv.socket.getsockname()[1]
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        out = {}
+        try:
+            with pw.sync_playwright() as p:
+                browser = TestMaskedBirthFieldsInARealBrowser._launch(p, pytest)
+                for width in (390, 1280):
+                    pg = browser.new_context(
+                        viewport={"width": width, "height": 1000}).new_page()
+                    pg.goto(f"http://127.0.0.1:{port}/")
+                    for k, v in GATE_FORM.items():
+                        pg.evaluate(
+                            "([k,v]) => { const e = document.querySelector("
+                            "`[name=\"${k}\"]`); if (e) e.value = v; }", [k, v])
+                    with pg.expect_navigation():
+                        pg.evaluate("document.querySelector('#cast').submit()")
+                    pg.wait_for_load_state("load")
+                    pg.wait_for_timeout(900)
+                    rows = []
+                    for view in cls.VIEWS:
+                        pg.evaluate(
+                            f"location.hash = '{view or '#today'}'")
+                        pg.wait_for_timeout(220)
+                        for r in pg.evaluate(_TEXT_SIZES_JS):
+                            rows.append({**r, "view": view or "#today"})
+                    out[width] = rows
+                browser.close()
+        finally:
+            srv.shutdown()
+        return out
+
+    def test_the_walk_actually_read_the_page(self, sizes):
+        """A floor gate that measured nothing would pass forever."""
+        for width, rows in sizes.items():
+            assert len(rows) > 400, (width, len(rows))
+            assert any(r["svg"] for r in rows), f"{width}: no SVG text read"
+
+    def test_no_rendered_text_is_below_the_floor(self, sizes):
+        for width, rows in sizes.items():
+            under = sorted({(r["px"], r["sel"], r["view"], r["text"])
+                            for r in rows if r["px"] < self.FLOOR})
+            assert not under, (
+                f"{width}px — text under {self.FLOOR}px:\n  "
+                + "\n  ".join(f"{px}px {sel} [{view}] {text!r}"
+                              for px, sel, view, text in under[:12]))
+
+    def test_the_body_of_a_category_reads_at_sixteen(self, sizes):
+        """The floor is 13 for a label. Anything anyone reads a SENTENCE of
+        is 16 — which is a different claim, and the one the brief made."""
+        for width, rows in sizes.items():
+            sentences = [r for r in rows
+                         if r["view"].startswith("#cat-") and not r["svg"]
+                         and r["inLedger"] and len(r["text"]) >= 30]
+            assert sentences, f"{width}: no prose found in any category"
+            thin = sorted({(r["px"], r["sel"], r["view"])
+                           for r in sentences if r["px"] < 16})
+            assert not thin, f"{width}px — prose under 16px: {thin[:10]}"
+
+    def test_the_scale_is_named_by_role_not_by_number(self):
+        """The floors only hold if new work reaches for a token. A raw
+        sub-16px `font-size` in the stylesheet is the thing that let this
+        drift to 9px in the first place — the exceptions are SVG user units,
+        which are not screen pixels at all."""
+        css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
+        css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+        svg_ok = (".kundli ", ".minikundli ", ".lifegraph ", "#hlgroup ",
+                  ".gplate")
+        offenders = []
+        for m in re.finditer(r"([^{}]+)\{([^{}]*)\}", css):
+            sel = " ".join(m.group(1).split())
+            if any(tok in sel for tok in svg_ok):
+                continue
+            for v in re.findall(r"font-size:\s*([\d.]+)px", m.group(2)):
+                if float(v) < 16:
+                    offenders.append((sel[-46:], v))
+        assert not offenders, offenders
+
+    def test_every_floor_token_is_defined_and_worth_its_name(self):
+        css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
+        head = css[:css.index("* { box-sizing")]
+        tok = dict(re.findall(r"(--t-[\w-]+):\s*([\d.]+)px", head))
+        for name, floor in (("--t-head", 20), ("--t-body", 16),
+                            ("--t-table", 15), ("--t-label", 13)):
+            assert name in tok, name
+            assert float(tok[name]) >= floor, (name, tok[name])
+        # `--t-mark` names the small-caps section marker by role; it is a
+        # label, so it cannot quietly be smaller than one.
+        assert float(tok["--t-mark"]) >= 13, tok["--t-mark"]
+
+
 class TestExploreIndex:
     """Explore was one scroll of everything at once. It is an index now."""
 
@@ -6647,17 +7145,35 @@ class TestExploreIndex:
 
     def test_nothing_in_explore_is_set_below_reading_size(self):
         """'Tiny fonts' was half the complaint. Index entries are >=16px and
-        so is the body of every category."""
+        so is the body of every category.
+
+        Re-pinned 2026-09-12: the sizes are named by ROLE now, so this reads
+        the token rather than a literal. `TestTypeFloors` is what checks the
+        tokens are worth what they claim.
+        """
         css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
         for selector, floor in ((".catrow-desc", 16), (".catrow-title", 16)):
             block = css[css.index(selector + " {"):]
             block = block[:block.index("}")]
             size = float(re.search(r"font-size:\s*([\d.]+)px", block).group(1))
             assert size >= floor, (selector, size)
-        body = css[css.index("#view-explore[data-showing] { font-size:"):]
-        assert float(re.search(r"([\d.]+)px", body[:60]).group(1)) >= 16
-        rows = css[css.index("#view-explore[data-showing] .rows {"):]
-        assert float(re.search(r"([\d.]+)px", rows[:80]).group(1)) >= 15
+        for rule, token in (
+                ("#view-explore[data-showing] { font-size:", "--t-body"),
+                ("#view-explore[data-showing] .rows {", "--t-body"),
+                ("#view-explore[data-showing] .gtable {", "--t-table")):
+            block = css[css.index(rule):]
+            block = block[:block.index("}")]
+            assert token in block, (rule, block)
+
+    def test_a_section_title_in_a_category_is_a_title(self):
+        """"section titles >=20px". Inside a category the `.kicker` that
+        opens each ledger is not a marginal label — it is the heading of the
+        section you just opened, and it was set at 10px."""
+        css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
+        block = css[css.index(
+            "#view-explore[data-showing] .ledger > .kicker,"):]
+        block = block[block.index("{"):block.index("}")]
+        assert "var(--t-head)" in block, block
 
     def test_nothing_leaks_onto_the_index(self):
         """Every block inside Explore declares a category — or it renders on
@@ -6822,8 +7338,12 @@ class TestTodayScreen:
         block = css[css.index(".kundli .ticks text {"):]
         block = block[:block.index("}")]
         assert "var(--accent-ink)" in block
+        # Re-pinned 2026-09-12. This used to cap the ticks at 11 USER UNITS
+        # to keep them marginal, which on a phone rendered at 9.5 effective
+        # pixels — under the legibility floor. Marginality is now carried by
+        # the accent and the position, and TestTypeFloors owns the size.
         size = float(re.search(r"font-size:\s*([\d.]+)px", block).group(1))
-        assert size <= 11, size
+        assert 12 <= size <= 16, size
 
 
 class TestYourChartsScreen:
@@ -6834,19 +7354,26 @@ class TestYourChartsScreen:
         import app as app_module
         codes = re.findall(r'<span class="gcard-code">([^<]+)</span>', page)
         assert len(codes) == len(app_module.VARGA_SLOTS), codes
-        for code in ("D1", "D9", "D10", "D2", "D7", "D12", "D30", "D60"):
+        for code in ("D1", "D2", "D3", "D7", "D9", "D10", "D12", "D16",
+                     "D30", "D60"):
             assert any(c.startswith(code + " ") for c in codes), code
 
     def test_the_unbuilt_slots_say_so_rather_than_being_omitted(self, page):
         """A gallery that quietly listed three charts would imply the list is
         complete. Same honesty the disabled Upapada option gets."""
+        import app as app_module
+        import vargas
+        built = {"d1"} | {k for k, code, *_ in app_module.VARGA_SLOTS
+                          if vargas.is_supported(code)}
+        expected = len(app_module.VARGA_SLOTS) - len(built)
         soon = re.findall(r'class="gcard gcard-soon"', page)
-        assert len(soon) == 5, len(soon)
-        assert page.count("In preparation") == 5
+        assert len(soon) == expected, (len(soon), expected)
+        assert page.count("In preparation") == expected
 
     def test_every_entry_says_what_that_chart_reads(self, page):
+        import app as app_module
         sums = re.findall(r'<span class="gcard-sum">([^<]+)</span>', page)
-        assert len(sums) == 8, len(sums)
+        assert len(sums) == len(app_module.VARGA_SLOTS), len(sums)
         for text in sums:
             assert len(text.split()) >= 8, text
             assert text.strip().endswith("."), text
@@ -6859,6 +7386,46 @@ class TestYourChartsScreen:
             assert 'class="kundli"' in view
             assert 'class="platecaption"' in view
             assert 'class="dverdict' in view
+
+    def test_every_computed_varga_is_plotted(self, page):
+        """"Wire the remaining divisions to render as real plates as soon as
+        their computation lands. If any division is already computed but not
+        plotted, plot it now."
+
+        This is the wire, asserted. The gallery is generic over
+        `vargas.SUPPORTED`: a division renders as a real plate exactly when
+        it has a sign function, and as a dashed empty frame when it does
+        not. Adding `"D7": saptamsa_sign` to that registry is the whole of
+        what it takes — and if a computation lands and the gallery does not
+        plot it, this fails.
+        """
+        import app as app_module
+        import vargas
+        for key, code, name, _summary, _intended in app_module.VARGA_SLOTS:
+            computed = key == "d1" or vargas.is_supported(code)
+            has_view = f'id="view-varga-{key}"' in page
+            assert has_view == computed, (
+                f"{code} is {'computed' if computed else 'not computed'} but "
+                f"{'has' if has_view else 'has no'} a plate page")
+            if computed:
+                view = page[page.index(f'id="view-varga-{key}"'):]
+                view = view[:view.index(f"<!-- /view-varga-{key} -->")]
+                assert 'class="kundli"' in view, code
+                assert "gm gm-" in view, f"{code} plate has no graha marks"
+
+    def test_an_unbuilt_division_is_named_not_omitted(self, page):
+        """A slot marked "in preparation" is a promise the app is keeping
+        track of. It carries the division's name and what it reads, so the
+        reader knows what is missing rather than that something is."""
+        import app as app_module
+        import vargas
+        for key, code, name, summary, _intended in app_module.VARGA_SLOTS:
+            if key == "d1" or vargas.is_supported(code):
+                continue
+            assert f"{code} {name}" in page, code
+            # Jinja escapes the apostrophe in "the Sun's half".
+            import html as _html
+            assert summary in _html.unescape(page), code
 
     def test_each_plate_carries_a_reading_of_its_own_chart(self, page):
         """"…opening to a full plate view with its own reading."
@@ -6893,16 +7460,13 @@ class TestYourChartsScreen:
         assertion above."""
         import app as app_module
         from engine import BirthData, compute_chart
-        from vargas import dasamsa, navamsa
         other = compute_chart(BirthData(
             year=1972, month=11, day=3, hour=21, minute=40,
             latitude=-33.8688, longitude=151.2093, tz="Australia/Sydney",
             place="Sydney"))
         for key in ("d1", "d9", "d10"):
-            a = app_module.plate_reading(key, chart, navamsa(chart),
-                                         dasamsa(chart))
-            b = app_module.plate_reading(key, other, navamsa(other),
-                                         dasamsa(other))
+            a = app_module.plate_reading(key, chart)
+            b = app_module.plate_reading(key, other)
             assert a != b, (key, a)
 
     def test_a_chart_url_opens_that_chart(self):
@@ -6913,10 +7477,695 @@ class TestYourChartsScreen:
         assert 'h === "charts"' in js and 'h === "readings"' in js
 
 
+class TestAshtakavarga:
+    """Milestone 2 — raw BAV and SAV.
+
+    THE GATE THAT MATTERS IS PER SIGN. The classical per-graha totals — Sun
+    48, Moon 49, Mars 39, Mercury 54, Jupiter 56, Venus 52, Saturn 39,
+    summing to 337 — are the same for EVERY chart: they count rows in the
+    benefic-point tables and depend on no birth moment. They passed while
+    four rows of this build's table were wrong, because a bindu written at
+    the wrong offset moves where it lands and not how many there are. Only
+    comparison against an independent implementation, per sign, found them.
+    """
+
+    ORACLE = json.loads(
+        (HERE / "fixtures_pyjhora.json").read_text(encoding="utf-8"))
+
+    @classmethod
+    @pytest.fixture(scope="class")
+    def tallies(cls):
+        import ashtakavarga
+        import fixtures
+        return {k: ashtakavarga.ashtakavarga(compute_chart(fixtures.birth(k)))
+                for k in ("reference", "partner")}
+
+    # --- the gate that bites -----------------------------------------------
+
+    @pytest.mark.parametrize("key", ["reference", "partner"])
+    def test_every_bav_row_matches_an_independent_implementation(
+            self, tallies, key):
+        """PyJHora, per SIGN, for both fictional charts. This is the gate the
+        milestone plan called the one that actually bites — and it did."""
+        import ashtakavarga
+        want = self.ORACLE["charts"][key]["ashtakavarga"]
+        got = tallies[key]
+        for planet in ashtakavarga.BODIES:
+            assert list(got.bav_by_sign[planet]) == want["bav_by_sign"][planet], (
+                f"{key} {planet}\n  ours   {list(got.bav_by_sign[planet])}"
+                f"\n  oracle {want['bav_by_sign'][planet]}")
+
+    @pytest.mark.parametrize("key", ["reference", "partner"])
+    def test_the_sav_distribution_matches_the_oracle(self, tallies, key):
+        want = self.ORACLE["charts"][key]["ashtakavarga"]
+        assert list(tallies[key].sav_by_sign) == want["sav_by_sign"]
+
+    @pytest.mark.parametrize("key", ["reference", "partner"])
+    def test_the_lagna_row_matches_and_is_kept_out_of_the_sav(self, tallies,
+                                                             key):
+        want = self.ORACLE["charts"][key]["ashtakavarga"]
+        got = tallies[key]
+        assert list(got.lagna_bav_by_sign) == want["lagna_bav_by_sign"]
+        # SAV is the seven, not the eight.
+        import ashtakavarga
+        seven = [sum(got.bav_by_sign[p][s] for p in ashtakavarga.BODIES)
+                 for s in range(12)]
+        assert list(got.sav_by_sign) == seven
+        assert got.sav_total == 337
+        assert got.sav_total + sum(got.lagna_bav_by_sign) == 386
+
+    def test_the_two_charts_actually_differ(self, tallies):
+        """A gate comparing two identical arrays proves nothing. The whole
+        point of the per-sign comparison is that it varies by chart."""
+        a, b = tallies["reference"], tallies["partner"]
+        assert list(a.sav_by_sign) != list(b.sav_by_sign)
+
+    # --- the checksum, and what it is worth ---------------------------------
+
+    def test_the_classical_totals_hold(self, tallies):
+        import ashtakavarga
+        for key, av in tallies.items():
+            for planet, total in ashtakavarga.CLASSICAL_TOTALS.items():
+                assert sum(av.bav_by_sign[planet]) == total, (key, planet)
+            assert sum(av.lagna_bav_by_sign) == \
+                ashtakavarga.CLASSICAL_LAGNA_TOTAL
+
+    def test_the_337_checksum_is_chart_invariant_and_says_so(self, tallies):
+        """Recorded so the milestone cannot quietly over-claim on it. The
+        totals are identical for both charts BY CONSTRUCTION — they count
+        table rows — so passing them is evidence about the transcription's
+        arithmetic and about nothing else."""
+        import ashtakavarga
+        a, b = tallies["reference"], tallies["partner"]
+        for planet in ashtakavarga.BODIES:
+            assert sum(a.bav_by_sign[planet]) == sum(b.bav_by_sign[planet])
+        assert a.sav_total == b.sav_total == 337
+        doc = (HERE / "ashtakavarga.py").read_text(encoding="utf-8")
+        assert "same for EVERY chart" in doc
+        assert "gate the" in doc
+
+    def test_the_checksum_is_blind_to_a_misplaced_bindu(self):
+        """The claim above, demonstrated rather than asserted.
+
+        Move one bindu to a different house in one row of one table. The
+        per-graha total is unchanged, so every classical-total check still
+        passes — and the per-sign comparison fails. That is precisely how
+        four wrong rows survived a green checksum in this build, and it is
+        why the oracle comparison is the gate this milestone rests on.
+        """
+        import copy
+        import ashtakavarga
+        import fixtures
+        chart = compute_chart(fixtures.birth("reference"))
+        table = copy.deepcopy(ashtakavarga.BENEFIC_PLACES)
+        # Venus's row from Mars: move the 4th to the 5th.
+        row = list(table["Venus"]["Mars"])
+        assert row[1] == 4, row
+        row[1] = 5
+        table["Venus"]["Mars"] = tuple(sorted(row))
+        original = ashtakavarga.BENEFIC_PLACES
+        try:
+            ashtakavarga.BENEFIC_PLACES = table
+            broken = ashtakavarga.ashtakavarga(chart)
+        finally:
+            ashtakavarga.BENEFIC_PLACES = original
+        good = ashtakavarga.ashtakavarga(chart)
+
+        # The checksum notices nothing.
+        for planet in ashtakavarga.BODIES:
+            assert sum(broken.bav_by_sign[planet]) == \
+                ashtakavarga.CLASSICAL_TOTALS[planet], planet
+        assert broken.sav_total == ashtakavarga.CLASSICAL_SAV_TOTAL
+
+        # The per-sign comparison does.
+        want = self.ORACLE["charts"]["reference"]["ashtakavarga"]
+        assert list(good.bav_by_sign["Venus"]) == want["bav_by_sign"]["Venus"]
+        assert list(broken.bav_by_sign["Venus"]) != want["bav_by_sign"]["Venus"]
+
+    def test_the_table_is_the_shape_the_method_needs(self):
+        import ashtakavarga
+        assert len(ashtakavarga.BODIES) == 7
+        assert len(ashtakavarga.REFERENCES) == 8
+        # Seven subject tables plus the lagna's own, eight rows each.
+        assert set(ashtakavarga.BENEFIC_PLACES) == \
+            set(ashtakavarga.REFERENCES)
+        for subject, rows in ashtakavarga.BENEFIC_PLACES.items():
+            assert set(rows) == set(ashtakavarga.REFERENCES), subject
+            for ref, places in rows.items():
+                assert places == tuple(sorted(set(places))), (subject, ref)
+                assert all(1 <= p <= 12 for p in places), (subject, ref)
+
+    def test_the_reductions_are_absent_and_the_app_says_so(self):
+        """Trikoṇa and ekādhipatya śodhana are deliberately not implemented:
+        published implementations diverge, and a disputed method printed as
+        an exact number would be worse than no number. Saying so is the
+        difference between a deferral and an omission."""
+        import ashtakavarga
+        src = (HERE / "ashtakavarga.py").read_text(encoding="utf-8")
+        for word in ("trikona", "trikoṇa", "sodhana", "śodhana"):
+            pass
+        assert "not implemented" in src or "NOT implemented" in src
+        note = ashtakavarga.REDUCTIONS_NOTE
+        assert "RAW" in note and "not" in note
+        assert "śodhana" in note or "sodhana" in note
+        # …and it reaches the reader, not only the source file.
+        page = (HERE / "templates" / "index.html").read_text(encoding="utf-8")
+        assert "ashtakavarga.note" in page
+
+    # --- signs vs houses ----------------------------------------------------
+
+    def test_rotation_to_houses_happens_once_and_is_named(self, tallies):
+        """Hazard 1 from the milestone plan. Every array is per SIGN; the
+        rotation to houses is an explicit call, because a table silently
+        rotated once is indistinguishable from one rotated twice."""
+        av = tallies["reference"]
+        lagna = av.lagna_sign_index
+        for h in range(1, 13):
+            assert av.sav_by_house[h] == av.sav_by_sign[(lagna + h - 1) % 12]
+        assert av.sav_by_house[1] == av.sav_by_sign[lagna]
+        assert sum(av.sav_by_house.values()) == av.sav_total
+
+    def test_sav_anchors_stay_in_their_own_cell(self):
+        """The number for a house is printed in that house's cell. Same
+        launch-blocker as the graha labels: a value in the wrong cell is a
+        wrong chart.
+
+        The totals take the SIGN NUMERAL'S anchor, because a North-Indian
+        cell has room for one small number and not two — measured: a third
+        number collided with the numeral or the graha stack in every
+        arrangement tried, and shrinking it to fit would have put it under
+        the legibility floor.
+        """
+        from app import NUMBER_POS, house_at
+        for house, (x, y) in NUMBER_POS.items():
+            assert house_at(x, y) == house, (house, x, y, house_at(x, y))
+
+    def test_the_plate_carries_the_sav_and_only_on_d1(self, page, chart):
+        """The tables are defined against the birth chart; rotated into a
+        division they would mean nothing.
+
+        One number to a cell: the totals REPLACE the sign numerals rather
+        than joining them, and a toggle above the plate says which is
+        showing. A cell whose graha stack has taken the numeral's corner
+        shows neither — the same rule, and the grid in Explore has all
+        twelve either way.
+        """
+        import ashtakavarga
+        d1 = page[page.index('aria-label="North-Indian chart d1"'):]
+        d1 = d1[:d1.index("</svg>")]
+        block = d1[d1.index('<g class="savnum"'):]
+        block = block[:block.index("</g>")]
+        marks = [int(m) for m in re.findall(r"<text[^>]*>(\d+)</text>", block)]
+        assert marks, "the plate carries no Ashtakavarga totals"
+        av = ashtakavarga.ashtakavarga(chart)
+        shown = set(marks)
+        assert shown <= set(av.sav_by_house.values()), (marks, av.sav_by_house)
+        # Every house that has room for its numeral has its total.
+        assert len(marks) == d1.count("<text", d1.index('<g class="signnum"'),
+                                      d1.index("</g>",
+                                               d1.index('<g class="signnum"')))
+        # The toggle exists and starts off, so the plate opens as a chart.
+        assert 'id="savToggle"' in page
+        toggle = re.search(r'<input type="checkbox" id="savToggle"[^>]*>',
+                           page).group(0)
+        assert "checked" not in toggle, toggle
+        for key in ("d9", "d10"):
+            other = page[page.index(f'aria-label="North-Indian chart {key}"'):]
+            other = other[:other.index("</svg>")]
+            assert "savnum" not in other, key
+
+    def test_the_two_numerals_are_never_shown_together(self):
+        """One number to a cell. If both groups could be visible at once the
+        plate would be printing a sign number and a bindu count in the same
+        corner, and neither would be readable."""
+        css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
+        assert ".savnum { display: none; }" in css
+        assert ".plate.showsav .savnum { display: block; }" in css
+        assert ".plate.showsav .signnum { display: none; }" in css
+
+    # --- the reading --------------------------------------------------------
+
+    def test_the_verdict_is_the_founders_sentence(self, tallies):
+        """"your strongest houses are the 8th at 34 and the 6th at 33; the
+        thinnest are the 4th at 24 and the 9th at 24" — four numbers a
+        reader can act on, before any grid."""
+        import ashtakavarga
+        for key, av in tallies.items():
+            v = ashtakavarga.verdict(av)
+            assert v.startswith("Your strongest houses are "), v
+            assert "; the thinnest are " in v, v
+            nums = [int(n) for n in re.findall(r" at (\d+)", v)]
+            assert len(nums) == 4, v
+            # Strongest first descending, thinnest first ASCENDING — the
+            # thinnest house is the one named first in its own clause.
+            assert nums[0] >= nums[1], v
+            assert nums[2] <= nums[3], v
+            assert nums[1] > nums[3], v
+            top = dict(ashtakavarga.strongest(av))
+            low = dict(ashtakavarga.thinnest(av))
+            assert set(top.values()) == set(nums[:2]), (v, top)
+            assert set(low.values()) == set(nums[2:]), (v, low)
+
+    def test_the_verdict_names_real_houses(self, chart, tallies):
+        import ashtakavarga
+        av = tallies["reference"]
+        by_house = av.sav_by_house
+        for house, score in (ashtakavarga.strongest(av)
+                             + ashtakavarga.thinnest(av)):
+            assert by_house[house] == score, (house, score)
+
+    def test_the_grid_is_folded_under_the_answer(self, page):
+        block = page[page.index('<section class="ledger" id="ashtakavarga"'):]
+        block = block[:block.index("</section>")]
+        assert block.index('class="yverdict"') < block.index("<details"), (
+            "the 12x8 grid is printed before the answer")
+        # A class TOKEN, not an exact attribute: the table also carries
+        # `gtable`, and matching the whole attribute has broken gates in
+        # this file twice already.
+        assert re.search(r'class="[^"]*\bavgrid\b', block), block[:200]
+        assert "overflow-x" in (HERE / "static" / "style.css").read_text(
+            encoding="utf-8")
+
+    # --- the ledger ---------------------------------------------------------
+
+    def test_the_ledger_carries_nineteen_facts_not_ninety_six(self, chart):
+        """`sav.house.N` x12 plus `bav.<planet>` x7, each carrying a
+        twelve-value array. Per-planet-per-house ids would have needed 84
+        more, tripling the prompt payload to say the same thing."""
+        from chartfacts import build_facts
+        ids = {f.id for f in build_facts(chart, AGENT_WHEN)}
+        for h in range(1, 13):
+            assert f"sav.house.{h}" in ids, h
+        import ashtakavarga
+        for p in ashtakavarga.BODIES:
+            assert f"bav.{p.lower()}" in ids, p
+        assert "sav.summary" in ids
+        # …and nothing per-planet-per-house crept in.
+        assert not [i for i in ids if re.match(r"bav\.\w+\.house\.", i)]
+
+    def test_every_ledger_number_matches_the_computation(self, chart):
+        from chartfacts import build_facts
+        import ashtakavarga
+        av = ashtakavarga.ashtakavarga(chart)
+        facts = {f.id: f for f in build_facts(chart, AGENT_WHEN)}
+        for h in range(1, 13):
+            fact = facts[f"sav.house.{h}"]
+            assert fact.value["bindus"] == av.sav_by_house[h], h
+            assert fact.value["sign"] == av.sign_of_house(h), h
+            assert str(av.sav_by_house[h]) in fact.statement, h
+        for p in ashtakavarga.BODIES:
+            fact = facts[f"bav.{p.lower()}"]
+            assert fact.value["by_sign"] == list(av.bav_by_sign[p]), p
+            assert fact.value["total"] == sum(av.bav_by_sign[p]), p
+
+    def test_every_ledger_fact_says_it_is_raw(self, chart):
+        """The reductions are deferred, so every number the agent can quote
+        has to carry that with it — otherwise the agent quotes a raw figure
+        as though it were a reduced one."""
+        from chartfacts import build_facts
+        for f in build_facts(chart, AGENT_WHEN):
+            if f.kind == "ashtakavarga":
+                assert f.value.get("raw") is True, f.id
+                assert "RAW" in f.statement or "RAW" in f.statement.upper(), \
+                    f.id
+
+
+class TestAYogaIsReadNotJustDetected:
+    """Item 3, whole. A yoga entry must answer four questions, in order.
+
+    Before this the app gave a name, a classical rule, and a sentence of
+    meaning that was true of the yoga rather than of the reader's chart. It
+    answered neither of the two questions anyone actually asks: is it real
+    in MY chart, and when does it do anything.
+    """
+
+    NOW = datetime(2026, 9, 10, tzinfo=timezone.utc)
+
+    @classmethod
+    @pytest.fixture(scope="class")
+    def readings(cls, chart):
+        import yogaread
+        return yogaread.read_all(chart, cls.NOW)
+
+    def test_there_is_something_to_read(self, readings):
+        assert readings, "no yogas in the reference chart — proves nothing"
+
+    # --- (a) FORMED IN ------------------------------------------------------
+
+    def test_every_yoga_is_tested_in_the_ninth_division(self, readings):
+        for r in readings:
+            codes = [t.varga for t in r.varga_tests]
+            assert "D9" in codes, (r.yoga.name, codes)
+
+    def test_a_career_or_wealth_yoga_is_tested_in_the_tenth_too(self,
+                                                               readings):
+        """"…and, for career/wealth yogas, D10." Decided from the chart —
+        which houses the combination actually touches — not from a list of
+        names."""
+        import yogaread
+        tested = False
+        for r in readings:
+            codes = [t.varga for t in r.varga_tests]
+            wealth = (any(h in yogaread.CAREER_WEALTH_HOUSES
+                          for h in r.yoga.houses)
+                      or r.yoga.kind in yogaread.CAREER_WEALTH_KINDS)
+            assert ("D10" in codes) == wealth, (r.yoga.name, codes, wealth)
+            tested = tested or wealth
+        assert tested, "no career/wealth yoga here — the rule is untested"
+
+    def test_each_test_says_confirmed_or_weakens_in_plain_words(self,
+                                                               readings):
+        """The founder's own words: 'confirmed in the ninth division' or
+        'weakens in the ninth division — the promise is thinner than it
+        looks'. Not a dignity string the reader has to interpret."""
+        for r in readings:
+            for t in r.varga_tests:
+                low = t.verdict.lower()
+                assert ("confirmed in the" in low or "weakens in the" in low
+                        or "splits" in low
+                        or "neither confirms nor weakens" in low), t.verdict
+                assert t.verdict.endswith("."), t.verdict
+
+    def test_a_varga_test_never_claims_a_degree_it_does_not_have(self):
+        """This build computes divisional positions to the SIGN. A varga
+        dignity may therefore be exalted, debilitated, own-sign or neutral —
+        never moolatrikona, which is a degree band. Claiming it would be an
+        invented fact."""
+        import yogaread
+        from vargas import varga_chart
+        chart = compute_chart(GATE_BIRTH)
+        for code in ("D9", "D10"):
+            vc = varga_chart(chart, code)
+            for p in PLANETS:
+                state = yogaread.varga_dignity(vc, p)
+                assert state in ("exalted", "debilitated", "own sign",
+                                 "neutral"), (code, p, state)
+
+    # --- (b) WHAT IT GIVES --------------------------------------------------
+
+    def test_every_yoga_says_what_it_gives_and_cites_a_rule(self, readings):
+        import rulelib
+        for r in readings:
+            assert r.gives and r.gives.endswith("."), r.yoga.name
+            assert len(r.gives.split()) >= 6, r.gives
+            assert r.gives_rule in rulelib.RULES, (r.yoga.name, r.gives_rule)
+
+    def test_what_it_gives_is_not_vague(self, readings):
+        import voice
+        for r in readings:
+            assert not voice.find_vagueness(r.gives), (r.yoga.name, r.gives)
+            assert not voice.find_throat_clearing(r.gives), r.gives
+
+    # --- (c) WHEN IT ACTIVATES ----------------------------------------------
+
+    def test_activation_is_dated_from_the_ledger(self, chart, readings):
+        """"…the dasha/antardasha periods of its forming planet(s) with
+        dates from the ledger." Not dates this module invented: every window
+        must be a real period of the Vimshottari timeline."""
+        from dashas import vimshottari
+        timeline = vimshottari(chart)
+        real = {(md.lord, md.start, md.end) for md in timeline.mahadashas}
+        real |= {(ad.lord, ad.start, ad.end)
+                 for md in timeline.mahadashas for ad in md.antardashas}
+        seen = 0
+        for r in readings:
+            for a in r.activations:
+                assert (a.lord, a.start, a.end) in real, (r.yoga.name, a)
+                assert a.lord in r.yoga.planets, (r.yoga.name, a.lord)
+                seen += 1
+        assert seen, "no activation windows at all"
+
+    def test_a_period_is_labelled_past_running_or_ahead(self, readings):
+        """"If the activating period is past, say so; if future, date it."""
+        for r in readings:
+            for a in r.activations:
+                assert a.state in ("past", "running", "ahead"), a
+                if a.state == "past":
+                    assert a.end <= self.NOW, a
+                elif a.state == "running":
+                    assert a.start <= self.NOW < a.end, a
+                else:
+                    assert a.start > self.NOW, a
+
+    def test_the_verdict_says_when(self, readings):
+        """A verdict that names no window has not answered the question the
+        founder asked it to answer."""
+        import voice
+        for r in readings:
+            said = voice.names_a_date(r.verdict)
+            if r.activations:
+                assert said, (r.yoga.name, r.verdict)
+            else:
+                assert "No period" in r.verdict, r.verdict
+
+    def test_a_past_period_is_not_sold_as_coming(self, readings):
+        for r in readings:
+            if r.running or r.next_up:
+                continue
+            if any(a.state == "past" for a in r.activations):
+                assert "already given" in r.verdict, r.verdict
+
+    # --- (d) WHERE IN LIFE --------------------------------------------------
+
+    def test_where_is_in_plain_words_never_a_house_number(self, readings):
+        import rulelib
+        plain = {rulelib.HOUSE_MATTERS[h].split(",")[0].strip()
+                 for h in range(1, 13)}
+        for r in readings:
+            assert r.where, r.yoga.name
+            assert any(w in r.where for w in plain), (r.yoga.name, r.where)
+            assert not re.search(r"\b\d+(?:st|nd|rd|th) house", r.where), \
+                r.where
+            assert not re.search(r"\bhouse \d", r.where), r.where
+
+    # --- word discipline ----------------------------------------------------
+
+    def test_the_verdict_answers_first_and_stays_short(self, readings):
+        import voice
+        import yogaread
+        for r in readings:
+            assert voice.words(r.verdict) <= yogaread.VERDICT_WORDS, (
+                r.yoga.name, voice.words(r.verdict), r.verdict)
+            assert len(voice.sentences(r.verdict)) <= 2, r.verdict
+            assert not voice.find_throat_clearing(r.verdict), r.verdict
+            assert not voice.find_vagueness(r.verdict), r.verdict
+
+    def test_the_verdict_names_a_planet(self, readings):
+        import voice
+        for r in readings:
+            assert voice.names_a_planet(r.verdict), (r.yoga.name, r.verdict)
+
+    def test_the_verdict_does_not_repeat_the_entry_name(self, readings):
+        """It sits directly under the name. Repeating it spent a fifth of
+        the budget and put "Yoga" — banned from the plain register — into
+        every verdict in the app."""
+        import voice
+        for r in readings:
+            assert r.yoga.name not in r.verdict, r.verdict
+            assert not voice.find_jargon(r.verdict), (
+                r.yoga.name, voice.find_jargon(r.verdict))
+
+    # --- the ledger can back it ---------------------------------------------
+
+    def test_every_claim_rests_on_a_rule_that_exists(self, readings):
+        import rulelib
+        for r in readings:
+            assert r.rule_ids, r.yoga.name
+            for rid in r.rule_ids:
+                assert rid in rulelib.RULES, (r.yoga.name, rid)
+
+    def test_every_claim_rests_on_a_fact_the_ledger_carries(self, chart,
+                                                            readings):
+        """"…the validator must be able to check every claim." It can only
+        do that if the ids a reading cites are ids the ledger publishes."""
+        from chartfacts import build_facts
+        ledger = {f.id for f in build_facts(chart, self.NOW)}
+        for r in readings:
+            assert r.fact_ids, r.yoga.name
+            for fid in r.fact_ids:
+                assert fid in ledger, (r.yoga.name, fid)
+
+    def test_the_ledger_carries_the_varga_and_activation_facts(self, chart):
+        """The two facts that did not exist before. A reading asserting that
+        the ninth division confirms a yoga, with nothing in the ledger
+        saying so, is exactly the improvisation the ledger exists to stop."""
+        from chartfacts import build_facts
+        from yogas import detect_all
+        ledger = {f.id: f for f in build_facts(chart, self.NOW)}
+        yogas = detect_all(chart)
+        assert yogas
+        for y in yogas:
+            slug = y.name.lower().replace(" ", "-").replace("'", "")
+            slug = re.sub(r"[^a-z0-9.-]", "", slug.replace("(", "")
+                          .replace(")", "").replace("&", "-"))
+            varga = [k for k in ledger if k.endswith(".varga")
+                     and k.startswith("yoga.")]
+            act = [k for k in ledger if k.endswith(".activation")
+                   and k.startswith("yoga.")]
+            assert len(varga) == len(yogas), (len(varga), len(yogas))
+            assert len(act) == len(yogas), (len(act), len(yogas))
+        # …and they say something, not nothing.
+        for fid, fact in ledger.items():
+            if fid.endswith(".varga"):
+                assert "D9" in fact.statement, fact.statement
+                assert "Sign-level only" in fact.statement, fact.statement
+            if fid.endswith(".activation"):
+                assert fact.value["periods"] is not None
+
+    # --- rendered -----------------------------------------------------------
+
+    def test_the_fold_puts_the_verdict_before_the_working(self, page):
+        block = page[page.index('<section class="ledger" id="yogas"'):]
+        block = block[:block.index("</section>")]
+        assert 'class="yverdict"' in block
+        first = block.index('class="yverdict"')
+        assert first < block.index("<details>"), (
+            "the working is printed before the verdict")
+        for label in ("Gives", "Where", "D9"):
+            assert f'class="xplabel">{label}<' in block, label
+        # The working, and the audit trail, are in the expander.
+        working = block[block.index("<details>"):]
+        assert "Rests on" in working and "Computed from" in working
+
+
+class TestNoEntryIsPrintedTwice:
+    """One entry per phenomenon, in the fold and in the data behind it.
+
+    From a live walk: "Mars in house 8 (Mangal Dosha pattern)" and "Mars in
+    the 8th house" printed as two separate myth-vs-record entries — one
+    placement, described twice, so a reader comparing them finds two
+    classical records for the same fact. Sade Sati printed in full under
+    Doshas AND under Myths.
+
+    The fix is a canonical `subject` — (what, condition) — with exactly one
+    home per subject, and a cross-reference where a phenomenon belongs to
+    two sections. These gates hold that line.
+    """
+
+    NOW = datetime(2026, 9, 10, tzinfo=timezone.utc)
+
+    @classmethod
+    @pytest.fixture(scope="class")
+    def folded(cls, chart):
+        from doshas import combinations
+        return combinations(chart, cls.NOW)
+
+    def test_no_two_entries_describe_the_same_subject(self, folded):
+        """The founder's gate, stated as they stated it: no two entries in a
+        view may describe the same (planet, house/condition) pair."""
+        subjects = [row["dosha"].subject for row in folded["doshas"]]
+        subjects += [row["subject"] for row in folded["myths"]]
+        dupes = [s for s in set(subjects) if subjects.count(s) > 1]
+        assert not dupes, f"printed twice in one view: {dupes}"
+
+    def test_a_subject_with_two_homes_is_shown_once_and_linked(self, folded):
+        """Sade Sati belongs to both sections. It is PRINTED in Doshas —
+        where its dates and its cancellation checks are — and linked from
+        Myths."""
+        dosha_subjects = {row["dosha"].subject for row in folded["doshas"]}
+        myth_subjects = {row["subject"] for row in folded["myths"]}
+        assert not (dosha_subjects & myth_subjects), (
+            dosha_subjects & myth_subjects)
+        # And the ones that moved are not silently gone.
+        assert folded["crossrefs"], "nothing cross-referenced at all"
+        names = {x["name"] for x in folded["crossrefs"]}
+        assert names <= {row["dosha"].name for row in folded["doshas"]}
+
+    def test_nothing_a_myth_card_said_was_dropped(self, chart, folded):
+        """De-duplicating must not lose text. Every myth card's classical
+        record is still somewhere — in its own entry, or folded into the
+        dosha entry that now owns its subject."""
+        from doshas import myth_busters
+        printed = " ".join(
+            [row["classical_record"] or "" for row in folded["doshas"]]
+            + [row["classical_record"] for row in folded["myths"]])
+        cards = myth_busters(chart, self.NOW)
+        assert cards, "no myth cards at all — this proves nothing"
+        for card in cards:
+            assert card.classical_record in printed, card.placement
+
+    def test_the_mangal_pattern_and_the_house_it_forms_in_are_one_entry(self):
+        """The exact pair from the walk. A chart with Mars in the 8th forms
+        the Mangal pattern BECAUSE Mars is in the 8th — one placement, and
+        the two cards that used to describe it now share a subject and
+        collapse."""
+        from doshas import combinations, myth_busters
+        from engine import BirthData
+        # Synthetic; searched for the shape, not taken from a real record.
+        # Aries lagna with Mars in Scorpio puts Mars in the 8th.
+        found = compute_chart(BirthData(
+            year=1988, month=1, day=5, hour=14, minute=30,
+            latitude=19.07, longitude=72.88, tz="+05:30", place="Test"))
+        assert found.planets["Mars"].house == 8, found.planets["Mars"].house
+        # The two cards are still GENERATED — they are two real readings of
+        # the same placement, and each contributes its record.
+        raw = [m.subject for m in myth_busters(found, self.NOW)]
+        assert raw.count(("Mars", "house-8")) == 2, raw
+        # …and they arrive at the fold as one entry.
+        folded = combinations(found, self.NOW)
+        printed = ([row["dosha"].subject for row in folded["doshas"]]
+                   + [row["subject"] for row in folded["myths"]])
+        assert printed.count(("Mars", "house-8")) == 1, printed
+        # Carrying both classical records, not one of them.
+        row = next(r for r in folded["doshas"]
+                   if r["dosha"].subject == ("Mars", "house-8"))
+        for card in myth_busters(found, self.NOW):
+            if card.subject == ("Mars", "house-8"):
+                assert card.classical_record in row["classical_record"]
+
+    def test_the_rendered_fold_prints_each_name_once(self, page):
+        """The data can be clean and the template still print both lists."""
+        block = page[page.index('<section class="ledger" id="doshas"'):]
+        block = block[:block.index("<!-- Gocara")]
+        names = re.findall(r'<span class="yoganame">([^<]+)</span>', block)
+        assert names, "no entries rendered in the Combinations fold"
+        # An entry's own name, once. A cross-reference is a link, not an
+        # entry, and is not counted here — it is checked below.
+        assert len(names) == len(set(names)), names
+        assert "Sade Sati" in " ".join(names)
+        crossref = re.search(r'<p class="crossref">(.*?)</p>', block, re.S)
+        assert crossref, "no cross-reference line"
+        assert "Sade Sati" in crossref.group(1)
+
+
 class TestTheTabRow:
     """The five screens are peers and every one is always one tap away."""
 
     TABS = ("Today", "Readings", "Your charts", "Explore", "Ask")
+
+    def test_numerology_is_listed_as_unbuilt_rather_than_hidden(self, page):
+        """Numerology was never implemented — there is no numerology code in
+        this repository, not a stub and not a route. It is named in the tab
+        row anyway, marked unavailable, which is the same honesty the
+        unbuilt divisional charts get: a reader can see what the app does
+        not do instead of wondering whether they missed it.
+
+        It must NOT be a link. A tab that navigates to a view that does not
+        exist is worse than no tab.
+        """
+        row = re.search(r'<nav class="tabs"[^>]*>(.*?)</nav>', page, re.S)
+        assert row, "no tab row"
+        entry = re.search(
+            r'<span class="tab-soon"[^>]*>(.*?)</span>\s*</span>',
+            row.group(1), re.S)
+        assert entry, "Numerology is not listed in the tab row"
+        text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", entry.group(1)))
+        assert "Numerology" in text, text
+        assert "in preparation" in text, text
+        assert 'aria-disabled="true"' in row.group(1)
+        # No href anywhere near it, and no view behind it.
+        assert 'href="#numerology"' not in page
+        assert 'id="view-numerology"' not in page
+
+    def test_nothing_in_the_build_pretends_numerology_exists(self):
+        """The other half of the same claim. A disabled tab is honest only
+        while there is genuinely nothing behind it; a half-built module
+        would make it a lie in the other direction."""
+        for path in sorted(HERE.glob("*.py")):
+            if path.name.startswith("test_"):
+                continue
+            body = path.read_text(encoding="utf-8").lower()
+            assert "numerolog" not in body, path.name
 
     def test_the_row_carries_all_five(self, page):
         row = re.search(r'<nav class="tabs"[^>]*>(.*?)</nav>', page, re.S)

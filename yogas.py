@@ -156,6 +156,75 @@ def dignity_grade(chart: Chart, planet: str) -> str:
     return dignity_grade_at(planet, pos.sign_index, pos.degree_in_sign)
 
 
+# --- combustion (asta) and natural benefic/malefic -------------------------
+#
+# COMBUSTION. A graha too close to the Sun in longitude is "burnt" — asta —
+# and the tradition reads it as unable to deliver its own results plainly.
+# The orbs are the standard Parashari table. Mercury and Venus take a
+# TIGHTER orb when retrograde, which is the one place the table is not a
+# single number per graha.
+COMBUSTION_ORB = {
+    "Moon": 12.0, "Mars": 17.0, "Mercury": 14.0,
+    "Jupiter": 11.0, "Venus": 10.0, "Saturn": 15.0,
+}
+COMBUSTION_ORB_RETRO = {"Mercury": 12.0, "Venus": 8.0}
+
+# The nodes are shadow points, not bodies: they are never burnt, and the Sun
+# cannot be combust by itself. Both are absent from the table on purpose.
+
+# NATURAL NATURE. Jupiter and Venus are benefic without qualification;
+# Saturn, Mars, Rāhu and Ketu malefic; the Sun a mild malefic by its heat.
+# The two conditional ones are the classical part: the Moon is benefic when
+# waxing and Mercury takes the nature of whatever it keeps company with.
+# NAMED FOR WHAT THEY ARE, not "NATURAL_BENEFICS" — `rulelib` already has a
+# constant by that name listing the four grahas that are benefic BEFORE the
+# conditions are applied (it includes the Moon and Mercury). These two are
+# the grahas whose nature needs no condition at all. Two tables with one
+# name meaning different things is the bug that has bitten this codebase
+# twice already.
+UNCONDITIONAL_BENEFICS = ("Jupiter", "Venus")
+UNCONDITIONAL_MALEFICS = ("Sun", "Mars", "Saturn", "Rahu", "Ketu")
+
+
+def combust(chart: Chart, planet: str) -> bool:
+    """Is this graha burnt by the Sun in this chart?"""
+    if planet not in COMBUSTION_ORB:
+        return False
+    pos = chart.planets[planet]
+    orb = COMBUSTION_ORB[planet]
+    if getattr(pos, "retrograde", False) and planet in COMBUSTION_ORB_RETRO:
+        orb = COMBUSTION_ORB_RETRO[planet]
+    gap = abs(pos.longitude - chart.planets["Sun"].longitude) % 360.0
+    return min(gap, 360.0 - gap) <= orb
+
+
+def natural_nature(chart: Chart, planet: str) -> str:
+    """'benefic' | 'malefic', with the two conditional grahas resolved.
+
+    The Moon: waxing (more than 120° from the Sun, the classical
+    pakṣa-bala split) reads benefic, waning malefic. Mercury: benefic
+    alone or with benefics, malefic when it shares a sign with a malefic.
+    """
+    if planet in UNCONDITIONAL_BENEFICS:
+        return "benefic"
+    if planet in UNCONDITIONAL_MALEFICS:
+        return "malefic"
+    if planet == "Moon":
+        gap = (chart.planets["Moon"].longitude
+               - chart.planets["Sun"].longitude) % 360.0
+        return "benefic" if 120.0 <= gap <= 240.0 else "malefic"
+    # Mercury
+    sign = chart.planets["Mercury"].sign_index
+    with_it = [p for p in PLANETS
+               if p != "Mercury" and chart.planets[p].sign_index == sign]
+    if any(p in UNCONDITIONAL_MALEFICS for p in with_it):
+        return "malefic"
+    if any(p == "Moon" and natural_nature(chart, "Moon") == "malefic"
+           for p in with_it):
+        return "malefic"
+    return "benefic"
+
+
 def natural_relation(a: str, b: str) -> str:
     """'friend' | 'enemy' | 'neutral' — from planet a's perspective."""
     if b in NATURAL_FRIENDS.get(a, ()):

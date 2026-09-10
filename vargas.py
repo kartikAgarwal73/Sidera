@@ -34,7 +34,20 @@ def dasamsa_sign(longitude: float) -> int:
     return (sign + offset + part) % 12
 
 
+# THE REGISTRY. `varga_chart` is generic over this table, and so is the
+# gallery: a division is rendered as a real plate exactly when it has an
+# entry here, and drawn as a dashed empty frame when it does not. Adding
+# `"D7": saptamsa_sign` is the whole of what it takes to light D7 up —
+# `TestEveryComputedVargaIsPlotted` fails if a computation lands and the
+# gallery does not plot it.
 _VARGA_FN = {"D9": navamsa_sign, "D10": dasamsa_sign}
+
+#: Division codes this build can actually cast, D1 aside.
+SUPPORTED = tuple(_VARGA_FN)
+
+
+def is_supported(varga: str) -> bool:
+    return varga in _VARGA_FN
 
 
 @dataclass(frozen=True)

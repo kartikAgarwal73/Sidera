@@ -189,6 +189,21 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
                      "or not, with what it reads"),
     "TestTheTabRow": (
         "invariant", "product rule: five peer screens, always one tap away"),
+    "TestAshtakavarga": (
+        "external", "PyJHora — an independent implementation, compared per "
+                    "SIGN for both fictional charts; plus the classical "
+                    "per-graha totals, which gate the table and not the "
+                    "computation"),
+    "TestTypeFloors": (
+        "invariant", "product rule: no rendered text below 13px, prose at "
+                     "16 — measured in a browser, SVG scaled by its viewBox"),
+    "TestAYogaIsReadNotJustDetected": (
+        "invariant", "product rule: a yoga entry says whether the divisional "
+                     "charts confirm it, what it gives, when its planets' "
+                     "periods run, and where in life"),
+    "TestNoEntryIsPrintedTwice": (
+        "invariant", "product rule: one entry per phenomenon; a subject with "
+                     "two homes is printed once and cross-referenced"),
     "TestVerdictsAreSpecific": (
         "invariant", "product rule: a verdict names at least one graha and, "
                      "where a dated influence runs, says when — specific "

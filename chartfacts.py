@@ -46,6 +46,13 @@ from transits import (
     transit_snapshot,
 )
 from vargas import dasamsa, navamsa
+from ashtakavarga import BODIES as AV_BODIES
+from ashtakavarga import REDUCTIONS_NOTE, STRONG_FLOOR as av_strong
+from ashtakavarga import THIN_CEILING as av_thin
+from ashtakavarga import ashtakavarga
+from ashtakavarga import strongest as av_strongest
+from ashtakavarga import thinnest as av_thinnest
+from ashtakavarga import verdict as ashtakavarga_verdict
 from yogas import (detect_all, dignity, dignity_grade, house_lords,
                    houses_owned_by, sign_lord)
 
@@ -484,15 +491,115 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
             ))
 
     # --- yogas -------------------------------------------------------------
+    #
+    # THREE FACTS PER YOGA, not one. The ledger used to carry only the
+    # detection, so the two things a reading actually asserts about a yoga —
+    # that the divisional charts confirm it, and that a period of its
+    # forming grahas runs from such a date to such a date — rested on
+    # nothing the validator could check. A claim the ledger cannot back is
+    # exactly what this file exists to make impossible.
+    import yogaread as _yogaread
+    # One shared computation for every yoga — see `yogaread._Shared`.
+    _shared = _yogaread.shared_for(chart, when)
     for yoga in detect_all(chart):
+        # The id comes from `yogaread`, which is what CITES it. See
+        # `yoga_fact_id` — the two used to slug the same name differently.
+        base = _yogaread.yoga_fact_id(yoga.name)
         facts.append(Fact(
-            id=f"yoga.{_slug(yoga.name)}",
+            id=base,
             kind="yoga",
             statement=f"{yoga.name}: {yoga.detail}",
             value={"name": yoga.name, "rule": yoga.rule,
                    "detail": yoga.detail, "planets": list(yoga.planets),
+                   "houses": list(yoga.houses), "kind": yoga.kind,
+                   "cancelled": yoga.cancelled,
                    "notes": list(yoga.notes)},
         ))
+        reading = _yogaread.read_yoga(yoga, chart, when, _shared)
+        tests = {t.varga: t for t in reading.varga_tests}
+        facts.append(Fact(
+            id=f"{base}.varga",
+            kind="yoga",
+            statement=(
+                f"{yoga.name} in the divisional charts — "
+                + " ".join(f"{t.varga}: {t.detail}"
+                           for t in reading.varga_tests)
+                + " (Sign-level only: this build computes no degree within a "
+                  "divisional sign, so there is no moolatrikona here.)"),
+            value={"name": yoga.name,
+                   "tested_in": [t.varga for t in reading.varga_tests],
+                   "confirmed": {t.varga: t.confirmed
+                                 for t in reading.varga_tests},
+                   "strong": {v: list(t.strong) for v, t in tests.items()},
+                   "weak": {v: list(t.weak) for v, t in tests.items()},
+                   "degree": None},
+        ))
+        acts = reading.activations
+        facts.append(Fact(
+            id=f"{base}.activation",
+            kind="yoga",
+            statement=(
+                f"{yoga.name} is carried by {', '.join(yoga.planets)}; "
+                + ("their periods: "
+                   + "; ".join(f"{a.lord} {a.level} {a.start:%b %Y}–"
+                               f"{a.end:%b %Y} ({a.state})" for a in acts)
+                   + "."
+                   if acts else
+                   "no period of these grahas falls inside the 120-year "
+                   "cycle this chart covers.")),
+            value={"name": yoga.name,
+                   "periods": [{"lord": a.lord, "level": a.level,
+                                "start": a.start.isoformat(),
+                                "end": a.end.isoformat(), "state": a.state}
+                               for a in acts]},
+        ))
+
+    # --- ashtakavarga ------------------------------------------------------
+    #
+    # NINETEEN FACTS, not ninety-six. `sav.house.N` ×12 plus `bav.<planet>`
+    # ×7 carrying a twelve-value array each. Per-planet-per-house ids would
+    # have needed 84 more, tripling the prompt payload and burying the
+    # useful facts under a grid nobody asks about.
+    av = ashtakavarga(chart)
+    by_house = av.sav_by_house
+    for house in range(1, 13):
+        score = by_house[house]
+        facts.append(Fact(
+            id=f"sav.house.{house}",
+            kind="ashtakavarga",
+            statement=(
+                f"The {ordinal(house)} house ({av.sign_of_house(house)}) "
+                f"carries {score} Sarvashtakavarga bindus out of the 337 "
+                f"this chart distributes"
+                + (" — among its strongest." if score >= av_strong
+                   else " — among its thinnest." if score <= av_thin
+                   else ".")
+                + " RAW: no trikona or ekadhipatya sodhana applied."),
+            value={"house": house, "sign": av.sign_of_house(house),
+                   "bindus": score, "raw": True},
+        ))
+    for planet in AV_BODIES:
+        row = av.bav_by_sign[planet]
+        facts.append(Fact(
+            id=f"bav.{planet.lower()}",
+            kind="ashtakavarga",
+            statement=(
+                f"{planet}'s Bhinnashtakavarga, by house from the lagna: "
+                + ", ".join(f"{ordinal(h)} {v}"
+                            for h, v in av.by_house(row).items())
+                + f" (total {sum(row)}). RAW: no reductions applied."),
+            value={"planet": planet, "by_sign": list(row),
+                   "by_house": av.by_house(row), "total": sum(row),
+                   "raw": True},
+        ))
+    facts.append(Fact(
+        id="sav.summary",
+        kind="ashtakavarga",
+        statement=(
+            ashtakavarga_verdict(av) + " " + REDUCTIONS_NOTE),
+        value={"strongest": av_strongest(av), "thinnest": av_thinnest(av),
+               "total": av.sav_total, "raw": True},
+    ))
 
     # --- dashas ------------------------------------------------------------
     current = timeline.at(when)
