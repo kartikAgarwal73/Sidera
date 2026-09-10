@@ -128,9 +128,19 @@ the real offenders, and that it fires on none of the honest sentences.
 
 ## How it looks
 
+Five screens, always one tap apart from a tab row in the masthead:
+
+| Today | the dated sky, for this chart |
+|---|---|
+| **Readings** | the contents page, and a verdict-first fold per domain |
+| **Your charts** | the divisional plates as a gallery, each with its own reading |
+| **Explore** | eight categories, one open at a time |
+| **Ask** | a question in your own words, answered from the computed chart |
+
 An almanac, set as printed matter: a numbered fold per view with its folio
-top-right, the wheel as a captioned **Plate I**, the arrival screen as a
-table of contents, and the working folded under footnote-style
+top-right — two levels of it, so `P. 02·1` is the first reading and `P. 03·2`
+the second plate — the wheel as a captioned **Plate I**, the Readings screen
+as a table of contents, and the working folded under footnote-style
 `show the working ↓` lines. Hairline rules and whitespace do all the
 separating — nothing is boxed, nothing has a shadow, and the only radius in
 the stylesheet is 0 or 50%.
@@ -141,6 +151,15 @@ alternate — two palettes, not six. One bronze accent, split by role because
 type, not enough for a link, so `--accent-ink` is the same hue darkened until
 it clears AA. Every pair is recomputed from the stylesheet by
 `TestPaperPalette` rather than trusted from a table.
+
+Today opens on the day, named twice — once by the civil calendar and once by
+the Moon — then three or four dated lines, each naming a graha and saying
+when: *"Ketu leaves the degree of your Venus today — the four-month stretch on
+comfort closes."* `today.py` computes both edges of a contact by bisection,
+because the ledger knows the current gap and not the boundary, and without the
+date the line would read *"Ketu is on your Venus"*. The birth plate pins
+beside it with today's transits ticked around its **outer** edge: the plate is
+the birth moment, and today is a marginal note on it.
 
 Scrolling is choreographed: fold rules draw in left to right, the chart plate
 pins beside the day's verdict and releases at the last contents entry, a ghost

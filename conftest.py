@@ -181,6 +181,14 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
         "invariant", "product rule: a reader who asks for no motion is served "
                      "the finished page — every reveal at its final value, "
                      "nothing left invisible, and the pin kept"),
+    "TestTodayScreen": (
+        "invariant", "product rule: the first screen is today — three or "
+                     "four dated lines, each naming a graha"),
+    "TestYourChartsScreen": (
+        "invariant", "product rule: every divisional chart is listed, built "
+                     "or not, with what it reads"),
+    "TestTheTabRow": (
+        "invariant", "product rule: five peer screens, always one tap away"),
     "TestVerdictsAreSpecific": (
         "invariant", "product rule: a verdict names at least one graha and, "
                      "where a dated influence runs, says when — specific "

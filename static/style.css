@@ -998,7 +998,13 @@ button.cast.recast { margin-top: 4px; }
    Two columns at desktop; the plate is sticky inside a grid that ENDS at
    the last contents entry, which is what releases it. No JS: the release
    point is the end of the grid. */
-.leaf { display: block; }
+/* On a phone there is no second column to pin into, so the two halves
+   stack — and the DAY goes first. Measured 2026-09-11: with the plate
+   first, the day's dated lines began around y=1000 on a 390px screen, so
+   arrival showed a wheel and nothing else. The plate is the illustration;
+   the day is the reading. */
+.leaf { display: flex; flex-direction: column; }
+.leaf > .daycol { order: -1; }
 @media (min-width: 1000px) {
   .leaf {
     display: grid;
@@ -1048,6 +1054,21 @@ button.cast.recast { margin-top: 4px; }
 }
 .verdictmoment > *:not(.ghostno) { position: relative; z-index: 1; }
 @media (max-width: 560px) { .ghostno { font-size: 112px; } }
+
+/* Under a plate's verdict: what the division reads, for anyone who does not
+   yet know. Quiet, because it is true of every chart and the line above it
+   is true only of this one. */
+.platewhat { margin-top: 18px; max-width: 46ch; }
+/* A plate on its own page is a FIGURE, at the measure of the column it
+   illustrates — not a 900px breakout. Measured 2026-09-11: the D9 view let
+   `.kundli` take its full width and the plate arrived twice the size of the
+   title above it. */
+.domainread > .kundli {
+  width: min(100%, 560px); left: auto; transform: none;
+  display: block; margin: var(--space-fold) auto 0;
+}
+/* …and its caption sits under the figure, not under the column. */
+.domainread > .platecaption { width: min(100%, 560px); margin-inline: auto; }
 
 /* --- 4. the verdict moment: a screenful, and it rises into place -------- */
 .verdictmoment {
@@ -1213,3 +1234,103 @@ button.cast.recast { margin-top: 4px; }
 #view-explore[data-showing] .yoganame { font-size: 19px; }
 #view-explore[data-showing] .wcard-head { font-size: 15.5px; }
 #view-explore[data-showing] .notebody { font-size: 16px; line-height: 1.65; }
+
+/* ============================================================
+   THE FIVE SCREENS — Today · Readings · Your charts · Explore · Ask
+   ============================================================ */
+
+/* The tab row. Peers, not a hierarchy: Today, Readings and Your charts are
+   three ways into the same chart, so they sit on one rule rather than behind
+   one another. Same treatment as the plate's own tabs. */
+.tabs {
+  display: flex; gap: 26px; overflow-x: auto;
+  border-bottom: 1px solid var(--divider);
+  margin: 0 -24px 0; padding: 0 24px;
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tabs a {
+  flex: none; font-family: var(--font-heading); font-size: 16px;
+  letter-spacing: .02em; color: var(--ink-50); text-decoration: none;
+  padding: 12px 0 13px; border-bottom: 1px solid transparent;
+  margin-bottom: -1px; white-space: nowrap;
+}
+.tabs a:hover { color: var(--ink-70); }
+.tabs a.active { color: var(--ink); border-bottom-color: var(--accent); }
+
+/* --- SCREEN 1 · TODAY ---------------------------------------------------
+   The day on the left, the plate pinned on the right. */
+.daycol { padding-top: 2px; }
+.dayhead {
+  font-family: var(--font-heading); font-weight: 400;
+  font-size: clamp(30px, 4.4vw, 46px); line-height: 1.08;
+  margin: 10px 0 0; max-width: 18ch; letter-spacing: -.012em;
+}
+.todaylist { list-style: none; margin: 12px 0 0; padding: 0; }
+/* Each entry is a ruled line, not a card. The fact ids sit in the margin
+   like a footnote reference — the same "one tap from its computation"
+   contract every other reading keeps. */
+.todayline {
+  border-bottom: 1px solid var(--hairline);
+  padding: 15px 0 16px;
+  font-size: 17px; line-height: 1.55; color: var(--ink);
+  max-width: 46ch;
+}
+.todayids {
+  display: block; margin-top: 7px;
+  font-size: var(--t-mark); letter-spacing: .1em;
+  font-variant-caps: all-small-caps; color: var(--ink-50);
+  font-variant-numeric: tabular-nums;
+}
+/* Keeps the `.statement` class too: "one statement hero" is a contract
+   the design handoff pins, and this IS that statement — set in italic
+   on the Today screen because it is the day's line, not the chart's. */
+.dayverdict {
+  font-family: var(--font-heading); font-style: italic;
+  font-size: clamp(20px, 2.2vw, 26px); line-height: 1.4;
+  color: var(--ink); margin: var(--space-rule) 0 0; max-width: 40ch;
+}
+
+/* Today's transits, ticked around the OUTSIDE of the birth plate. Small,
+   in the bronze, and never inside the frame: the plate is the birth moment
+   and today is a marginal note on it. */
+.kundli .ticks text {
+  font-family: var(--font-body); font-size: 10px; font-weight: 500;
+  fill: var(--accent-ink); letter-spacing: .04em;
+}
+
+/* --- SCREEN 3 · YOUR CHARTS --------------------------------------------
+   A gallery of small plates. One column on a phone, two from 560px. */
+.gallery {
+  display: grid; grid-template-columns: 1fr; gap: 0;
+  border-top: 1px solid var(--divider);
+}
+@media (min-width: 560px) {
+  .gallery { grid-template-columns: 1fr 1fr; column-gap: 34px; }
+}
+.gcard {
+  display: grid; grid-template-columns: 74px 1fr;
+  grid-template-areas: "plate code" "plate sum" "plate more";
+  column-gap: 16px; row-gap: 4px; align-content: start;
+  padding: 18px 0 19px; border-bottom: 1px solid var(--divider);
+  text-decoration: none; color: inherit;
+}
+.gplate { grid-area: plate; width: 74px; height: 74px; }
+.gplate-empty { opacity: .45; }
+.gcard-code {
+  grid-area: code; font-family: var(--font-heading); font-size: 20px;
+  line-height: 1.2; color: var(--ink);
+}
+.gcard-sum {
+  grid-area: sum; font-size: 14.5px; line-height: 1.55;
+  color: var(--ink-60);
+}
+.gcard-more {
+  grid-area: more; font-size: var(--t-mark); letter-spacing: .12em;
+  font-variant-caps: all-small-caps; color: var(--ink-50); margin-top: 3px;
+}
+.gcard:hover .gcard-code, .gcard:hover .gcard-more { color: var(--accent-ink); }
+/* A slot that is not built reads as a slot, not as a broken card. */
+.gcard-soon .gcard-code, .gcard-soon .gcard-sum { color: var(--ink-50); }
+.gcard-soon .gcard-more { font-style: italic; }
+.gcard-soon .minigrahas { display: none; }

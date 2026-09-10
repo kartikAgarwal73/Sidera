@@ -39,6 +39,7 @@ from doshas import WEATHER_FRAMING, doshas_all, myth_busters, transit_weather
 from lessons import CONTEXT_LESSONS, LESSONS
 from engine import SIGNS, PLANETS, BirthData, compute_chart
 from explain import DASHA_THEME, explain_dashboard, explain_yoga, ordinal
+from rulelib import HOUSE_MATTERS
 import schools
 from transits import (
     DRISHTI_OFFSETS,
@@ -49,7 +50,8 @@ from transits import (
 from vargas import dasamsa, navamsa
 import agent
 import chartfacts
-from yogas import detect_all, dignity, dignity_grade
+import today
+from yogas import detect_all, dignity, dignity_grade, sign_lord
 
 app = Flask(__name__)
 app.template_filter("ordinal")(ordinal)  # '3' → '3rd', app-wide
@@ -190,6 +192,150 @@ def parse_coord(text: str, axis: str) -> float:
         raise ValueError(f"{axis.capitalize()} runs −{limit} to {limit}.")
     return value
 
+
+# --- SCREEN 3: the divisional charts, and the ones not built yet ------------
+# Every varga this app can cast, plus the slots it cannot. A gallery that
+# quietly omitted D2 and D7 would imply the list is complete; saying "in
+# preparation" is the same honesty the disabled Upapada option gets.
+VARGA_SLOTS = (
+    ("d1", "D1", "Rāśi",
+     "The birth chart itself — every other chart is read against this one.",
+     True),
+    ("d9", "D9", "Navāṃśa",
+     "Marriage, and the inner strength of every planet in the birth chart.",
+     True),
+    ("d10", "D10", "Daśāṃśa",
+     "Work, standing, and the field a career actually takes place in.",
+     True),
+    ("d2", "D2", "Horā",
+     "Wealth and what is kept, split between the Sun's half and the Moon's.",
+     False),
+    ("d7", "D7", "Saptāṃśa",
+     "Children, and what the chart carries forward past this life.",
+     False),
+    ("d12", "D12", "Dvādaśāṃśa",
+     "The parents, and what was inherited before anything was chosen.",
+     False),
+    ("d30", "D30", "Triṃśāṃśa",
+     "Where the chart is tested, and which planet does the testing.",
+     False),
+    ("d60", "D60", "Ṣaṣṭyāṃśa",
+     "The finest division Parāśara gives, and the hardest to cast honestly.",
+     False),
+)
+
+
+def _and_list(names: list[str]) -> str:
+    """'Venus', 'Venus and Saturn', 'Venus, Saturn and Mars'."""
+    if len(names) == 1:
+        return names[0]
+    return ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def plate_reading(key: str, chart, d9, d10) -> str:
+    """One line of reading for a plate, composed from that plate alone.
+
+    A gallery of charts with no reading is a filing cabinet. Each of these
+    says the one thing the division is FOR, out of this chart's own
+    placements — the lagna lord and where it stands, which planets keep
+    their sign into the ninth, what actually occupies the tenth of the
+    tenth. Plain register, no house numbers, no Sanskrit: the technical
+    reading of every placement is two taps away in Explore.
+    """
+    def matters(house: int) -> str:
+        return HOUSE_MATTERS[house].split(",")[0].strip()
+
+    def plain(name: str) -> str:
+        return today.PLAIN_PLANET.get(name, name)
+
+    if key == "d1":
+        lord = sign_lord(chart.lagna.sign_index)
+        return (f"{chart.lagna.sign} rises, so {plain(lord)} rules this "
+                f"chart — and it stands in {matters(chart.planets[lord].house)}.")
+
+    if key == "d9":
+        lord = sign_lord(d9.lagna_sign_index)
+        kept = [p for p in PLANETS if d9.planets[p].vargottama]
+        head = (f"{d9.lagna_sign} rises in the ninth division, so "
+                f"{plain(lord)} carries the inner chart")
+        # The lord is named once. "…so the Moon carries the inner chart —
+        # and the Moon and Mars keep the sign they were born in" is true and
+        # reads like a template.
+        rest = [plain(p) for p in kept if p != lord]
+        if lord in kept:
+            tail = "and it keeps the sign it was born in"
+            if rest:
+                tail += (f", as {'does' if len(rest) == 1 else 'do'} "
+                         f"{_and_list(rest)}")
+            return f"{head} — {tail}."
+        if rest:
+            return (f"{head} — and {_and_list(rest)} "
+                    f"{'keeps' if len(rest) == 1 else 'keep'} the sign "
+                    f"{'it was' if len(rest) == 1 else 'they were'} born in.")
+        return f"{head} — and no planet keeps the sign it was born in."
+
+    tenth = [plain(p) for p in PLANETS if d10.planets[p].house == 10]
+    head = (f"{d10.lagna_sign} rises in the tenth division, so "
+            f"{plain(sign_lord(d10.lagna_sign_index))} sets the field the "
+            f"work happens in")
+    if tenth:
+        return (f"{head} — and {_and_list(tenth)} "
+                f"{'stands' if len(tenth) == 1 else 'stand'} in its house of "
+                f"visible work.")
+    return f"{head} — and nothing stands in its house of visible work."
+
+
+def varga_gallery(chart, d9, d10) -> list[dict]:
+    """The gallery index: three plates that exist, five slots that do not."""
+    built = {
+        "d1": (chart.lagna.sign_index,
+               {p: chart.planets[p].house for p in PLANETS}),
+        "d9": (d9.lagna_sign_index, {p: d9.planets[p].house for p in PLANETS}),
+        "d10": (d10.lagna_sign_index,
+                {p: d10.planets[p].house for p in PLANETS}),
+    }
+    out = []
+    for key, code, name, summary, live in VARGA_SLOTS:
+        row = {"key": key, "code": code, "name": name, "summary": summary,
+               "live": live}
+        if live:
+            sign_index, houses = built[key]
+            row["houses"] = kundli_houses(sign_index, houses)
+            row["lagna"] = SIGNS[sign_index]
+            row["reading"] = plate_reading(key, chart, d9, d10)
+        out.append(row)
+    return out
+
+
+def transit_ticks(chart, when) -> list[dict]:
+    """Today's transiting grahas, marked on the outer edge of the plate.
+
+    A tick per occupied house, carrying the abbreviations of whatever stands
+    there — the plate is a square of fixed houses, so "outer edge" means the
+    outward-facing corner of that house's cell.
+    """
+    snapshot = transit_snapshot(chart, when)
+    by_house: dict[int, list[str]] = {}
+    for name in PLANETS:
+        # `natal_house`, not `house`: the tick marks where a transit stands
+        # relative to THIS chart's lagna, which is the only frame in which
+        # "your 8th" means anything.
+        house = snapshot.planets[name].natal_house
+        by_house.setdefault(house, []).append(ABBR[name])
+    return [{"house": h, "label": " ".join(marks),
+             "x": TICK_POS[h][0], "y": TICK_POS[h][1]}
+            for h, marks in sorted(by_house.items())]
+
+
+# Where a tick sits for each house: in the margin OUTSIDE the 0..300 frame,
+# which is why the D1 plate's viewBox is widened to -30..330. Inside the
+# frame they collided with the plate's own sign numerals at every width —
+# the overlap gate caught it immediately.
+TICK_POS = {
+    1: (150, -12), 2: (60, -12), 3: (-14, 60), 4: (-14, 150), 5: (-14, 240),
+    6: (60, 320), 7: (150, 320), 8: (240, 320), 9: (320, 240), 10: (320, 150),
+    11: (320, 60), 12: (240, -12),
+}
 
 ABBR = {
     "Sun": "Su", "Moon": "Mo", "Mars": "Ma", "Mercury": "Me",
@@ -518,6 +664,17 @@ def build_dashboard(profile: Profile) -> dict:
              f"to {_fmt(current[1].end)}" if current else "—"),
         ],
         "domains": domain_cards(chart, now),
+        # SCREEN 1 — TODAY. Three or four dated lines, each naming a graha,
+        # composed by today.py from the ephemeris. See ui-design/DOSSIER.md.
+        "day_header": today.day_header(now, panca),
+        "today_entries": [
+            {"text": e.text, "kind": e.kind, "ids": " · ".join(e.fact_ids)}
+            for e in today.entries(chart, now)],
+        # The transiting grahas, by the natal house they stand in, for the
+        # ticks on the outer edge of the plate.
+        "transit_ticks": transit_ticks(chart, now),
+        # SCREEN 3 — YOUR CHARTS. What is built, and what is honestly not.
+        "vargas": varga_gallery(chart, d9, d10),
         "school_node_reach": schools.chosen("node_reach").school,
         "school_node_position": schools.chosen("node_position").school,
     }

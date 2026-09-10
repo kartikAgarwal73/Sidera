@@ -315,3 +315,102 @@ names at least one graha and, where a dated influence is running, says when:
 > weakest. The north node's period holds it until Aug 2029.**
 
 Budgets are unchanged — 15 words, not 20. Specific *and* short.
+
+---
+
+## The five screens
+
+The dashboard used to be one long arrival page with everything on it. It is
+five peers now, reached from a tab row that is always in the masthead:
+
+| Tab | Fold | What it is |
+|---|---|---|
+| Today | P. 01 | The dated sky, for this chart |
+| Readings | P. 02 · P. 02·N | The seven-entry contents, and the verdict-first folds |
+| Your charts | P. 03 · P. 03·N | The divisional plates, as a gallery |
+| Explore | P. 04 | The eight-category index |
+| Ask | (inside Explore) | Correspondence |
+
+The folios are **two-level** now — `P. 02·1` is the first reading, `P. 03·2`
+the second plate. Numbering stayed a real sequence, which is the test for
+whether it is information or ornament; there are simply two levels of it.
+
+### Screen 1 — Today
+
+Left, a dated day-header set in the display face — *Thursday 10 September ·
+Kṛṣṇa Amāvāsyā*, the day named twice, once by the civil calendar and once by
+the Moon. Under it three or four dated entries, then one italic verdict line.
+Right, the birth plate, pinned, with today's transits ticked around its
+**outer** edge — the plate is the birth moment and today is a marginal note
+on it, never drawn inside the frame.
+
+`today.py` composes the entries. The ledger already knew a transit was inside
+3° of a natal point and it already knew when a planet changes sign; it did
+*not* know when a contact **ends**, because the orb has no boundary in the
+fact. `contact_window()` finds both edges the way `next_sign_ingress` finds a
+sign boundary — coarse scan, then bisect to the hour. Without that date the
+entry reads "Ketu is on your Venus", which is exactly the register the voice
+doctrine refuses.
+
+Two things were wrong when the rendered screen was finally read rather than
+reasoned about:
+
+- **Every ingress line was generic.** "The Sun moves into Virgo on the 17th,
+  carrying authority with it" is true of every reader alive, under a heading
+  that says *Today for this chart*. The line now names the part of **this**
+  chart the sign is — Whole Sign from the lagna, in plain words, never by
+  number: *"— the part of your chart that holds gains."*
+- **On a phone the day was a thousand pixels down.** The plate came first in
+  source order, so arrival on a 390px screen showed a wheel and nothing else.
+  The leaf is a flex column below 1000px with `.daycol { order: -1 }`: the
+  plate is the illustration, the day is the reading.
+
+### Screen 2 — Readings
+
+Unchanged IA: the same seven contents entries, the same verdict-first folds.
+One thing did change — the contents used to start at **02**, because entry 01
+was the day's glance sitting above it on the same screen. Today is its own
+fold now, so the list read as a page missing its first line. The numbers are
+the folios the entries open (01 opens P. 02·1); the two entries that leave
+this fold entirely, Ask and Explore, are unnumbered.
+
+### Screen 3 — Your charts
+
+A gallery-index of divisional plates: D1, D9 and D10 cast, and D2, D7, D12,
+D30, D60 drawn as **dashed empty frames** marked *in preparation*. Listing
+only the three that exist would imply the list is complete — the same honesty
+the disabled school options get.
+
+Each plate opens to its own page, and each page carries a reading **composed
+from that division's own placements**:
+
+> **Cancer rises in the ninth division, so the Moon carries the inner chart —
+> and it keeps the sign it was born in, as does Mercury.**
+
+The first version of this screen showed the plate and the gallery's one-line
+summary, which says what a Navāṃśa *is* and nothing about this one. A gallery
+of charts with no reading is a filing cabinet.
+`test_a_plate_reading_is_computed_not_canned` casts a second chart and
+asserts the three readings differ, because a constant would satisfy every
+other assertion.
+
+The plate on its own page is a **figure at the measure of its column** —
+560px, centred — not the 900px breakout `.kundli` takes by default. Measured:
+it had been arriving twice the size of the title above it.
+
+### Scroll choreography, per screen
+
+The four devices are unchanged; what differs is where each one lands.
+
+| Screen | Rules draw in | Pin | Ghost numeral | Verdict moment |
+|---|---|---|---|---|
+| Today | `Today for this chart` | plate, released at the day verdict | — | the italic day line |
+| Readings | `Contents` | plate, released at the last contents entry | fold number, behind the title | the fold verdict, 68vh |
+| Your charts | `Divisional charts` | — (the gallery is the figure) | — | the plate's own reading, 68vh |
+| Explore | each category rule | — | — | — |
+
+Every entry on Today rises 22px into place (8px at ≤560px) over 620ms on
+`cubic-bezier(.22, .61, .36, 1)`, once, never looping. `prefers-reduced-motion`
+still turns all of it off and un-pins nothing essential —
+`TestReducedMotionInARealBrowser` measures elements that are actually on
+screen, after the fix that had it passing vacuously against a hidden fold.

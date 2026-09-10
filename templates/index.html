@@ -26,6 +26,17 @@
     </select>
     {% if data %}{{ data.birth.place or "Janma kundli" }}{% else %}Sidereal · Lahiri{% endif %}</span>
 </header>
+{% if data %}
+{# The five screens, always reachable. A tab row rather than a back-link
+   chain: Today, Readings and Your Charts are peers, not a hierarchy. #}
+<nav class="tabs" id="tabs">
+  <a href="#top" data-view="view-arrival">Today</a>
+  <a href="#readings" data-view="view-readings">Readings</a>
+  <a href="#charts" data-view="view-charts">Your charts</a>
+  <a href="#explore" data-view="view-explore">Explore</a>
+  <a href="#ask" data-view="view-explore" data-scroll="ask">Ask</a>
+</nav>
+{% endif %}
 
 {% if not data %}
 <!-- ============ Birth form ============ -->
@@ -190,17 +201,12 @@
      chart" — nothing is deleted, everything is re-homed. Spec:
      ui-design/RESTRUCTURE.md -->
 <div class="view" id="view-arrival">
-{# Pagination as identity. Seven folds, and they are a real sequence: the
-   contents, the five domains, and the technical sections. See DOSSIER.md. #}
-<p class="folio"><span class="folio-p">P. 01</span> · Contents<br>
-  <span class="folio-of">Fold 1 of 7</span></p>
-{# THE LEAF. On a wide screen this is two columns: the plate pins in the
-   left one and the day's verdict and the contents scroll past it in the
-   right, releasing at the last contents entry because the grid ends there.
-   At 560px and below it collapses to one column, plate first, unpinned.
-   Same sections, same order, same ids — a wrapper, not a re-organisation. #}
+<p class="folio"><span class="folio-p">P. 01</span> · Today<br>
+  <span class="folio-of">Fold 1 of 4</span></p>
+{# SCREEN 1 — TODAY. The leaf is two columns: the day on the left, the plate
+   pinned on the right with today's transits ticked around its edge. At 390px
+   it collapses to one column, plate first. #}
 <div class="leaf">
-<!-- Chart plate with D1/D9/D10 switcher -->
 <section class="plate showdeg" id="plate">
   <div class="switcher" role="tablist">
     <button class="tab active" role="tab" data-tab="d1">Rāśi · D1</button>
@@ -215,7 +221,8 @@
                               ("d9", data.kundli_d9, "D9 lagna " ~ data.d9_lagna),
                               ("d10", data.kundli_d10, "D10 lagna " ~ data.d10_lagna)] %}
   <div class="pane {% if key != 'd1' %}hidden{% endif %}" id="pane-{{ key }}">
-    <svg viewBox="0 0 300 300" class="kundli" aria-label="North-Indian chart {{ key }}">
+    <svg viewBox="{% if key == 'd1' %}-30 -30 360 360{% else %}0 0 300 300{% endif %}"
+         class="kundli" aria-label="North-Indian chart {{ key }}">
       <g fill="none" class="plate-rule" stroke-width="0.75">
         <rect x="3" y="3" width="294" height="294"/>
         <path d="M3 3 L297 297 M297 3 L3 297"/>
@@ -239,6 +246,16 @@
           {%- endfor -%}
         </text>
         {% endif %}{% endfor %}
+      </g>
+      {% endif %}
+      {% if key == 'd1' %}
+      {# Today's transits, ticked around the outside — the sky now, against
+         the birth chart. Outside the frame on purpose: the plate itself is
+         the birth moment and must not be overwritten by today. #}
+      <g class="ticks" text-anchor="middle">
+        {% for t in data.transit_ticks %}
+        <text x="{{ t.x }}" y="{{ t.y }}">{{ t.label }}</text>
+        {% endfor %}
       </g>
       {% endif %}
     </svg>
@@ -267,62 +284,19 @@
   </div>
 </section>
 
-<section class="chartof" id="glance">
-  <h1 class="chartof-name">{{ data.headline }}</h1>
-  <div class="chartof-sub">{{ data.subline }}</div>
-  {# The three-line identity strip: lagna, Moon and nakshatra, the running
-     period. Enough for someone who knows charts to recognise theirs at a
-     glance, and short enough not to reflow on a phone. #}
-  <ul class="identity">
-    {% for line in data.identity %}<li>{{ line }}</li>{% endfor %}
+<section class="daycol">
+  <h1 class="dayhead">{{ data.day_header }}</h1>
+  <div class="mark"><div class="kicker">Today for this chart</div></div>
+  <ul class="todaylist">
+    {% for e in data.today_entries %}
+    <li class="todayline reveal-rise">{{ e.text }}
+      <span class="todayids">{{ e.ids }}</span></li>
+    {% endfor %}
   </ul>
-  {# The reader chose how this chart is computed; the choice belongs with
-     the chart, not only on the form they have already left. #}
-  <div class="chartof-sub schoolsum {% if schools.changed %}moved{% endif %}">
-    {{ schools.summary }}
-  </div>
-
-  {# The same questions, on the dashboard, re-posting the birth details that
-     are already on this page. Without this the reader would have to retype
-     everything to change one setting. #}
-  <details class="schoolbox onboard">
-    <summary>How this chart is calculated
-      {% if schools.changed %}<span class="chip changed">{{ schools.changed
-      | length }} changed</span>{% endif %}
-    </summary>
-    <form method="post" action="/" class="schoolform">
-      {% for k in ["name","date","time","place","lat","lon","tz",
-                   "p_name","p_date","p_time","p_place","p_lat","p_lon","p_tz"] %}
-      <input type="hidden" name="{{ k }}" value="{{ form.get(k, '') }}">
-      {% endfor %}
-      {% for opt in schools.options %}
-      <fieldset class="school {% if not opt.live %}notlive{% endif %}">
-        <legend>{{ opt.question }}</legend>
-        <p class="consequence">{{ opt.consequence }}</p>
-        {% if not opt.live %}<p class="notyet">{{ opt.unavailable }}</p>{% endif %}
-        {% for ans in opt.answers %}
-        <div class="answer">
-          <label>
-            <input type="radio" name="school_{{ opt.id }}" value="{{ ans.id }}"
-                   {% if schools.selected[opt.id] == ans.id %}checked{% endif %}
-                   {% if not opt.live or not ans.live %}disabled{% endif %}>
-            <span class="answerline"><span class="answertext">{{ ans.text }}</span>{% if ans.recommended %}<span class="rec">recommended</span>{% endif %}</span>
-          </label>
-          <span class="schoolname">{{ ans.school }}</span>
-          <details class="whythis"><summary>explain this</summary>
-            <p>{{ ans.explain }}</p></details>
-        </div>
-        {% endfor %}
-      </fieldset>
-      {% endfor %}
-      <button type="submit" class="cast recast">Recalculate →</button>
-    </form>
-  </details>
-</section>
-<!-- Glance — design 4b: one statement, three chips, single swap panel -->
-<section class="glance">
-  <div class="kicker">{{ data.today.strftime("%a %d %B") }} · {{ data.pancanga.paksa }} {{ data.pancanga.tithi.name }}</div>
-  <p class="statement">{{ data.reading.statement_stem }}<span class="accent">{{ data.reading.emphasis }}.</span></p>
+  {# The one italic line of verdict for the day, composed by reading/. #}
+  <p class="statement dayverdict">{{ data.reading.statement_stem }}<span class="accent">{{ data.reading.emphasis }}.</span></p>
+  {# The long reading is a footnote to the day, not the day itself. It opens
+     only if the reader wants the working. #}
   <details class="fold readfold">
     <summary class="readlink">Read the full day</summary>
     <p class="readlong">{{ data.reading.long }}</p>
@@ -333,6 +307,10 @@
     </div>
   </details>
 
+  {# The sky of the day itself — pañcāṅga, then the three-pane glance. It
+     sits under the day's entries because it answers "what is the day
+     made of", which is the second question, not the first. #}
+  <section class="glance">
   <div class="pstrip">
     <div class="pcell"><div class="plabel">Tithi</div><div class="pvalue">{{ data.pancanga.tithi.name }}</div></div>
     <div class="pcell"><div class="plabel">Nakṣatra</div><div class="pvalue accent">{{ data.pancanga.nakshatra.name }}</div></div>
@@ -398,8 +376,67 @@
       {% endif %}
     </div>
   </div>
-</section>
+</section><!-- /glance -->
 
+</section><!-- /daycol -->
+</div><!-- /leaf -->
+</div><!-- /view-arrival -->
+
+<div class="view" id="view-readings" hidden>
+<p class="folio"><span class="folio-p">P. 02</span> · Readings<br>
+  <span class="folio-of">Fold 2 of 4</span></p>
+<section class="chartof" id="glance">
+  <h1 class="chartof-name">{{ data.headline }}</h1>
+  <div class="chartof-sub">{{ data.subline }}</div>
+  {# The three-line identity strip: lagna, Moon and nakshatra, the running
+     period. Enough for someone who knows charts to recognise theirs at a
+     glance, and short enough not to reflow on a phone. #}
+  <ul class="identity">
+    {% for line in data.identity %}<li>{{ line }}</li>{% endfor %}
+  </ul>
+  {# The reader chose how this chart is computed; the choice belongs with
+     the chart, not only on the form they have already left. #}
+  <div class="chartof-sub schoolsum {% if schools.changed %}moved{% endif %}">
+    {{ schools.summary }}
+  </div>
+
+  {# The same questions, on the dashboard, re-posting the birth details that
+     are already on this page. Without this the reader would have to retype
+     everything to change one setting. #}
+  <details class="schoolbox onboard">
+    <summary>How this chart is calculated
+      {% if schools.changed %}<span class="chip changed">{{ schools.changed
+      | length }} changed</span>{% endif %}
+    </summary>
+    <form method="post" action="/" class="schoolform">
+      {% for k in ["name","date","time","place","lat","lon","tz",
+                   "p_name","p_date","p_time","p_place","p_lat","p_lon","p_tz"] %}
+      <input type="hidden" name="{{ k }}" value="{{ form.get(k, '') }}">
+      {% endfor %}
+      {% for opt in schools.options %}
+      <fieldset class="school {% if not opt.live %}notlive{% endif %}">
+        <legend>{{ opt.question }}</legend>
+        <p class="consequence">{{ opt.consequence }}</p>
+        {% if not opt.live %}<p class="notyet">{{ opt.unavailable }}</p>{% endif %}
+        {% for ans in opt.answers %}
+        <div class="answer">
+          <label>
+            <input type="radio" name="school_{{ opt.id }}" value="{{ ans.id }}"
+                   {% if schools.selected[opt.id] == ans.id %}checked{% endif %}
+                   {% if not opt.live or not ans.live %}disabled{% endif %}>
+            <span class="answerline"><span class="answertext">{{ ans.text }}</span>{% if ans.recommended %}<span class="rec">recommended</span>{% endif %}</span>
+          </label>
+          <span class="schoolname">{{ ans.school }}</span>
+          <details class="whythis"><summary>explain this</summary>
+            <p>{{ ans.explain }}</p></details>
+        </div>
+        {% endfor %}
+      </fieldset>
+      {% endfor %}
+      <button type="submit" class="cast recast">Recalculate →</button>
+    </form>
+  </details>
+</section>
 <!-- The domain grid. Each card carries a one-line teaser composed
      deterministically from that domain's own checklist (domainread.py) —
      a CONDITION, never a prediction, and never written by a model. -->
@@ -413,7 +450,7 @@
   <div class="cards">
     {% for d in data.domains %}
     <a class="dcard" href="#{{ d.id }}" data-view="view-domain-{{ d.id }}">
-      <span class="dcard-no">{{ "%02d"|format(loop.index + 1) }}</span>
+      <span class="dcard-no">{{ "%02d"|format(loop.index) }}</span>
       <span class="dcard-title">{{ d.title }}</span>
       <span class="dcard-teaser">{{ d.teaser }}</span>
       <span class="dcard-more">Read it →</span>
@@ -427,7 +464,7 @@
       <span class="dcard-more">Ask →</span>
     </a>
     <a class="dcard dcard-alt dcard-wide" href="#explore" data-view="view-explore">
-      <span class="dcard-no">07</span>
+      <span class="dcard-no">—</span>
       <span class="dcard-title">Explore the full chart</span>
       {# Named by what they are, not by their Sanskrit. The section names are
          waiting inside, where a term can be glossed — on the arrival screen
@@ -438,16 +475,102 @@
     </a>
   </div>
 </section>
-</div><!-- /leaf -->
-</div><!-- /view-arrival -->
+</div><!-- /view-readings -->
+
+<div class="view" id="view-charts" hidden>
+<p class="folio"><span class="folio-p">P. 03</span> · Your charts<br>
+  <span class="folio-of">Fold 3 of 4</span></p>
+{# SCREEN 3 — YOUR CHARTS. A gallery of small plates. Three are cast; five
+   are named and marked "in preparation" rather than quietly omitted, which
+   would imply the list is complete. #}
+<section class="exindex">
+  <h1 class="chartof-name">Your charts</h1>
+  <div class="mark"><div class="kicker">Divisional charts</div></div>
+  <div class="gallery">
+    {% for v in data.vargas %}
+    {% if v.live %}
+    <a class="gcard" href="#chart-{{ v.key }}" data-view="view-varga-{{ v.key }}">
+      <svg viewBox="0 0 300 300" class="gplate" aria-hidden="true">
+        <g fill="none" class="plate-rule" stroke-width="2">
+          <rect x="3" y="3" width="294" height="294"/>
+          <path d="M3 3 L297 297 M297 3 L3 297"/>
+        </g>
+        <path class="plate-diamond" fill="none" stroke-width="2.6"
+              d="M150 3 L297 150 L150 297 L3 150 Z"/>
+        <g class="minigrahas" text-anchor="middle">
+          {% for h in v.houses %}{% if h.line1 %}
+          <text x="{{ h.pl_pos[0] }}" y="{{ h.pl_pos[1] }}">{{ h.line1 }}</text>
+          {% endif %}{% endfor %}
+        </g>
+      </svg>
+      <span class="gcard-code">{{ v.code }} {{ v.name }}</span>
+      <span class="gcard-sum">{{ v.summary }}</span>
+      <span class="gcard-more">Open →</span>
+    </a>
+    {% else %}
+    <div class="gcard gcard-soon">
+      <svg viewBox="0 0 300 300" class="gplate gplate-empty" aria-hidden="true">
+        <g fill="none" class="plate-rule" stroke-width="2" stroke-dasharray="6 6">
+          <rect x="3" y="3" width="294" height="294"/>
+          <path d="M150 3 L297 150 L150 297 L3 150 Z"/>
+        </g>
+      </svg>
+      <span class="gcard-code">{{ v.code }} {{ v.name }}</span>
+      <span class="gcard-sum">{{ v.summary }}</span>
+      <span class="gcard-more">In preparation</span>
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+</section>
+</div><!-- /view-charts -->
+
+{% for v in data.vargas %}{% if v.live %}
+<div class="view" id="view-varga-{{ v.key }}" hidden>
+<p class="folio"><span class="folio-p">P. 03·{{ loop.index }}</span> · {{ v.code }} {{ v.name }}<br>
+  <span class="folio-of">Fold 3 of 4</span></p>
+<a class="backlink" href="#charts" data-view="view-charts">← Your charts</a>
+<section class="domainread">
+  <div class="verdictmoment">
+    <h1 class="chartof-name">{{ v.code }} · {{ v.name }}</h1>
+    {# The plate's OWN reading, composed from this division's placements —
+       answer first. The line under it says what the division is for, which
+       is true of every chart and so comes second. #}
+    <p class="dverdict reveal-rise">{{ v.reading }}</p>
+    <p class="chartof-sub platewhat">{{ v.summary }}</p>
+  </div>
+  <svg viewBox="0 0 300 300" class="kundli" aria-label="{{ v.code }} plate">
+    <g fill="none" class="plate-rule" stroke-width="0.75">
+      <rect x="3" y="3" width="294" height="294"/>
+      <path d="M3 3 L297 297 M297 3 L3 297"/>
+    </g>
+    <path class="plate-diamond" fill="none" stroke-width="1"
+          d="M150 3 L297 150 L150 297 L3 150 Z"/>
+    <g class="signnum" text-anchor="middle">
+      {% for h in v.houses %}<text x="{{ h.num_pos[0] }}" y="{{ h.num_pos[1] }}">{{ h.sign_num }}</text>{% endfor %}
+    </g>
+    <g class="grahas" text-anchor="middle">
+      {% for h in v.houses %}{% if h.line1 %}
+      <text x="{{ h.pl_pos[0] }}" y="{{ h.pl_pos[1] }}">{{ h.line1 }}{% if h.line2 %}<tspan x="{{ h.pl_pos[0] }}" dy="14">{{ h.line2 }}</tspan>{% endif %}</text>
+      {% endif %}{% endfor %}
+    </g>
+  </svg>
+  <div class="platecaption">
+    <span class="plateno">{{ v.code }}</span> {{ v.lagna }} rising
+    <span class="platecast">cast {{ data.today.strftime("%-d %B %Y") }} · Lahiri ayanāṃśa</span>
+  </div>
+</section>
+</div><!-- /view-varga-{{ v.key }} -->
+{% endif %}{% endfor %}
+
 
 <!-- ============ DOMAIN VIEWS ============
      Verdict first: the synthesis on top, then the checklist steps as
      expanders, each naming the facts it was composed from. -->
 {% for d in data.domains %}
 <div class="view" id="view-domain-{{ d.id }}" hidden>
-  <p class="folio"><span class="folio-p">P. {{ "%02d"|format(loop.index + 1) }}</span> · {{ d.title }}<br>
-    <span class="folio-of">Fold {{ loop.index + 1 }} of 7</span></p>
+  <p class="folio"><span class="folio-p">P. 02·{{ loop.index }}</span> · {{ d.title }}<br>
+    <span class="folio-of">Fold 2 of 4</span></p>
   <a class="backlink" href="#top" data-view="view-arrival">← All of your chart</a>
   <section class="domainread">
     {# The folio, set enormous and nearly invisible — the plate has released
@@ -500,8 +623,8 @@
      Every technical section, unchanged, behind the sticky nav it always
      had. Re-homed, not rewritten. -->
 <div class="view" id="view-explore" hidden>
-<p class="folio"><span class="folio-p">P. 07</span> · The full chart<br>
-  <span class="folio-of">Fold 7 of 7</span></p>
+<p class="folio"><span class="folio-p">P. 04</span> · The full chart<br>
+  <span class="folio-of">Fold 4 of 4</span></p>
 <a class="backlink" href="#top" data-view="view-arrival">← All of your chart</a>
 {# EXPLORE IS AN INDEX, NOT A DUMP.
    Eight categories; opening one shows that category's sections and hides
@@ -1141,6 +1264,18 @@ Sidereal · Lahiri ayanāṃśa · Whole Sign · North-Indian<br>
   if (!views.length) return;
   const byId = new Map(views.map(v => [v.id, v]));
 
+  // Which tab owns which view — a domain fold belongs to Readings, a
+  // divisional plate to Your charts, so the row never goes blank mid-read.
+  function markTabs(viewId) {
+    const owner =
+      viewId === "view-arrival" ? "view-arrival" :
+      viewId.startsWith("view-domain-") ? "view-readings" :
+      viewId.startsWith("view-varga-") ? "view-charts" :
+      viewId;
+    document.querySelectorAll("#tabs a").forEach(a =>
+      a.classList.toggle("active", a.getAttribute("data-view") === owner));
+  }
+
   function show(viewId, scrollTo) {
     const target = byId.get(viewId) || byId.get("view-arrival");
     views.forEach(v => { v.hidden = (v !== target); });
@@ -1150,6 +1285,7 @@ Sidereal · Lahiri ayanāṃśa · Whole Sign · North-Indian<br>
     if (scrollTo) {
       const el = document.getElementById(scrollTo);
       if (el) {
+        markTabs(viewId);
         // Opening a technical section directly means opening its category
         // first; otherwise the CSS is still hiding the thing we scroll to.
         const cat = window.sideraCategoryOf && window.sideraCategoryOf(scrollTo);
@@ -1162,6 +1298,7 @@ Sidereal · Lahiri ayanāṃśa · Whole Sign · North-Indian<br>
     }
     window.scrollTo(0, 0);
     target.focus({ preventScroll: true });
+    markTabs(viewId);
     window.dispatchEvent(new CustomEvent("sidera:viewshown", {detail: target}));
   }
 
@@ -1178,6 +1315,9 @@ Sidereal · Lahiri ayanāṃśa · Whole Sign · North-Indian<br>
       if (window.sideraShowCategory) window.sideraShowCategory(h.slice(4));
       return;
     }
+    if (h === "readings") return show("view-readings");
+    if (h === "charts") return show("view-charts");
+    if (h.startsWith("chart-")) return show("view-varga-" + h.slice(6));
     if (h === "explore") {
       show("view-explore");
       if (window.sideraShowCategory) window.sideraShowCategory("index");

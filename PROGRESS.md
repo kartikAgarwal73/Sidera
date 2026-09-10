@@ -1,5 +1,79 @@
 # PROGRESS
 
+## Five screens: Today, Readings, Your charts, Explore, Ask ✅ (2026-09-11)
+
+The dashboard was one long arrival page. It is five peers now, reached from a
+tab row in the masthead, with two-level folios — `P. 02·1` is the first
+reading, `P. 03·2` the second plate.
+
+### Today (new)
+
+`today.py` composes three or four dated lines from the ephemeris. The ledger
+knew a transit was inside 3° of a natal point and knew when a planet changes
+sign; it did **not** know when a contact *ends*, because the orb has no
+boundary in the fact. `contact_window()` finds both edges the way
+`next_sign_ingress` finds a sign boundary — coarse scan, then bisect to the
+hour. Without that date the line reads "Ketu is on your Venus", which is the
+vague register the doctrine exists to refuse.
+
+The plate is pinned beside it with today's transits ticked around its
+**outer** edge. Inside the frame they collided with the plate's own sign
+numerals at every width, which `TestNothingOverlaps` caught immediately; the
+D1 viewBox is widened to `-30 -30 360 360` and the ticks live in the margin.
+
+Two faults found only by reading the rendered screen:
+
+- **Every ingress line was generic.** "The Sun moves into Virgo on the 17th,
+  carrying authority with it" is true of every reader alive, under a heading
+  that reads *Today for this chart*. Each line now names the part of **this**
+  chart the sign is — Whole Sign from the lagna, in plain words, never by
+  number. `test_a_sign_change_is_told_against_this_chart` recomputes the house
+  from the chart and asserts the line carries it; **verified red** against the
+  old wording.
+- **On a phone the day was ~1000px down.** Arrival on a 390px screen showed a
+  wheel and nothing else, because the plate came first in source order. The
+  leaf is a flex column below 1000px with `.daycol { order: -1 }`.
+
+### Your charts (new)
+
+D1, D9, D10 as small plates; D2, D7, D12, D30, D60 as dashed empty frames
+marked *in preparation* — listing only the three that exist would imply the
+list is complete.
+
+Each opens to its own page with a reading composed from that division's own
+placements: the lagna lord and where it stands, which planets keep their sign
+into the ninth, what occupies the tenth of the tenth. The first version showed
+the plate and the gallery's one-line summary, which says what a Navāṃśa *is*
+and nothing about this one — a gallery of charts with no reading is a filing
+cabinet. `test_a_plate_reading_is_computed_not_canned` casts a second chart
+and asserts the three readings differ, because a constant would satisfy every
+other assertion.
+
+The plate on its own page is a figure at the measure of its column (560px),
+not the 900px breakout `.kundli` takes by default — measured; it had been
+arriving twice the size of the title above it.
+
+### Readings
+
+IA unchanged. The contents used to start at **02**, because entry 01 was the
+day's glance sitting above it on the same screen; with Today its own fold the
+list read as a page missing its first line. The numbers are the folios the
+entries open, and the two that leave the fold entirely are unnumbered.
+
+### Repairs along the way
+
+- A template slice taken with `split("\n")[6:]` cut mid-block, leaving a
+  duplicated `<p class="readlong">`, a dangling `</details>`, and 26 `<section>`
+  against 27 `</section>`. The pañcāṅga strip and the three-pane glance are
+  back inside a real `<section class="glance">`.
+- `TestEditorialDossier.measured` was measuring `#view-arrival` for `.dcard`,
+  `.identity` and `.statement` — all of which had moved to Readings, so it was
+  reading zero-height rects and passing for the wrong reason. It navigates to
+  `#readings` now, captures the plate strokes on arrival first (asserting the
+  set is non-empty), and measures the display hero that fold actually has.
+
+**Tests:** 483 passed.
+
 ## The collision, the hierarchy, the index, and verdicts that name something ✅ (2026-09-10)
 
 Four findings from a live walk. All four fixed, each with a gate.

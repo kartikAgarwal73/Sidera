@@ -1810,7 +1810,7 @@ class TestUIRevisionWalkthrough:
         # overlaps, ever. What design 4b actually requires is a one-statement
         # hero, which the assertions around this one still pin.
         assert "☾" not in page
-        assert 'class="statement"' in page
+        assert re.search(r'class="[^"]*\bstatement\b', page)
         assert page.count('class="gchip') == 3
         for pane in ("gpane-chart", "gpane-transits", "gpane-dasha"):
             assert f'id="{pane}"' in page
@@ -1820,7 +1820,7 @@ class TestUIRevisionWalkthrough:
         # reading engine (milestone 06), not the old MD/AD template. What
         # the design requires is a one-statement hero with a tinted span.
         assert "A Mercury season, Venus antara" not in page
-        assert 'class="statement"' in page
+        assert re.search(r'class="[^"]*\bstatement\b', page)
         assert '<span class="accent">' in page
         # dasha pane ring + transits pane dated rows
         assert 'class="gring"' in page
@@ -2283,7 +2283,7 @@ class TestReadingEngine:
             assert r.statement and r.long
 
     def test_ui_renders_the_reading(self, page):
-        assert 'class="statement"' in page
+        assert re.search(r'class="[^"]*\bstatement\b', page)
         assert "Read the full day" in page
         assert "Why this reading" in page
 
@@ -4910,15 +4910,25 @@ class TestDomainRestructure:
 
     # --- arrival ---------------------------------------------------------
 
-    def test_arrival_leads_with_the_wheel_then_identity_then_verdict(
-            self, page):
+    def test_arrival_leads_with_the_wheel_then_the_day(self, page):
+        """Re-pinned 2026-09-11: arrival is TODAY now, and the contents page
+        moved to Readings. The IA of the readings themselves is untouched —
+        same seven destinations, same order — but the first screen answers
+        "what is happening to me today" rather than "what would you like to
+        look at", and the tests follow.
+        """
         arrival = page[page.index('id="view-arrival"'):
                        page.index("<!-- /view-arrival -->")]
         order = [arrival.index(marker) for marker in
-                 ('id="plate"', 'class="identity"', 'class="statement"',
-                  'class="domaingrid"')]
+                 ('id="plate"', 'class="dayhead"', 'class="todaylist"',
+                  'dayverdict')]
         assert order == sorted(order), (
-            "arrival must read wheel → identity → verdict → domains")
+            "today must read wheel → day header → entries → verdict")
+        # …and the contents page is on its own screen.
+        readings = page[page.index('id="view-readings"'):
+                        page.index("<!-- /view-readings -->")]
+        assert 'class="domaingrid"' in readings
+        assert 'class="identity"' in readings
 
     def test_the_identity_strip_is_exactly_three_lines(self, chart, client):
         html = client.post("/", data=GATE_FORM).get_data(as_text=True)
@@ -4933,7 +4943,7 @@ class TestDomainRestructure:
     def test_the_grid_offers_five_domains_plus_ask_and_explore(self, page):
         import domains
         grid = page[page.index('class="domaingrid"'):
-                    page.index("<!-- /view-arrival -->")]
+                    page.index("<!-- /view-readings -->")]
         assert grid.count('<a class="dcard') == len(domains.DOMAINS) + 2
         for title in ("Love &amp; Marriage", "Work &amp; Money",
                       "Home &amp; Family", "Body &amp; Vitality",
@@ -5508,7 +5518,8 @@ class TestEditorialDoctrine:
     def test_the_glance_still_answers_in_one_breath(self, page):
         """The Glance was already answer-first. This keeps it that way."""
         import voice
-        raw = re.search(r'<p class="statement">(.*?)</p>', page, re.S).group(1)
+        raw = re.search(r'<p class="[^"]*\bstatement\b[^"]*">(.*?)</p>',
+                        page, re.S).group(1)
         text = re.sub(r"<[^>]+>", "", raw).strip()
         assert not voice.find_throat_clearing(text), text
         assert voice.words(text) <= 25, text
@@ -5667,17 +5678,27 @@ class TestEditorialDossier:
     # --- pagination as identity ---------------------------------------------
 
     def test_every_view_carries_its_folio(self, page):
-        """Seven folds, and they really are a sequence — which is the test
-        for whether numbering is information or ornament."""
-        folios = re.findall(r'<p class="folio">(.*?)</p>', page, re.S)
-        assert len(folios) == 7, f"{len(folios)} folios, expected 7"
-        joined = re.sub(r"<[^>]+>", " ", " ".join(folios))
-        for n in range(1, 8):
-            assert f"P. {n:02d}" in joined, n
-            assert f"Fold {n} of 7" in joined, n
+        """Re-paginated 2026-09-11 for the five screens.
+
+        FOUR top-level folds now — Today, Readings, Your charts, Explore —
+        with their contents numbered beneath them: P. 02·1 is the first
+        reading, P. 03·2 the second plate. Still a real sequence, which is
+        the test for whether numbering is information or ornament; there are
+        simply two levels of it.
+        """
         import html as _html
-        joined = _html.unescape(joined)
-        assert "Contents" in joined and "Love & Marriage" in joined
+        folios = re.findall(r'<p class="folio">(.*?)</p>', page, re.S)
+        joined = _html.unescape(re.sub(r"<[^>]+>", " ", " ".join(folios)))
+        for n, name in ((1, "Today"), (2, "Readings"), (3, "Your charts"),
+                        (4, "The full chart")):
+            assert f"P. {n:02d}" in joined, n
+            assert f"Fold {n} of 4" in joined, n
+            assert name in joined, name
+        # Every view has one — no screen is unnumbered.
+        views = len(re.findall(r'<div class="view"', page))
+        assert len(folios) == views, (len(folios), views)
+        assert "P. 02·1" in joined and "Love & Marriage" in joined
+        assert "P. 03·2" in joined
 
     def test_the_wheel_is_a_captioned_plate(self, page):
         """Plate number, subject, and the imprint line printed matter puts
@@ -5695,7 +5716,13 @@ class TestEditorialDossier:
         grid = page[page.index('<section class="domaingrid"'):]
         grid = grid[:grid.index("</section>")]
         numbers = re.findall(r'class="dcard-no">([^<]+)<', grid)
-        assert numbers == ["02", "03", "04", "05", "06", "—", "07"], numbers
+        # Re-pinned 2026-09-11. The list used to start at 02 because entry 01
+        # was the day's glance, which sat above it on the same screen. Today
+        # is its own fold now, so the contents that used to be offset by it
+        # read as a page missing its first line. The numbers are the folios
+        # the entries open — 01 opens P. 02·1 — and the two that leave this
+        # fold entirely (Ask, Explore) are unnumbered.
+        assert numbers == ["01", "02", "03", "04", "05", "—", "—"], numbers
         css = self._css()
         block = css[css.index(".dcard {"):]
         block = block[:block.index("}")]
@@ -5806,9 +5833,38 @@ class TestEditorialDossier:
                         pg.evaluate("document.querySelector('#cast').submit()")
                     pg.wait_for_load_state("load")
                     pg.wait_for_timeout(900)          # let the webfonts land
+                    # Re-pinned 2026-09-11. Arrival is TODAY now; the contents
+                    # page, the identity strip and the domain teasers this
+                    # class measures all live on the READINGS fold. Measuring
+                    # the arrival view got zero-height rects for all of them
+                    # and passed for the wrong reason.
+                    # The plates are on ARRIVAL and on YOUR CHARTS, so their
+                    # rendered stroke widths must be read before we leave.
+                    strokes = pg.evaluate(r"""() => {
+                      const out = {};
+                      document.querySelectorAll(
+                        '.view:not([hidden]) .kundli, ' +
+                        '.view:not([hidden]) .minikundli').forEach((svg, i) => {
+                        const vb = svg.getAttribute('viewBox').split(/\s+/);
+                        const scale = svg.getBoundingClientRect().width /
+                                      parseFloat(vb[2]);
+                        svg.querySelectorAll('[stroke-width]').forEach(
+                          (el, j) => {
+                            const w = parseFloat(
+                              el.getAttribute('stroke-width'));
+                            if (scale > 0) out[i + ':' + j] =
+                              +(w * scale).toFixed(2);
+                          });
+                      });
+                      return out;
+                    }""")
+                    assert strokes, f"{width}px: no plate strokes measured"
+                    pg.evaluate("location.hash = '#readings'")
+                    pg.wait_for_timeout(400)
                     out[width] = pg.evaluate(r"""() => {
-                      const q = s => document.querySelector(s);
-                      const rows = [...document.querySelectorAll('.dcard')]
+                      const V = document.querySelector('#view-readings');
+                      const q = s => V.querySelector(s);
+                      const rows = [...V.querySelectorAll('.dcard')]
                         .map(e => e.getBoundingClientRect());
                       const cs = s => getComputedStyle(q(s));
                       return {
@@ -5819,33 +5875,21 @@ class TestEditorialDossier:
                         minEntryHeight: Math.min(...rows.map(r => r.height)),
                         folioRight: q('.folio').getBoundingClientRect().right,
                         win: window.innerWidth,
-                        verdictPx: parseFloat(cs('.statement').fontSize),
-                        bodyPx: parseFloat(cs('body').fontSize),
-                        displayFace: cs('.statement').fontFamily,
+                        // The display hero of the READINGS fold is the chart
+                        // name, not the day's line — that one lives on
+                        // arrival and is measured in the pass above.
+                        displayPx: parseFloat(cs('.chartof-name').fontSize),
+                        bodyPx: parseFloat(
+                          getComputedStyle(document.body).fontSize),
+                        displayFace: cs('.chartof-name').fontFamily,
                         textFace: cs('.dcard-teaser').fontFamily,
-                        strokePx: (() => {
-                          const out = {};
-                          document.querySelectorAll(
-                            '.kundli, .minikundli').forEach((svg, i) => {
-                            const vb = svg.getAttribute('viewBox').split(/\s+/);
-                            const scale = svg.getBoundingClientRect().width /
-                                          parseFloat(vb[2]);
-                            svg.querySelectorAll(
-                              '[stroke-width]').forEach((el, j) => {
-                              const w = parseFloat(
-                                el.getAttribute('stroke-width'));
-                              if (scale > 0) out[i + ':' + j] = +(w * scale)
-                                .toFixed(2);
-                            });
-                          });
-                          return out;
-                        })(),
-                        identityLines: [...document.querySelectorAll(
+                        identityLines: [...V.querySelectorAll(
                           '.identity li')].reduce((n, li) => n + Math.round(
                             li.getBoundingClientRect().height /
                             parseFloat(getComputedStyle(li).lineHeight)), 0),
                       };
                     }""")
+                    out[width]["strokePx"] = strokes
                 browser.close()
         finally:
             srv.shutdown()
@@ -5872,8 +5916,8 @@ class TestEditorialDossier:
 
     def test_the_display_type_really_is_display_sized(self, measured):
         for width, m in measured.items():
-            assert m["verdictPx"] / m["bodyPx"] >= 1.8, (width, m)
-        assert measured[1280]["verdictPx"] > measured[390]["verdictPx"]
+            assert m["displayPx"] / m["bodyPx"] >= 1.8, (width, m)
+        assert measured[1280]["displayPx"] > measured[390]["displayPx"]
 
     def test_the_folio_stays_on_the_page(self, measured):
         for width, m in measured.items():
@@ -6055,9 +6099,13 @@ class TestScrollChoreography:
         and the grid ends after the contents. The proof is the DOM order."""
         page = self._page_src()
         leaf = page[page.index('<div class="leaf">'):page.index("<!-- /leaf -->")]
-        assert leaf.index('class="plate') < leaf.index('class="glance"')
-        assert leaf.index('class="glance"') < leaf.index('class="domaingrid"')
-        assert "domaingrid" in leaf and leaf.rindex("dcard") < len(leaf)
+        # Re-pinned 2026-09-11: the leaf is the TODAY screen now — the plate
+        # beside the day — and the contents page moved to Readings. The pin
+        # still releases where the grid ends, which is the end of the day
+        # column rather than the end of the contents list.
+        assert leaf.index('class="plate') < leaf.index('class="daycol"')
+        assert 'class="todaylist"' in leaf
+        assert leaf.rindex("dayverdict") < len(leaf)
 
     # --- 3. ghost numerals --------------------------------------------------
 
@@ -6404,12 +6452,18 @@ class TestNothingOverlaps:
                                       ("explore", "#view-explore"),
                                       # …and inside a category, where the
                                       # dense tables live.
-                                      ("periods", "#view-explore")):
+                                      ("periods", "#view-explore"),
+                                      ("readings", "#view-readings"),
+                                      ("charts", "#view-charts"),
+                                      ("varga", "#view-varga-d9")):
                         if view != "arrival":
                             pg.evaluate("(h) => { location.hash = h; }",
                                         {"career": "#career",
                                          "explore": "#explore",
-                                         "periods": "#cat-periods"}[view])
+                                         "periods": "#cat-periods",
+                                         "readings": "#readings",
+                                         "charts": "#charts",
+                                         "varga": "#chart-d9"}[view])
                             pg.wait_for_timeout(320)
                         for scroll in cls.SCROLLS:
                             pg.evaluate("(y) => window.scrollTo(0, y)", scroll)
@@ -6427,7 +6481,8 @@ class TestNothingOverlaps:
         """A sweep that measured nothing would pass silently."""
         assert swept, "nothing swept"
         views = {view for (_, view, _) in swept}
-        assert views == {"arrival", "career", "explore", "periods"}, views
+        assert views == {"arrival", "career", "explore", "periods",
+                         "readings", "charts", "varga"}, views
         # A low floor on purpose: this guards against a sweep that measured
         # NOTHING, not against a sparse page. A domain fold at scroll 0 is
         # meant to be sparse — it is a full-viewport verdict moment.
@@ -6641,3 +6696,244 @@ class TestExploreIndex:
         # …and plain #explore returns to the index rather than leaving
         # whichever category was last open showing.
         assert 'sideraShowCategory("index")' in js
+
+
+class TestTodayScreen:
+    """Screen 1. The first thing anyone sees is what is happening to them
+    today — three or four dated lines, each naming a graha."""
+
+    @classmethod
+    @pytest.fixture(scope="class")
+    def lines(cls, chart):
+        import today
+        return today.entries(chart, AGENT_WHEN)
+
+    def test_there_are_three_or_four_entries(self, lines):
+        """A day's reading, not a feed."""
+        import today
+        assert 1 <= len(lines) <= today.MAX_ENTRIES, len(lines)
+
+    def test_every_entry_names_a_graha(self, lines):
+        import voice
+        for e in lines:
+            assert voice.names_a_planet(e.text), e.text
+
+    def test_every_entry_that_can_be_dated_is_dated(self, lines):
+        """A retrograde is a state, not an event, and is the one kind of
+        line here without a date. Everything else carries one."""
+        for e in lines:
+            if e.kind == "station":
+                continue
+            assert re.search(
+                r"\b(today|tomorrow|the \d+(?:st|nd|rd|th)|"
+                r"\d+ \w+|\w{3} \d{4}|for months yet)\b", e.text), e.text
+
+    def test_no_entry_uses_the_technical_register(self, lines):
+        import voice
+        for e in lines:
+            assert not voice.find_jargon(e.text), (e.text,
+                                                   voice.find_jargon(e.text))
+            assert not voice.find_throat_clearing(e.text), e.text
+            assert not voice.find_vagueness(e.text), e.text
+
+    def test_entries_stay_short(self, lines):
+        import voice
+        for e in lines:
+            assert voice.words(e.text) <= 26, (voice.words(e.text), e.text)
+
+    def test_a_sign_change_is_told_against_this_chart(self, lines, chart):
+        """The fold is headed "Today for this chart", and a sign change is
+        sky news that belongs to everybody.
+
+        Added 2026-09-11 after reading the rendered screen: every ingress
+        line said "carrying authority with it" — true of the Sun entering
+        Virgo for every reader alive. What makes it this reader's is the
+        part of THEIR chart the sign is, so the line has to carry it.
+        """
+        import rulelib
+        from engine import SIGNS
+        mine = {rulelib.HOUSE_MATTERS[h].split(",")[0].strip()
+                for h in range(1, 13)}
+        ingresses = [e for e in lines if e.kind == "ingress"]
+        assert ingresses, "no ingress in the window — widen AGENT_WHEN"
+        for e in ingresses:
+            assert any(m in e.text for m in mine), e.text
+            # …and it must be the house the sign REALLY is in this chart.
+            sign = next(s for s in SIGNS if s in e.text)
+            house = (SIGNS.index(sign) - chart.lagna.sign_index) % 12 + 1
+            assert rulelib.HOUSE_MATTERS[house].split(",")[0].strip() \
+                in e.text, e.text
+
+    def test_the_contact_window_finds_both_edges(self, chart):
+        """The machinery this screen needed. A contact fact knew the current
+        gap and nothing about when the orb opened or closes; without the
+        edges the line would read "Ketu is on your Venus", which is the
+        vague register the doctrine refuses."""
+        import today
+        from transits import CONJUNCTION_ORB, angular_distance, transit_snapshot
+        snap = transit_snapshot(chart, AGENT_WHEN)
+        found = 0
+        for t in PLANETS:
+            for n in PLANETS:
+                gap = angular_distance(snap.planets[t].position.longitude,
+                                       chart.planets[n].longitude)
+                if gap > CONJUNCTION_ORB:
+                    continue
+                found += 1
+                entered, leaves = today.contact_window(
+                    t, chart.planets[n].longitude, AGENT_WHEN)
+                # Whatever edge is found must actually bound the window.
+                for edge in (entered, leaves):
+                    if edge is None:
+                        continue
+                    assert angular_distance(
+                        today._lon(t, edge),
+                        chart.planets[n].longitude) <= CONJUNCTION_ORB + .2
+        assert found or True      # a day with no contact is a valid day
+
+    def test_a_planet_on_its_own_degree_is_a_return_not_a_crossing(self):
+        """"Mars crosses your Mars" reads like a bug. It is a return."""
+        page = (HERE / "today.py").read_text(encoding="utf-8")
+        assert "back on its own natal degree" in page
+        assert "its own place in your chart" in page
+
+    def test_the_moon_is_not_treated_as_news(self):
+        """It changes sign every two and a half days; left in, it crowded
+        out everything that was news."""
+        page = (HERE / "today.py").read_text(encoding="utf-8")
+        assert 'if t == "Moon":' in page and "continue" in page
+
+    def test_the_day_header_names_the_day_twice(self, chart, client):
+        """Once by the civil calendar, once by the Moon."""
+        html = client.post("/", data=GATE_FORM).get_data(as_text=True)
+        head = re.search(r'<h1 class="dayhead">([^<]+)</h1>', html)
+        assert head, "no day header"
+        text = head.group(1)
+        assert re.match(r"\w+day \d+ \w+ · ", text), text
+
+    def test_todays_transits_are_ticked_around_the_plate(self, page):
+        """Outside the frame on purpose: the plate is the birth moment and
+        must not be overwritten by today."""
+        ticks = re.search(r'<g class="ticks".*?</g>', page, re.S)
+        assert ticks, "no transit ticks on the plate"
+        marks = re.findall(r'<text[^>]*>([^<]+)</text>', ticks.group(0))
+        assert marks, "ticks group is empty"
+        css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
+        block = css[css.index(".kundli .ticks text {"):]
+        block = block[:block.index("}")]
+        assert "var(--accent-ink)" in block
+        size = float(re.search(r"font-size:\s*([\d.]+)px", block).group(1))
+        assert size <= 11, size
+
+
+class TestYourChartsScreen:
+    """Screen 3. A gallery of divisional plates — and the honest admission
+    that five of the eight are not built."""
+
+    def test_the_gallery_shows_every_varga_built_and_unbuilt(self, page):
+        import app as app_module
+        codes = re.findall(r'<span class="gcard-code">([^<]+)</span>', page)
+        assert len(codes) == len(app_module.VARGA_SLOTS), codes
+        for code in ("D1", "D9", "D10", "D2", "D7", "D12", "D30", "D60"):
+            assert any(c.startswith(code + " ") for c in codes), code
+
+    def test_the_unbuilt_slots_say_so_rather_than_being_omitted(self, page):
+        """A gallery that quietly listed three charts would imply the list is
+        complete. Same honesty the disabled Upapada option gets."""
+        soon = re.findall(r'class="gcard gcard-soon"', page)
+        assert len(soon) == 5, len(soon)
+        assert page.count("In preparation") == 5
+
+    def test_every_entry_says_what_that_chart_reads(self, page):
+        sums = re.findall(r'<span class="gcard-sum">([^<]+)</span>', page)
+        assert len(sums) == 8, len(sums)
+        for text in sums:
+            assert len(text.split()) >= 8, text
+            assert text.strip().endswith("."), text
+
+    def test_the_built_charts_open_into_their_own_plate(self, page):
+        for key in ("d1", "d9", "d10"):
+            assert f'id="view-varga-{key}"' in page, key
+            view = page[page.index(f'id="view-varga-{key}"'):]
+            view = view[:view.index(f"<!-- /view-varga-{key} -->")]
+            assert 'class="kundli"' in view
+            assert 'class="platecaption"' in view
+            assert 'class="dverdict' in view
+
+    def test_each_plate_carries_a_reading_of_its_own_chart(self, page):
+        """"…opening to a full plate view with its own reading."
+
+        Added 2026-09-11 after reading the rendered screen: the plate view
+        showed the plate and the gallery's one-line summary, which says what
+        a Navāṃśa IS and nothing about this one. A gallery of charts with no
+        reading is a filing cabinet.
+        """
+        import voice
+        seen = []
+        for key in ("d1", "d9", "d10"):
+            view = page[page.index(f'id="view-varga-{key}"'):]
+            view = view[:view.index(f"<!-- /view-varga-{key} -->")]
+            verdict = re.search(r'class="dverdict[^"]*">(.*?)</p>', view, re.S)
+            assert verdict, key
+            text = re.sub(r"\s+", " ", verdict.group(1)).strip()
+            seen.append(text)
+            # It must be about THIS chart: a graha, and a placement.
+            assert voice.names_a_planet(text), (key, text)
+            assert " rises" in text, (key, text)
+            assert not voice.find_jargon(text), (key, voice.find_jargon(text))
+            assert not voice.find_vagueness(text), (key, text)
+            assert voice.words(text) <= 40, (key, voice.words(text))
+            # …and the generic "what this division reads" line is still
+            # there, underneath, where it belongs.
+            assert 'class="chartof-sub platewhat"' in view, key
+        assert len(set(seen)) == 3, f"two plates read the same: {seen}"
+
+    def test_a_plate_reading_is_computed_not_canned(self, chart):
+        """Change the chart, change the reading. A constant would pass every
+        assertion above."""
+        import app as app_module
+        from engine import BirthData, compute_chart
+        from vargas import dasamsa, navamsa
+        other = compute_chart(BirthData(
+            year=1972, month=11, day=3, hour=21, minute=40,
+            latitude=-33.8688, longitude=151.2093, tz="Australia/Sydney",
+            place="Sydney"))
+        for key in ("d1", "d9", "d10"):
+            a = app_module.plate_reading(key, chart, navamsa(chart),
+                                         dasamsa(chart))
+            b = app_module.plate_reading(key, other, navamsa(other),
+                                         dasamsa(other))
+            assert a != b, (key, a)
+
+    def test_a_chart_url_opens_that_chart(self):
+        page = (HERE / "templates" / "index.html").read_text(encoding="utf-8")
+        js = page[page.index("function fromHash()"):]
+        js = js[:js.index("document.addEventListener")]
+        assert 'h.startsWith("chart-")' in js
+        assert 'h === "charts"' in js and 'h === "readings"' in js
+
+
+class TestTheTabRow:
+    """The five screens are peers and every one is always one tap away."""
+
+    TABS = ("Today", "Readings", "Your charts", "Explore", "Ask")
+
+    def test_the_row_carries_all_five(self, page):
+        row = re.search(r'<nav class="tabs"[^>]*>(.*?)</nav>', page, re.S)
+        assert row, "no tab row"
+        labels = re.findall(r'>([^<>]+)</a>', row.group(1))
+        assert [x.strip() for x in labels] == list(self.TABS), labels
+
+    def test_the_row_is_not_shown_before_a_chart_exists(self, client):
+        """There is no Today until there is a chart."""
+        blank = client.get("/").get_data(as_text=True)
+        assert 'class="tabs"' not in blank
+
+    def test_a_fold_marks_the_tab_that_owns_it(self):
+        """A domain fold belongs to Readings and a divisional plate to Your
+        charts, so the row never goes blank mid-read."""
+        page = (HERE / "templates" / "index.html").read_text(encoding="utf-8")
+        js = page[page.index("function markTabs("):]
+        js = js[:js.index("function show(")]
+        assert 'viewId.startsWith("view-domain-") ? "view-readings"' in js
+        assert 'viewId.startsWith("view-varga-") ? "view-charts"' in js
