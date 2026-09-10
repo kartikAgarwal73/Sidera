@@ -47,7 +47,7 @@ checked instead:
   person on the same day gets the same sentence forever.
 - **The one LLM feature is fenced in code, not by prompt.** "Ask about this
   chart" reads free-text questions against two things it may not depart from:
-  a **fact ledger** (the computed chart, ~140 statements with stable IDs) and a
+  a **fact ledger** (the computed chart, ~330 statements with stable IDs) and a
   **rule library** (`rulelib.py` — classical daśā-phala and gocara rules, each
   with its named source). It never computes. It is *required* to interpret —
   a fact-list is not a reading — and every interpretive statement must cite a
@@ -62,6 +62,14 @@ checked instead:
   also aspects your 10th, so the career house is under its discipline until
   Jun 2027"* — and a claimed transit aspect that the ledger does not support
   **for the selected school** is a violation like any other.
+
+  The ledger and the payload are not the same list. Nine divisions put 199
+  varga facts in the ledger, and sending all of them would have tripled the
+  prompt to make the model read eight charts it was not asked about, so the
+  payload carries the lagna of every division plus the bodies and houses of
+  D9, D10 and whichever division the question's own domain is tested by —
+  183 facts of 330. The validator still checks against the full ledger: a
+  smaller prompt must not become a smaller truth.
 
   The line it works to is narrow and specific: **it may say what a period
   favours, asks for or classically tends toward; it may not say what will
@@ -84,6 +92,25 @@ checked instead:
   A question whose feature is not built yet (the Upapada's two rulers) is
   shown, explained and disabled rather than offered. See also the yoni and
   vaśya notes in `gunamilan.py`.
+
+- **Nine divisions, cast at degree level, each gated against the oracle.**
+  D2 Horā, D3 Drekkāṇa, D7 Saptāṃśa, D9 Navāṃśa, D10 Daśāṃśa, D12 Dvādaśāṃśa,
+  D16 Ṣoḍaśāṃśa, D30 Triṃśāṃśa and D60 Ṣaṣṭyāṃśa. A `VargaPosition` now
+  carries a longitude, not just a sign, so a varga nakṣatra and dignity by
+  degree are computable: the part index is `floor(deg / (30/N))` and the
+  degree inside the divisional sign is the remainder *stretched* back over
+  30° — a scaling convention, labelled as one in the rule library
+  (`rule.varga.degree_convention`), not a classical statement dressed up as
+  one. **Every division is checked body by body against PyJHora on both
+  fixtures before it appears in the gallery** — 180 comparisons, and the rules
+  were derived from the oracle and verified exhaustively before the module was
+  written rather than recalled and hoped for.
+
+  Three divisions have no single answer and are **flagged on the plate** with
+  the rule they were cast under: D2 uses the twelve-sign horā rather than the
+  Sun/Moon binary, D30 the unequal 5·5·8·7·5 bands that reverse between odd
+  and even signs, and D60 the ½°-per-division count from the sign itself.
+  Where schools diverge the app names the fork; it does not pick one quietly.
 
 - **Aṣṭakavarga is raw, and the app says so.** BAV and SAV are computed from
   the classical benefic-point tables; the reductions — trikoṇa and
@@ -150,7 +177,7 @@ Five screens, always one tap apart from a tab row in the masthead:
 | Today | the dated sky, for this chart |
 |---|---|
 | **Readings** | the contents page, and a verdict-first fold per domain |
-| **Your charts** | the divisional plates as a gallery, each with its own reading |
+| **Your charts** | nine divisional plates as a gallery, each with its own reading |
 | **Explore** | eight categories, one open at a time |
 | **Ask** | a question in your own words, answered from the computed chart |
 | *Numerology* | *in preparation — named where it will be, and not built* |
@@ -165,10 +192,25 @@ the stylesheet is 0 or 50%.
 
 It reads as **paper** by default, with **Night reading** as the single
 alternate — two palettes, not six. One bronze accent, split by role because
-`#b68235` is 3.02:1 on paper: bright enough for plate strokes and display
+`#a37129` is 3.80:1 on paper: bright enough for plate strokes and display
 type, not enough for a link, so `--accent-ink` is the same hue darkened until
 it clears AA. Every pair is recomputed from the stylesheet by
 `TestPaperPalette` rather than trusted from a table.
+
+Flatness is a real failure and it got four devices rather than a gradient.
+A **second surface tone** carries everything that sits *behind* a reading —
+Explore's tables, every expander — so a fold separates by tone and not only
+by rule; it was deepened from 1.08 to 1.19 against the paper because at 1.08
+it was a tone in the tokens and nothing on the screen. A **paper grain** rides
+the page background alone: one `feTurbulence` desaturated to grey at 5.5%
+inside its own SVG data URI, off entirely under `prefers-contrast: more`.
+Section heads sit under a **1.5px rule** where the hairlines are 0.16 ink, so
+hierarchy is legible before a word is read. And the **bronze is the plate's
+ink** and the verdict's emphasis, which gives the eye one anchor per screen —
+that change is what surfaced a pre-existing failure, the plate having been
+drawn at 2.28:1 against a 3.0 non-text floor the whole time. Deepening the
+tone has a hard stop: `--accent-ink` on the surface is the binding pair at
+4.96:1, and the gate recomputes all of it.
 
 Today opens on the day, named twice — once by the civil calendar and once by
 the Moon — then three or four dated lines, each naming a graha and saying
@@ -204,6 +246,25 @@ polygons — the anchor tables say where a stack is hung and cannot see how wide
 it is, which is how three marks measuring 104 user units ended up in a cell 73
 across. A browser gate reads the real bounding boxes and checks every corner
 against the house it belongs to.
+
+**Ask** is a screen, not a panel. It opens on one thing — *Put a question to
+your chart* at display size over a large centred field, with three suggested
+questions as quiet links under it — and it opens on it whether or not an
+answer can be produced, because whether an answer can be produced is a
+question about the answer and not a reason to refuse someone the chance to
+ask. A reply lands verdict first: one bold line, then two short paragraphs,
+then a **Facts used ▸** footnote listing the fact and rule IDs the answer
+cited. The six-step walk is shown rather than described — natal, karaka,
+varga, daśā, transit, synthesis, each marked as having fired or not and each
+expanding to the facts it actually used. That mark is **derived from the
+citations**, never self-reported: a step that fired is a step whose facts
+appear in the answer. A withheld answer gets its own state and keeps the
+working visible, so a refusal is legible instead of blank.
+
+Combinations lists each yoga as **one closed row** — name, a one-line verdict,
+a classification chip — and opens the full reading only on click, one at a
+time. The word budgets are the same either way; what changed is that a chart's
+yogas are now a page you can scan rather than a page you must read.
 
 Two faces: **Tiro Devanagari Sanskrit**, drawn by John Hudson to set
 Sanskrit — it carries both the transliteration range and the Devanagari
@@ -294,9 +355,10 @@ python tools/erfa_cross_check.py  # re-derive the cross-check constants
 `fixtures_pyjhora.json` holds a **second implementation's answers** for the
 two fictional charts, computed by [PyJHora](https://github.com/naturalstupid/PyJHora)
 — an independently written Vedic astrology library that Sidera does not link,
-import or ship. It covers what Sidera does not yet compute: all 23 divisional
-charts **with degrees**, bhava arudhas A1–A12, chara karakas, Ashtakavarga
-BAV/SAV, sphutas and Shadbala.
+import or ship. It covers all 23 divisional charts **with degrees**, bhava
+arudhas A1–A12, chara karakas, Ashtakavarga BAV/SAV, sphutas and Shadbala —
+nine of those divisions are now Sidera's own gate, body by body on both
+charts; the rest are the map of what is still unbuilt.
 
 It is an *oracle*, not a dependency. The moment our answer and its answer come
 from the same code, the agreement proves nothing — so `test_hygiene.py` fails
@@ -411,7 +473,7 @@ app.py            Flask routes and view assembly
 engine.py         ephemeris, Lagna, sidereal positions, Whole Sign houses
 dashas.py         nakṣatras and the Vimśottarī tree
 pancanga.py       tithi, nakṣatra, yoga, karaṇa, sunrise/sunset
-vargas.py         D9 / D10 divisional charts
+vargas.py         nine divisional charts at degree level, D2 … D60
 transits.py       gocara, drishti, ingress finder
 ashtakavarga.py   raw BAV and SAV — the benefic-point tables, per sign
 yogas.py          lordships, dignities, combustion, yoga detection

@@ -28,11 +28,11 @@ the rule id it rests on, so `chartfacts` can back it and the validator can
 check it.
 
 ON VARGA DIGNITY
-This build computes divisional positions to the SIGN, never the degree
-(`rule.varga.sign_level`). Exaltation, debilitation and own-sign are sign
-properties and are available; moolatrikona needs a degree and is not. The
-strength test below says exactly which of those it used, and never reaches
-for the one that is not there.
+Divisional positions now carry a DEGREE (`rule.varga.degree_convention`), so
+dignity in a varga is computed the same way as in the birth chart —
+moolatrikona included. That degree is a scaling convention rather than a
+classical statement, which is why the rule id travels with every claim that
+rests on it.
 """
 from __future__ import annotations
 
@@ -45,8 +45,7 @@ from engine import Chart, PLANETS, SIGNS
 from rulelib import HOUSE_MATTERS, KARAKATVAS
 from transits import CONJUNCTION_ORB, angular_distance, transit_snapshot
 from vargas import VargaChart, varga_chart
-from yogas import (DEBILITATION_SIGN, EXALTATION_SIGN, Yoga, detect_all,
-                   sign_lord)
+from yogas import Yoga, detect_all, dignity_at, sign_lord
 
 # The nodes have no English name in ordinary use; everything else is the
 # reader's own sky. Same table `today.py` and `domainread.py` use.
@@ -136,24 +135,19 @@ def family(yoga: Yoga) -> str:
 
 
 def varga_dignity(varga: VargaChart, planet: str) -> str:
-    """Dignity in a divisional chart, from the SIGN alone.
+    """Dignity in a divisional chart.
 
-    Exaltation, debilitation and own-sign are properties of the sign and are
-    computable here. Moolatrikona is a degree band and is not — this build
-    holds no degree inside a divisional sign — so it is never returned and
-    never implied. `rule.varga.sign_level` is the statement of that limit.
+    Sign-level dignity was all this could give while a varga carried no
+    degree. It carries one now, so this is the same `dignity_at` the birth
+    chart uses and moolatrikona is available — under
+    `rule.varga.degree_convention`, which states that the degree is a
+    scaling convention and not something the texts assign.
     """
-    sign = varga.planets[planet].sign_index
-    if DEBILITATION_SIGN.get(planet) == sign:
-        return "debilitated"
-    if EXALTATION_SIGN.get(planet) == sign:
-        return "exalted"
-    if sign_lord(sign) == planet:
-        return "own sign"
-    return "neutral"
+    p = varga.planets[planet]
+    return dignity_at(planet, p.sign_index, p.degree_in_sign)
 
 
-STRONG = ("exalted", "own sign")
+STRONG = ("exalted", "moolatrikona", "own sign")
 
 
 @dataclass(frozen=True)
@@ -189,6 +183,7 @@ class Activation:
 class YogaReading:
     yoga: Yoga
     verdict: str                       # answer first, two sentences at most
+    oneline: str                       # the closed row's line
     gives: str                         # the classical result, plainly
     gives_rule: str
     where: str                         # the houses, in plain words
@@ -315,6 +310,12 @@ def _where(yoga: Yoga) -> str:
 # domain synthesis, which is a whole fold.
 VERDICT_WORDS = 40
 
+# The CLOSED row's line. Shorter than the verdict, because it has to sit on
+# one line beside a name and a chip and still say the thing that decides
+# whether a reader opens the row: is this combination real, and is it
+# working now. Same budget as a domain card's teaser.
+ONELINE_WORDS = voice.TEASER_WORDS
+
 
 def _verdict(yoga: Yoga, tests: tuple[VargaTest, ...],
              activations: tuple[Activation, ...], when: datetime) -> str:
@@ -396,6 +397,39 @@ def shared_for(chart: Chart, when: datetime) -> _Shared:
                    snapshot=transit_snapshot(chart, when))
 
 
+def _oneline(yoga: Yoga, tests: tuple[VargaTest, ...],
+             activations: tuple[Activation, ...]) -> str:
+    """One line for the closed row: is it real, and is it working now.
+
+    Deliberately not a shortened verdict. A reader scanning nine rows is
+    deciding which one to open, and the two things that decide that are
+    whether the divisional charts back the combination and whether its
+    period is running. Everything else is inside.
+    """
+    d9 = next((t for t in tests if t.varga == "D9"), None)
+    if yoga.cancelled:
+        state = "Held in check"
+    elif d9 is not None and d9.confirmed:
+        state = "Confirmed in the ninth"
+    elif d9 is not None and d9.weak:
+        state = "Thins in the ninth"
+    else:
+        state = "Formed"
+
+    running = next((a for a in activations if a.state == "running"), None)
+    ahead = next((a for a in activations if a.state == "ahead"), None)
+    past = [a for a in activations if a.state == "past"]
+    if running:
+        when_ = f"running to {running.end:%b %Y}"
+    elif ahead:
+        when_ = f"from {ahead.start:%b %Y}"
+    elif past:
+        when_ = f"already run, to {max(past, key=lambda a: a.end).end:%b %Y}"
+    else:
+        when_ = "no period in this cycle"
+    return f"{state} · {when_}"
+
+
 def read_yoga(yoga: Yoga, chart: Chart, when: datetime,
               shared: _Shared | None = None) -> YogaReading:
     shared = shared if shared is not None else shared_for(chart, when)
@@ -417,11 +451,12 @@ def read_yoga(yoga: Yoga, chart: Chart, when: datetime,
         facts += [f"varga.d10.{p.lower()}" for p in yoga.planets]
     facts.append("dasha.current")
     rules = ["rule.graha.yoga_varga", "rule.graha.yoga_activation",
-             "rule.varga.confirms", "rule.varga.sign_level",
+             "rule.varga.confirms", "rule.varga.degree_convention",
              GIVES_RULE[key]]
     return YogaReading(
         yoga=yoga,
         verdict=_verdict(yoga, tuple(tests), activations, when),
+        oneline=_oneline(yoga, tuple(tests), activations),
         gives=GIVES[key],
         gives_rule=GIVES_RULE[key],
         where=_where(yoga),

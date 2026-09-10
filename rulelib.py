@@ -219,12 +219,41 @@ _VARGA = dict([
        "Houses in a divisional chart are counted from that chart's own "
        "lagna, not from the birth lagna.",
        "Standard varga construction"),
-    _r("rule.varga.sign_level",
-       "This build computes divisional positions to the SIGN only. Degree "
-       "within a divisional sign, and therefore varga nakshatra and "
-       "dignity-by-degree in a varga, are not available and must not be "
-       "asserted.",
-       "Implementation limit of this build, not a classical rule"),
+    _r("rule.varga.degree_convention",
+       "This build computes divisional positions to the DEGREE. The "
+       "position a graha holds inside its part of a sign is stretched over "
+       "a full 30 degrees, so every divisional placement has a longitude "
+       "and not merely a sign. That stretch is a SCALING CONVENTION, not a "
+       "classical statement: the texts assign a divisional sign and say "
+       "nothing about a position within it. It may be used for varga "
+       "nakshatra and dignity by degree; it must never be quoted as a "
+       "classical figure.",
+       "Standard varga longitude construction (Jagannatha Hora, PyJHora "
+       "and other modern implementations); the convention, not the text"),
+    _r("rule.varga.hora_school",
+       "The D2 (hora) is computed here as the TWELVE-SIGN hora: odd signs "
+       "count forward from twice the sign, even signs backward from one "
+       "past it, giving all twelve signs. The older and better-known hora "
+       "assigns only two signs — the Sun's Leo and the Moon's Cancer — and "
+       "is a different question rather than a variant of this one. Which is "
+       "in use is stated on the plate.",
+       "Twelve-sign hora as implemented in Jagannatha Hora (PVR Narasimha "
+       "Rao); the two-sign hora is BPHS"),
+    _r("rule.varga.trimsamsa_school",
+       "The D30 (trimsamsa) sign comes from the classical UNEQUAL bands — "
+       "5, 5, 8, 7 and 5 degrees ruled by Mars, Saturn, Jupiter, Mercury "
+       "and Venus in an odd sign, and the reverse order with each planet's "
+       "other sign in an even one. The equal 1-degree division is used only "
+       "to scale the degree, never to choose the sign: a graha inside an "
+       "8-degree band has no equal-part position to take.",
+       "Trimsamsa, Brihat Parashara Hora Shastra; the unequal bands are the "
+       "classical statement and the equal division is a modern shortcut"),
+    _r("rule.varga.shastyamsa_school",
+       "The D60 (shastyamsa) is counted half a degree per division, "
+       "straight on from the sign itself. Some texts reverse the count in "
+       "even signs; this build does not, and says so on the plate.",
+       "Shastyamsa, Brihat Parashara Hora Shastra; the even-sign reversal "
+       "is carried by some commentaries and not by others"),
 ])
 
 # --- the state of a graha in itself --------------------------------------------
@@ -399,7 +428,8 @@ def rules_for(*, dasha_lords=(), transit_planets=(),
             wanted.append("rule.transit.node_on_natal")
     if vargas:
         wanted += ["rule.varga.purpose", "rule.varga.confirms",
-                   "rule.varga.from_varga_lagna", "rule.varga.sign_level"]
+                   "rule.varga.from_varga_lagna",
+                   "rule.varga.degree_convention"]
         if "D9" in [v.upper() for v in vargas]:
             wanted.append("rule.varga.vargottama")
     wanted += [f"rule.house.{h}" for h in houses if f"rule.house.{h}" in RULES]

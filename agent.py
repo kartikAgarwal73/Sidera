@@ -929,6 +929,40 @@ class AgentAnswer:
         return not self.violations
 
 
+def steps_walked(answer: "AgentAnswer", brief: dict | None) -> list[dict]:
+    """Which of the six steps the answer actually WORKED, per step.
+
+    Derived from the evidence, never self-reported. `domain_brief` publishes
+    the exact fact ids each step is answerable from; a step counts as
+    walked when the answer cites at least one of them. A model that says it
+    considered the divisional chart and cites no varga fact has not, and
+    this is what makes that visible instead of plausible.
+
+    Returns an empty list for a question that is not about a life domain —
+    there is no checklist to walk, and inventing one to display would be
+    the same dishonesty pointed the other way.
+    """
+    if not brief:
+        return []
+    cited = set(answer.facts_used)
+    out = []
+    for step in brief.get("checklist", []):
+        name = step["step"]
+        expected = list(brief.get("fact_ids", {}).get(name, []))
+        used = [f for f in expected if f in cited]
+        out.append({
+            "step": name,
+            "do": step["do"],
+            # SYNTHESIS has no facts of its own — it is the weave. It counts
+            # as walked when the answer has prose beyond its verdict.
+            "fired": bool(used) if name != "SYNTHESIS"
+                     else bool(answer.answer.strip()),
+            "facts": used,
+            "available": len(expected),
+        })
+    return out
+
+
 class AgentUnavailable(RuntimeError):
     """No API key, or the upstream call failed."""
 

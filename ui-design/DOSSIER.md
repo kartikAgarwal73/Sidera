@@ -38,10 +38,10 @@ the four retired palettes were variations nobody was choosing between.
 | Token | Paper (default) | Night reading | Role |
 |---|---|---|---|
 | `--paper` | `#f3f2f2` | `#1a1826` | the ground |
-| `--surface` | `#eae9e9` | `#262336` | raised areas |
+| `--surface` | `#e2dfda` | `#2b2839` | what sits behind the reading |
 | `--ink` | `#201f1d` | `#ece5d8` | text |
-| `--accent` | `#b68235` | `#dcb877` | plate strokes, large display |
-| `--accent-ink` | `#8a5f1c` | `#e2c48c` | links, text below 24px |
+| `--accent` | `#a37129` | `#dcb877` | the plate's ink, rules, large display |
+| `--accent-ink` | `#7d5518` | `#e2c48c` | links, text below 24px |
 | `--hairline` / `--divider` | 16% / 24% ink | same | rules |
 
 `--ink` used to name the GROUND. It names the text now, and `--paper` is the

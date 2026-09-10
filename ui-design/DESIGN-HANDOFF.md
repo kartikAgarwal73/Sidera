@@ -20,20 +20,33 @@
 > | Token | Paper (default) | Night reading | Role |
 > |---|---|---|---|
 > | `--paper` | `#f3f2f2` | `#1a1826` | the ground |
-> | `--surface` | `#eae9e9` | `#262336` | raised areas |
+> | `--surface` | `#e2dfda` | `#2b2839` | what sits behind the reading |
 > | `--ink` | `#201f1d` | `#ece5d8` | text |
-> | `--accent` | `#b68235` | `#dcb877` | plate strokes, large display emphasis |
-> | `--accent-ink` | `#8a5f1c` | `#e2c48c` | links and text below 24px |
-> | `--hairline` | 16% ink | 16% ink | rules |
-> | `--divider` | 24% ink | 24% ink | section rules |
+> | `--accent` | `#a37129` | `#dcb877` | the plate's ink, rules, large display |
+> | `--accent-ink` | `#7d5518` | `#e2c48c` | links and text below 24px |
+> | `--hairline` | 16% ink | 16% ink | rules between rows |
+> | `--divider` | 24% ink | 24% ink | section rules, drawn at 1.5px |
+>
+> **REVISED 2026-09-13 — the page read flat.** The surface tone measured
+> **1.084:1** against the paper: a tone in the tokens and nothing on the
+> screen, so folds separated by rule alone. It is **1.189:1** now, which is
+> as far as it can go — `--accent-ink` on the surface is the binding pair
+> and lands at 4.96:1. Both bronzes darkened with it so every pair keeps its
+> headroom on *both* grounds rather than only on the paper.
 >
 > **The bronze splits by role because one hex cannot do both jobs.**
-> `#b68235` on `#f3f2f2` is **3.02:1** — enough for graphics and large
-> display (AA for non-text objects is 3.0) and *not* enough for body text
-> (4.5). `--accent-ink` is the same bronze hue darkened to **5.03:1** on
-> paper and **4.64:1** on the surface tone. Every muted ink step is at or
-> above **4.73:1**. `TestPaperPalette` recomputes all of it from
-> `static/style.css` on every run rather than trusting this table.
+> `#a37129` on `#f3f2f2` is **3.80:1** — a non-text graphic needs 3.0 — and
+> `--accent-ink` is the same hue darkened to **5.90:1** on paper and
+> **4.96:1** on the surface, because text needs 4.5. The old `#b68235` sat
+> at exactly 3.02:1, which is the floor with nothing spare, and the plate
+> was not even drawn in it: `.plate-rule` was 38% ink at **2.28:1**, so the
+> figure carrying the whole screen was the faintest thing on it. The plate
+> is drawn in the accent now, at full strength, both strokes.
+>
+> Every muted ink step is at or above **4.57:1** on either ground.
+> `TestPaperPalette` recomputes all of it from `static/style.css` on every
+> run rather than trusting this table, and `TestTextureAndContrast` owns the
+> devices the tones are used for.
 >
 > Type is unchanged from `ui-design/DOSSIER.md`: Tiro Devanagari Sanskrit for
 > display, IBM Plex Sans for working text. The approved mockup used Cormorant,

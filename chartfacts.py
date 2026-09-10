@@ -420,19 +420,35 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
     # divisional sign and discards the position within it. No varga degree,
     # so no varga nakshatra and no dignity-by-degree — stated in the fact
     # so the agent does not reach for what is not there.
-    _VARGA_OF = {"d9": ("Navamsa", "inner strength, marriage and the "
-                                   "durability of a natal promise"),
-                 "d10": ("Dasamsa", "work, standing and the field of "
-                                    "action")}
-    for label, varga in (("d9", navamsa(chart)), ("d10", dasamsa(chart))):
-        vname, vfor = _VARGA_OF[label]
+    # EVERY DIVISION THIS BUILD CASTS, not two. The ledger carried D9 and
+    # D10 only while the app computed only those; it is generic over
+    # `vargas.SUPPORTED` now, so a division that lands is in the ledger the
+    # same day it is in the gallery.
+    #
+    # These are DEGREE-LEVEL. `rule.varga.degree_convention` states what the
+    # degree is — a scaling convention, not something the texts assign — and
+    # every fact here carries that caveat so the agent cannot quote a
+    # divisional degree as a classical figure.
+    from vargas import (READ_FOR as _READ_FOR, SCHOOL_NOTE as _SCHOOL_NOTE,
+                        SUPPORTED as _SUPPORTED, varga_chart as _varga_chart)
+    _DEGREE_CAVEAT = (" (The divisional degree is a scaling convention — the "
+                      "position within the part, stretched over 30° — not a "
+                      "figure the classical texts assign.)")
+    for code in _SUPPORTED:
+        label = code.lower()
+        varga = _varga_chart(chart, code)
+        vfor = _READ_FOR[code]
+        school = _SCHOOL_NOTE.get(code)
         facts.append(Fact(
             id=f"varga.{label}.lagna",
             kind="varga",
-            statement=(f"The {label.upper()} ({vname}) lagna is "
-                       f"{varga.lagna_sign}. This varga is read for {vfor}."),
-            value={"varga": label.upper(), "name": vname,
-                   "lagna": varga.lagna_sign, "read_for": vfor},
+            statement=(f"The {code} lagna is {varga.lagna_sign} "
+                       f"{varga.lagna_degree_in_sign:.2f}°. This varga is "
+                       f"read for {vfor}."
+                       + (f" SCHOOL: {school}" if school else "")),
+            value={"varga": code, "lagna": varga.lagna_sign,
+                   "lagna_degree": round(varga.lagna_degree_in_sign, 4),
+                   "read_for": vfor, "school": school},
         ))
         for name in PLANETS:
             vp = varga.planets[name]
@@ -440,20 +456,17 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
                 id=f"varga.{label}.{name.lower()}",
                 kind="varga",
                 statement=(
-                    f"In the {label.upper()} ({vname}), {name} is in "
-                    f"{vp.sign}, in the {ordinal(vp.house)} house from the "
-                    f"{label.upper()} lagna"
+                    f"In the {code}, {name} is in {vp.sign} {vp.dms}, in the "
+                    f"{ordinal(vp.house)} house from the {code} lagna"
                     + (" — vargottama, the same sign it holds at birth."
                        if vp.vargottama else ".")
-                    + " (Sign-level only: this build computes no degree "
-                      "within a divisional sign.)"),
-                value={"varga": label.upper(), "planet": name,
-                       "sign": vp.sign, "house": vp.house,
-                       "vargottama": vp.vargottama,
-                       "degree": None},
+                    + _DEGREE_CAVEAT),
+                value={"varga": code, "planet": name, "sign": vp.sign,
+                       "house": vp.house, "vargottama": vp.vargottama,
+                       "degree": round(vp.degree_in_sign, 4)},
             ))
         vargottama = [n for n, v in varga.planets.items() if v.vargottama]
-        if label == "d9" and vargottama:
+        if code == "D9" and vargottama:
             facts.append(Fact(
                 id="varga.d9.vargottama",
                 kind="varga",
@@ -462,12 +475,12 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
                 value={"planets": vargottama},
             ))
 
-        # Step 3 asks what is IN the domain house of the divisional chart.
-        # The per-planet varga facts held that, scattered across nine
-        # entries the agent had to assemble itself — and did not. One fact
-        # per divisional house, `d9.7th`, makes the step a single citation.
+        # One fact per divisional HOUSE. Step 3 of the domain method asks
+        # what is in the domain house of a divisional chart; before this the
+        # answer was scattered across nine per-planet entries the agent had
+        # to assemble itself, and did not.
         from engine import SIGNS as _SIGNS
-        vlagna = _SIGNS.index(varga.lagna_sign)
+        vlagna = varga.lagna_sign_index
         for house in range(1, 13):
             sign = _SIGNS[(vlagna + house - 1) % 12]
             here = [n for n in PLANETS if varga.planets[n].house == house]
@@ -477,17 +490,14 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
                 id=f"{label}.{ordinal(house)}",
                 kind="varga",
                 statement=(
-                    f"In the {label.upper()}, the {ordinal(house)} house is "
-                    f"{sign}, ruled by {lord} (which sits in the "
-                    f"{ordinal(lord_in)} house of the {label.upper()})"
+                    f"In the {code}, the {ordinal(house)} house is {sign}, "
+                    f"ruled by {lord} (which sits in the {ordinal(lord_in)} "
+                    f"house of the {code})"
                     + (", occupied by " + _and_list(here) + "."
-                       if here else ", with no graha in it.")
-                    + " (Sign-level only: this build computes no degree "
-                      "within a divisional sign, so there is no dignity by "
-                      "degree here.)"),
-                value={"varga": label.upper(), "house": house, "sign": sign,
+                       if here else ", with no graha in it.")),
+                value={"varga": code, "house": house, "sign": sign,
                        "lord": lord, "lord_house": lord_in,
-                       "occupants": here, "degree": None},
+                       "occupants": here},
             ))
 
     # --- yogas -------------------------------------------------------------
@@ -839,19 +849,51 @@ def domain_brief(chart: Chart, question: str) -> dict | None:
     }
 
 
+#: Divisions whose FULL detail travels to the agent by default. The ledger
+#: holds all nine; the prompt does not need all nine. D9 tests every promise
+#: and D10 is the career division, so those two are always in; a domain adds
+#: its own if it names another.
+#:
+#: WHY THIS SLICE EXISTS. Casting seven more divisions took the ledger from
+#: 130 facts to 330, and every one of them would have gone into every prompt
+#: — tripling the payload to answer a question about marriage with the
+#: Ṣaṣṭyāṃśa positions of nine grahas. The LAGNA of every division still
+#: travels, because the agent must know a division exists and can be asked
+#: for; the per-graha and per-house detail of an unasked-for division does
+#: not.
+_PROMPT_VARGAS = ("D9", "D10")
+
+
+def _varga_in_prompt(fact_id: str, wanted: frozenset[str]) -> bool:
+    """Does this varga fact belong in the agent's payload?"""
+    if fact_id.endswith(".lagna"):
+        return True
+    for code in wanted:
+        low = code.lower()
+        if fact_id.startswith(f"varga.{low}.") or fact_id.startswith(f"{low}."):
+            return True
+    return False
+
+
 def facts_payload(chart: Chart, when: datetime,
                   question: str = "") -> dict:
     """The ledger as the JSON the agent is given. Sorted, so it caches."""
     facts = build_facts(chart, when)
+    brief_for_slice = domain_brief(chart, question)
+    wanted = set(_PROMPT_VARGAS)
+    if brief_for_slice:
+        wanted.add(brief_for_slice["varga"])
+    wanted = frozenset(wanted)
+    facts = [f for f in facts
+             if f.kind != "varga" or _varga_in_prompt(f.id, wanted)]
     payload = {
         "as_of": when.date().isoformat(),
         "system": "sidereal, Lahiri ayanamsa, Whole Sign houses",
         "facts": [f.as_dict() for f in facts],
         "rules": [r.as_dict() for r in active_rules(chart, when)],
     }
-    brief = domain_brief(chart, question)
-    if brief:
-        payload["domain"] = brief
+    if brief_for_slice:
+        payload["domain"] = brief_for_slice
     return payload
 
 

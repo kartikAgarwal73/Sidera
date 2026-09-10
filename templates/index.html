@@ -143,13 +143,18 @@
   <a href="#readings" data-view="view-readings">Readings</a>
   <a href="#charts" data-view="view-charts">Your charts</a>
   <a href="#explore" data-view="view-explore">Explore</a>
-  <a href="#ask" data-view="view-explore" data-scroll="ask">Ask</a>
+  <a href="#ask" data-view="view-ask">Ask</a>
   {# NUMEROLOGY IS NOT BUILT. Not a stub, not a placeholder view — there is
      no numerology code in this repository at all. It is listed anyway, and
      listed as unavailable, which is the same honesty the unbuilt divisional
      charts get: a reader can see what the app does not yet do instead of
      wondering whether they missed it. `aria-disabled` and no href, so it is
      not focusable and cannot be clicked into a view that does not exist. #}
+  {# Quiet, and persistent. Learn is not a screen anyone opens daily and it
+     is the screen a newcomer needs on their first visit; a tab entry that
+     is always there and never loud is the shape that serves both. #}
+  <a href="#cat-learn" data-view="view-explore" data-scroll="learnpath"
+     class="tab-quiet">Learn</a>
   <span class="tab-soon" aria-disabled="true">Numerology
     <span class="tab-soonmark">in preparation</span></span>
 </nav>
@@ -319,7 +324,7 @@
      ui-design/RESTRUCTURE.md -->
 <div class="view" id="view-arrival">
 <p class="folio"><span class="folio-p">P. 01</span> · Today<br>
-  <span class="folio-of">Fold 1 of 4</span></p>
+  <span class="folio-of">Fold 1 of 5</span></p>
 {# SCREEN 1 — TODAY. The leaf is two columns: the day on the left, the plate
    pinned on the right with today's transits ticked around its edge. At 390px
    it collapses to one column, plate first. #}
@@ -512,7 +517,7 @@
 
 <div class="view" id="view-readings" hidden>
 <p class="folio"><span class="folio-p">P. 02</span> · Readings<br>
-  <span class="folio-of">Fold 2 of 4</span></p>
+  <span class="folio-of">Fold 2 of 5</span></p>
 <section class="chartof" id="glance">
   <h1 class="chartof-name">{{ data.headline }}</h1>
   <div class="chartof-sub">{{ data.subline }}</div>
@@ -607,7 +612,7 @@
 
 <div class="view" id="view-charts" hidden>
 <p class="folio"><span class="folio-p">P. 03</span> · Your charts<br>
-  <span class="folio-of">Fold 3 of 4</span></p>
+  <span class="folio-of">Fold 3 of 5</span></p>
 {# SCREEN 3 — YOUR CHARTS. A gallery of small plates. Three are cast; five
    are named and marked "in preparation" rather than quietly omitted, which
    would imply the list is complete. #}
@@ -660,7 +665,7 @@
    page sequence with holes in it, which is not a sequence. #}
 <div class="view" id="view-varga-{{ v.key }}" hidden>
 <p class="folio"><span class="folio-p">P. 03·{{ plateno.n }}</span> · {{ v.code }} {{ v.name }}<br>
-  <span class="folio-of">Fold 3 of 4</span></p>
+  <span class="folio-of">Fold 3 of 5</span></p>
 <a class="backlink" href="#charts" data-view="view-charts">← Your charts</a>
 <section class="domainread">
   <div class="verdictmoment">
@@ -670,6 +675,18 @@
        is true of every chart and so comes second. #}
     <p class="dverdict reveal-rise">{{ v.reading }}</p>
     <p class="chartof-sub platewhat">{{ v.summary }}</p>
+    {% if v.school %}
+    {# WHERE THE TRADITION SPLITS, said on the plate. Three of these
+       divisions are read differently by different schools and this one is
+       not a neutral rendering of "the" rule — the reader is told which
+       reading they are looking at rather than left to assume there is only
+       one. #}
+    <details class="schoolflag">
+      <summary>Which reading this is</summary>
+      <p>{{ v.school }}</p>
+      <p class="yogarule"><span class="xplabel">Rests on</span>{{ v.school_rule }}</p>
+    </details>
+    {% endif %}
   </div>
   <svg viewBox="0 0 300 300" class="kundli" aria-label="{{ v.code }} plate">
     <g fill="none" class="plate-rule" stroke-width="0.75">
@@ -699,7 +716,7 @@
 {% for d in data.domains %}
 <div class="view" id="view-domain-{{ d.id }}" hidden>
   <p class="folio"><span class="folio-p">P. 02·{{ loop.index }}</span> · {{ d.title }}<br>
-    <span class="folio-of">Fold 2 of 4</span></p>
+    <span class="folio-of">Fold 2 of 5</span></p>
   <a class="backlink" href="#top" data-view="view-arrival">← All of your chart</a>
   <section class="domainread">
     {# The folio, set enormous and nearly invisible — the plate has released
@@ -751,9 +768,50 @@
 <!-- ============ EXPLORE THE FULL CHART ============
      Every technical section, unchanged, behind the sticky nav it always
      had. Re-homed, not rewritten. -->
+<!-- ============ SCREEN 5 · ASK ============
+     A screen, not a panel inside another one. The field is ALWAYS here:
+     the founder opened this and found nowhere to type, because the whole
+     block was behind `{% raw %}{% if data.agent_ready %}{% endraw %}` and
+     the deployment had no key. Whether an answer can be produced is a
+     question about the answer, not about whether a person may ask. -->
+<div class="view" id="view-ask" hidden>
+<p class="folio"><span class="folio-p">P. 05</span> · Ask<br>
+  <span class="folio-of">Fold 5 of 5</span></p>
+<section class="askscreen" id="askscreen"
+         data-sid="{{ data.agent_sid }}"
+         data-ready="{{ 1 if data.agent_ready else 0 }}"
+         data-birth='{{ data.agent_birth | tojson }}'>
+  <div class="asktop">
+    <h1 class="asklabel"><label for="askq">Put a question to your chart</label></h1>
+    <div class="askfield">
+      <input id="askq" type="text" maxlength="400" autocomplete="off"
+             aria-describedby="askhelp"
+             placeholder="In your own words…">
+      <button type="button" id="askgo" class="askgo">Ask</button>
+    </div>
+    {# Three, quietly. A wall of suggestions is a menu; three is an
+       invitation to see the shape of a question that works. #}
+    <div class="asksuggest">
+      {% for q in data.agent_suggestions[:3] %}
+      <button type="button" class="sugq">{{ q }}</button>
+      {% endfor %}
+    </div>
+    <p class="askhelp" id="askhelp">Every answer is built from your computed
+      chart and the stored rule library, and checked against the chart before
+      it is shown. It will say what a period favours and what it asks for; it
+      will not say what <em>will</em> happen, and it cannot invent a date.
+      {% if data.agent_ready %}<span id="askremaining">{{ data.agent_max }}</span>
+      questions left this session.{% else %}Free-text answers are not
+      configured on this deployment — the stored classical lenses in Explore
+      answer without them.{% endif %}</p>
+  </div>
+  <div id="askout" class="askout"></div>
+</section>
+</div><!-- /view-ask -->
+
 <div class="view" id="view-explore" hidden>
 <p class="folio"><span class="folio-p">P. 04</span> · The full chart<br>
-  <span class="folio-of">Fold 4 of 4</span></p>
+  <span class="folio-of">Fold 4 of 5</span></p>
 <a class="backlink" href="#top" data-view="view-arrival">← All of your chart</a>
 {# EXPLORE IS AN INDEX, NOT A DUMP.
    Eight categories; opening one shows that category's sections and hides
@@ -800,10 +858,16 @@
       <span class="catrow-desc">Put a question to the chart — the stored classical lenses, and the grounded agent.</span>
       <span class="catrow-more">Open →</span>
     </a>
-    <a class="catrow" href="#cat-learn" data-cat="learn">
+    {# LEARN HAS A HOME. Not a spotlight and not buried: the same row as
+       every other category, given the second surface tone so it reads as a
+       destination rather than a footnote, and named for what it does. The
+       count is generated — writing "seven short pieces" beside twenty cards
+       would be a small lie in the one place that exists to teach. #}
+    <a class="catrow catrow-learn" href="#cat-learn" data-cat="learn">
       <span class="catrow-title">Learn</span>
-      <span class="catrow-desc">Twenty cards, a minute each, from what a lagna is to reading your own chart.</span>
-      <span class="catrow-more">Open →</span>
+      <span class="catrow-desc">How the chart is built, in {{ data.lessons | length }}
+        short pieces — a minute each, from what a lagna is to reading your own.</span>
+      <span class="catrow-more">Start →</span>
     </a>
   </div>
 </section>
@@ -1012,22 +1076,25 @@
   <p class="schoolstamp">Rāhu and Ketu reach: {{ data.school_node_reach }}</p>
 </section>
 
-<!-- Yogas — verdict first, then the working.
-     Each entry answers four questions in that order: is it real (formed in
-     D1, and confirmed or weakened in the divisional charts), what does it
-     classically give, WHEN does it act, and where in life. Everything here
-     is composed by yogaread.py and every claim carries the rule it rests
-     on and the ledger fact it was computed from. -->
+<!-- Yogas — CLOSED ROWS, one open at a time.
+     Nine yogas printed open was a wall of text nobody read. Each is a
+     single row now: name, a one-line verdict, and its family as a chip.
+     The full reading — gives / where / D9 / D10 / activation dates — opens
+     on click, and opening one closes the rest, so the fold is always a
+     list with at most one thing expanded in it. -->
 <section class="ledger" id="yogas" data-cat="combinations">
   <div class="kicker">Yogas <button class="learn" data-lesson="yoga">ⓘ 60s</button></div>
+  <div class="yogalist" data-exclusive="yoga">
   {% for r, xp in data.yogas %}
   {% set y = r.yoga %}
-  <div class="yoga">
-    <div class="yogahead">
+  <details class="yoga yogarow">
+    <summary class="yogahead">
       <span class="yoganame">{{ y.name }}</span>
+      {# THE ANSWER, on the closed row. A list of names tells a reader
+         nothing; a list of names each carrying its verdict is the fold. #}
+      <span class="yogaline">{{ r.oneline }}</span>
       <span class="yogakind">{{ y.kind }}</span>
-    </div>
-    {# THE ANSWER, in two sentences: whether it is real, and when it acts. #}
+    </summary>
     <p class="yverdict">{{ r.verdict }}</p>
     <div class="yfacts">
       <div class="yfact"><span class="xplabel">Gives</span>{{ r.gives }}</div>
@@ -1065,8 +1132,9 @@
       <p class="yogarule"><span class="xplabel">Rests on</span>{{ r.rule_ids | join(" · ") }}</p>
       <p class="yogarule"><span class="xplabel">Computed from</span>{{ r.fact_ids | join(" · ") }}</p>
     </details>
-  </div>
+  </details>
   {% endfor %}
+  </div>
 </section>
 
 {% if data.match %}
@@ -1271,10 +1339,10 @@
 
 <!-- Phase 11: 20-card literacy path -->
 <section class="ledger" id="learnpath" data-cat="learn">
-  <div class="kicker">Learn the sky · 20 cards, 60 seconds each</div>
+  <div class="kicker">Learn the sky · {{ data.lessons | length }} cards, 60 seconds each</div>
   <p class="ratehint">A reading path from "what is a lagna" to reading your
   own D9. Cards you open are remembered in this browser —
-  <span id="learnprogress">0</span>/20 read.</p>
+  <span id="learnprogress">0</span>/{{ data.lessons | length }} read.</p>
   {% for l in data.lessons %}
   <details class="xp lessoncard" data-lesson="{{ l.key }}">
     <summary>
@@ -1552,6 +1620,10 @@ Sidereal · Lahiri ayanāṃśa · Whole Sign · North-Indian<br>
     }
     if (h === "readings") return show("view-readings");
     if (h === "charts") return show("view-charts");
+    // Ask is a screen of its own now. It must be matched BEFORE the
+    // element-lookup fallback below, which would otherwise find the old
+    // `#ask` lens section inside Explore and open that instead.
+    if (h === "ask") return show("view-ask");
     if (h.startsWith("chart-")) return show("view-varga-" + h.slice(6));
     if (h === "explore") {
       show("view-explore");
@@ -1619,6 +1691,18 @@ if (navlinks.length) {
 const degToggle = document.getElementById("degToggle");
 if (degToggle) degToggle.addEventListener("change", () =>
   document.getElementById("plate").classList.toggle("showdeg", degToggle.checked));
+// ONE OPEN AT A TIME. `<details name="...">` would do this natively but is
+// not in every browser this ships to, and a fold that quietly stops being
+// exclusive is worse than one that never was. Any container carrying
+// data-exclusive keeps exactly one of its direct <details> open.
+document.querySelectorAll("[data-exclusive]").forEach(group => {
+  const rows = [...group.querySelectorAll(":scope > details")];
+  rows.forEach(row => row.addEventListener("toggle", () => {
+    if (!row.open) return;
+    rows.forEach(other => { if (other !== row) other.open = false; });
+  }));
+});
+
 // The Aṣṭakavarga totals take the sign numeral's slot rather than sitting
 // beside it — see the note on the group in the plate above.
 const savToggle = document.getElementById("savToggle");
@@ -1961,8 +2045,152 @@ wirePlace("p_");
   input.addEventListener("keydown", e => {
     if (e.key === "Enter") { e.preventDefault(); go.click(); }
   });
-  document.querySelectorAll(".sugq").forEach(b =>
+  document.querySelectorAll("#agentbox .sugq").forEach(b =>
     b.addEventListener("click", () => ask(b.textContent.trim())));
+})();
+
+/* ============ SCREEN 5 · ASK ============
+   The field is always here. Whether an answer can be produced is a question
+   about the answer; the founder opened this screen and found nowhere to
+   type, because the whole block was behind a key check.
+
+   Everything the answer renders is STRUCTURAL, handed over by /ask as its
+   own field: the verdict, the paragraphs, which of the six steps actually
+   fired and what each cited. Nothing here parses prose to find the answer,
+   which is what makes answer-first a property of the page rather than of
+   the model remembering. */
+(function () {
+  const box = document.getElementById("askscreen");
+  if (!box) return;
+  const input = document.getElementById("askq");
+  const go = document.getElementById("askgo");
+  const out = document.getElementById("askout");
+  const left = document.getElementById("askremaining");
+  const sid = box.dataset.sid;
+  const birth = JSON.parse(box.dataset.birth || "{}");
+  const esc = t => String(t == null ? "" : t)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  function panel(html, cls) {
+    out.innerHTML = `<div class="askanswer ${cls || ""}">${html}</div>`;
+    out.scrollIntoView({block: "nearest", behavior: "smooth"});
+  }
+
+  function idlist(items, kind) {
+    if (!items || !items.length) return "";
+    return `<details class="askfacts"><summary>${kind} used`
+      + ` <span class="askcount">${items.length}</span></summary>`
+      + items.map(f => `<div class="askfact"><code>${esc(f.id)}</code>`
+          + `<span>${esc(f.statement || f.text || "")}</span></div>`).join("")
+      + `</details>`;
+  }
+
+  function stepsBlock(steps) {
+    if (!steps || !steps.length) return "";
+    /* WHICH STEPS FIRED, from the facts the answer cited — not from
+       anything it claimed about itself. A step with no citation shows as
+       not walked, which is the whole point of displaying this. */
+    return `<div class="asksteps"><div class="kicker">The working</div>`
+      + steps.map(s => {
+          const mark = s.fired ? "✓" : "—";
+          const body = s.facts.length
+            ? s.facts.map(f => `<div class="askfact"><code>${esc(f.id)}</code>`
+                + `<span>${esc(f.statement)}</span></div>`).join("")
+            : `<p class="askstep-none">No fact from this step was cited.</p>`;
+          return `<details class="askstep ${s.fired ? "fired" : "skipped"}">`
+            + `<summary><span class="askstep-mark">${mark}</span>`
+            + `<span class="askstep-name">${esc(s.step)}</span>`
+            + `<span class="askstep-do">${esc(s.do)}</span></summary>`
+            + body + `</details>`;
+        }).join("")
+      + `</div>`;
+  }
+
+  function answered(q, d) {
+    const paras = (d.paragraphs || []).filter(p => p !== d.verdict);
+    panel(
+      `<p class="askq">${esc(q)}</p>`
+      + (d.verdict ? `<p class="askverdict">${esc(d.verdict)}</p>` : "")
+      + paras.slice(0, 2).map(p => `<p class="askpara">${esc(p)}</p>`).join("")
+      + stepsBlock(d.steps)
+      + `<div class="askcites">`
+      + idlist(d.facts_used, "Facts")
+      + idlist(d.rules_applied, "Rules")
+      + `</div>`
+      + `<p class="conf"><span class="chip chip-${esc((d.confidence || "")
+          .toLowerCase())}">${esc(d.confidence)}</span></p>`);
+  }
+
+  function withheld(q, d) {
+    /* A DISTINCT STATE, not an error message in the same box. The reply
+       failed validation against the chart, which is the feature working —
+       so it is presented as a finding, with what the validator caught. */
+    panel(
+      `<p class="askq">${esc(q)}</p>`
+      + `<p class="askwithheld-mark">Withheld</p>`
+      + `<p class="askverdict">${esc(d.error)}</p>`
+      + ((d.violations || []).length
+          ? `<details class="askfacts"><summary>What the check caught`
+            + ` <span class="askcount">${d.violations.length}</span></summary>`
+            + d.violations.map(v => `<div class="askfact">${esc(v)}</div>`)
+              .join("") + `</details>`
+          : ""),
+      "is-withheld");
+  }
+
+  function unavailable(q) {
+    panel(
+      `<p class="askq">${esc(q)}</p>`
+      + `<p class="askwithheld-mark">Not configured</p>`
+      + `<p class="askverdict">Free-text answers are switched off on this `
+      + `deployment. Everything else on this page is computed here and is `
+      + `unaffected.</p>`
+      + `<p class="askpara">The stored classical lenses under `
+      + `<a href="#cat-ask">Explore &rarr; Ask</a> answer a fixed set of `
+      + `questions without it.</p>`, "is-withheld");
+  }
+
+  async function submit(q) {
+    if (!q.trim()) return;
+    // Read at SUBMIT time, not at load. Snapshotting it into a const meant
+    // the screen could never learn that its situation had changed — and a
+    // state that can only be set before the page exists cannot be driven,
+    // which is the same thing that makes it untestable.
+    if (box.dataset.ready !== "1") { unavailable(q); return; }
+    go.disabled = true; go.textContent = "Asking\u2026";
+    panel(`<p class="askq">${esc(q)}</p>`
+          + `<p class="askpara">Reading the chart\u2026</p>`, "is-waiting");
+    try {
+      const r = await fetch("/ask", {
+        method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(Object.assign({sid: sid, question: q}, birth))
+      });
+      const d = await r.json();
+      if (left && typeof d.remaining === "number") left.textContent = d.remaining;
+      if (r.ok) answered(q, d);
+      else if (d.withheld) withheld(q, d);
+      else panel(`<p class="askq">${esc(q)}</p>`
+                 + `<p class="askverdict">${esc(d.error)}</p>`, "is-withheld");
+    } catch (e) {
+      panel(`<p class="askq">${esc(q)}</p>`
+            + `<p class="askverdict">Could not reach the chart agent.</p>`,
+            "is-withheld");
+    } finally {
+      go.disabled = false; go.textContent = "Ask";
+    }
+  }
+
+  go.addEventListener("click", () => {
+    const q = input.value; input.value = ""; submit(q);
+  });
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); go.click(); }
+  });
+  box.querySelectorAll(".sugq").forEach(b => b.addEventListener("click", () => {
+    input.value = b.textContent.trim();
+    submit(input.value);
+    input.value = "";
+  }));
 })();
 </script>
 </body>

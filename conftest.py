@@ -189,6 +189,28 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
                      "or not, with what it reads"),
     "TestTheTabRow": (
         "invariant", "product rule: five peer screens, always one tap away"),
+    "TestTheAskScreen": (
+        "invariant", "product rule: the question field renders whether or "
+                     "not an answer can be produced; answers are "
+                     "verdict-first and footnote the ids they rest on"),
+    "TestTheAskScreenInARealBrowser": (
+        "invariant", "product rule: the field renders, accepts text, "
+                     "submits, and both the answered and the withheld state "
+                     "render — driven in a browser"),
+    "TestYogasAreCollapsedRows": (
+        "invariant", "product rule: a yoga is a closed row carrying name, "
+                     "one-line verdict and family; one open at a time"),
+    "TestLearnHasAHome": (
+        "invariant", "product rule: Learn has a category card and a quiet "
+                     "tab entry — not a spotlight, not buried"),
+    "TestTextureAndContrast": (
+        "invariant", "product rule: a second surface tone, a grain on the "
+                     "ground only, a heavier structural rule than a row "
+                     "divider, and the bronze as the plate's ink"),
+    "TestEveryDivisionMatchesTheOracle": (
+        "external", "PyJHora — an independent implementation, compared per "
+                    "body and per division for both fictional charts, sign "
+                    "AND divisional longitude"),
     "TestAshtakavarga": (
         "external", "PyJHora — an independent implementation, compared per "
                     "SIGN for both fictional charts; plus the classical "

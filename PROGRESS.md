@@ -1,5 +1,128 @@
 # PROGRESS
 
+## Nine divisions at degree level, a readable Ask, and a page that is not flat ✅ (2026-09-13)
+
+Six findings from a founder's walk; one — Numerology stays *in preparation* —
+was correct as it stood.
+
+### 1. Every division is cast, at DEGREE level
+
+D2 Horā, D3 Drekkāṇa, D7 Saptāṃśa, D12 Dvādaśāṃśa, D16 Ṣoḍaśāṃśa, D30
+Triṃśāṃśa and D60 Ṣaṣṭyāṃśa. Milestone 3's prerequisite landed with them:
+`VargaPosition` carries a divisional longitude, so a graha's position inside
+its part is stretched over a full 30° and varga nakṣatras and
+dignity-by-degree are possible at all. `yogaread.varga_dignity` is now the
+same `dignity_at` the birth chart uses — moolatrikona included, where it used
+to be structurally unreachable.
+
+That stretch is a **scaling convention**, not a classical statement — the
+texts assign a divisional sign and say nothing about a position inside it —
+and `rule.varga.degree_convention` says so in as many words, on every one of
+the 199 varga facts that carries a degree.
+
+**The gate is per body, per division, both fixtures — 180 comparisons of sign
+AND longitude against PyJHora.** Every one of these counting rules produces a
+perfectly reasonable-looking plate when it is wrong, which is why nothing
+lights up in the gallery before passing it. Two deliberate mutations were run
+to confirm it bites: a D3 counting 8 signs instead of 4, and D30's odd/even
+bands swapped. Both went red immediately.
+
+**The two divergent implementations the founder singled out, and a third.**
+`SCHOOL_NOTE` states the reading in use on the plate itself:
+
+| | what this build does | what else exists |
+|---|---|---|
+| D2 | twelve-sign horā, forward in odd signs and backward in even | the older two-sign horā gives only Leo and Cancer |
+| D30 | the classical UNEQUAL bands — 5°, 5°, 8°, 7°, 5° | the equal 1° division, used here only to scale the degree |
+| D60 | half a degree per division, counted on from the sign | some texts reverse the count in even signs |
+
+The ledger's agent payload is **sliced**, not tripled: casting seven more
+divisions took the ledger from 130 facts to 330, and every one would have
+gone into every prompt. The lagna of every division travels — the agent must
+know a division exists and can be asked for — and the per-graha detail only
+for D9, D10 and whatever division the question's domain names.
+
+### 3. Yogas are closed rows
+
+Nine printed open was a wall of text nobody read. Each is one row now — name,
+a one-line verdict, its family as a chip — and the full reading opens on
+click, one at a time. The line is a new composition inside the teaser budget,
+and it says the two things that decide whether a reader opens the row:
+
+> **Thins in the ninth · running to Feb 2027**
+
+### 4. Learn has a home
+
+Its own card in the Explore index at the second surface tone, and a
+persistent quiet entry in the tab row — the body face at the label colour
+against the display face the five screens use. The description counts the
+lessons that exist: writing "seven short pieces" beside twenty cards would be
+a small lie in the one place that exists to teach.
+
+### 5. The page was flat, and the fix stayed in the system
+
+No gradients, no hue-noise. Four devices:
+
+- **A second tone that is actually a tone.** `--surface` measured **1.084:1**
+  against the paper — a token in the stylesheet and nothing on the screen. It
+  is **1.189:1** now, which is as far as it can go: `--accent-ink` on the
+  surface is the binding pair and lands at 4.96. Both bronzes darkened with
+  it so every pair keeps headroom on *both* grounds. It is applied where a
+  layer sits *behind* the reading — an opened expander, an ephemeris table,
+  an open yoga row.
+- **A paper grain**, an feTurbulence tile carried at 5.5% alpha **inside the
+  SVG** rather than as a CSS overlay, so it is a background image and cannot
+  end up over text. `prefers-contrast: more` drops it.
+- **1.5px structural rules** above a section head, against the 1px hairlines
+  between rows. The page had one line weight and therefore one level of
+  hierarchy.
+- **The bronze is the plate's ink.** And this found a real failure: the plate
+  was drawn in 38% ink at **2.28:1**, under the 3.0 floor for a non-text
+  graphic — the figure carrying the whole screen was the faintest thing on
+  it. Drawing the frame at 62% of the new accent put it back at 2.16, so the
+  frame and the diamond are told apart by stroke WEIGHT instead, which costs
+  no contrast. `TestPaperPalette` gained a gate that resolves a stroke
+  declaration to a colour and checks it.
+
+### 6. The Ask screen had nowhere to type
+
+The entire block sat behind `{% if data.agent_ready %}` and the deployment
+had no API key, so the screen rendered a paragraph of explanation and no
+field. **Whether an answer can be produced is a question about the answer; it
+is not a reason to refuse someone the chance to ask.**
+
+Ask is a screen of its own now — which also makes the folios match the tab
+row, five folds against five tabs, where they had said four. A display-size
+label bound to the field, three quiet suggestions, and an answer that renders
+**verdict-first structurally**: `/ask` hands the verdict over as its own
+field and the page never parses prose to find it.
+
+**The six-step checklist is shown, and it is derived from evidence.** A step
+counts as walked when the answer cites a fact id that step is answerable
+from — `domain_brief` already publishes exactly which. A model that says it
+considered the divisional chart and cites no varga fact shows as not walked.
+The withheld state is its own state, with a bronze rule and the surface tone,
+because a reply that failed validation is the feature working.
+
+`TestTheAskScreenInARealBrowser` drives the page: the field renders, accepts
+text, submits, and both the answered and the withheld states render, at 390
+and 1280, with `/ask` stubbed at the network so both outcomes run without a
+key and without a model.
+
+### Two things worth writing down
+
+**A stale `.pyc` reported a failure the source did not have.** A mutation test
+restored `vargas.py` from a backup within the same second and at the same
+file size, so Python's mtime-and-size cache check passed and the mutated
+bytecode was reused — the disassembly showed branches inverted against the
+source on disk. Mutation runs clear `__pycache__` now.
+
+**The masthead was 640px while the folds ran to 1120.** Adding Learn and
+Numerology overflowed the tab row by 74px and clipped its own last word. The
+masthead spans what the page spans.
+
+**Tests:** 590 passed, up from 547.
+
 ## Milestone 2 — Aṣṭakavarga, raw ✅ (2026-09-12)
 
 Unblocked by the restructure, and shipped to the scope agreed on 2026-09-03:

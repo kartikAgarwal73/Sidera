@@ -2056,15 +2056,25 @@ class TestUIRevisionWalkthrough:
         assert "SUPERSEDED IN PART" in handoff, (
             "the token table below is only authoritative because the handoff "
             "says it supersedes the old one")
+        # THE HEXES COME FROM THE DOCUMENT, not from a copy of them here.
+        # Duplicating the table into the gate made every palette revision a
+        # two-file edit, and the second file is the one that gets forgotten —
+        # which is exactly what an external gate is supposed to catch rather
+        # than suffer from. This reads the record and holds the stylesheet
+        # to it.
+        table = dict(re.findall(
+            r"\|\s*`(--[\w-]+)`\s*\|\s*`(#[0-9a-fA-F]{6})`\s*\|", handoff))
+        for token in ("--paper", "--surface", "--ink", "--accent",
+                      "--accent-ink"):
+            assert token in table, f"{token} is not in the handoff table"
         css = open(HERE / "static/style.css").read()
         default = css[css.index(":root,"):css.index('[data-palette="night"]')]
-        for token, value in (("--paper", "#f3f2f2"), ("--surface", "#eae9e9"),
-                             ("--ink", "#201f1d"), ("--accent", "#b68235"),
-                             ("--accent-ink", "#8a5f1c")):
+        for token, value in table.items():
             assert f"{token}: {value}" in default, (token, value)
-            assert f"| `{token}` | `{value}` |" in handoff, (token, value)
         fav = open(HERE / "static/favicon.svg").read()
-        assert "#f3f2f2" in fav and "#201f1d" in fav and "#b68235" in fav
+        for token in ("--paper", "--ink", "--accent"):
+            assert table[token] in fav, (
+                f"the favicon still carries the retired {token}")
 
     def test_framework_palettes_by_root_attribute(self):
         """Build framework, SIX · TOKENS: palettes stored centrally and
@@ -2086,16 +2096,24 @@ class TestUIRevisionWalkthrough:
             assert block.count(f"{token}:") >= 2, token
         # A component may never carry a palette's hex directly.
         body = css[css.index("* { box-sizing"):]
+        # The grain is an inline SVG data URI. `%23` inside it is an escaped
+        # `#` for a filter reference, not a colour, and the URI carries no
+        # colour at all — the noise is desaturated. Drop it before scanning
+        # rather than widening the rule that keeps colour in the tokens.
+        body = re.sub(r'url\("data:image/svg\+xml,[^"]*"\)', "", body)
         stray = [h for h in re.findall(r"#[0-9a-fA-F]{6}", body)]
         assert stray == [], f"hardcoded colour outside the token block: {stray}"
 
     def test_framework_non_negotiable_tokens(self):
         # "Square corners everywhere. The device bezel is the only radius"
         # — the sole exception in-app is a circular score ring.
-        css = open(HERE / "static/style.css").read()
-        radii = re.findall(r"border-radius:\s*([^;]+);", css)
+        raw = open(HERE / "static/style.css").read()
+        radii = re.findall(r"border-radius:\s*([^;]+);", raw)
         assert sorted(set(radii)) == ["0", "50%"], radii
-        # "No shadows, no gradients, no elevation."
+        # "No shadows, no gradients, no elevation." DECLARATIONS, not prose:
+        # scanning the raw file made a comment saying "no gradient and no
+        # hue" fail the no-gradient rule.
+        css = re.sub(r"/\*.*?\*/", "", raw, flags=re.S)
         assert "box-shadow" not in css and "gradient" not in css
 
     def test_design_handoff_glance_pattern(self, page):
@@ -2888,16 +2906,34 @@ class TestChartFactLedger:
                 # reader which sky it is describing.
                 assert label.upper() in fact.statement
 
-    def test_varga_facts_admit_they_carry_no_degree(self, agent_facts):
-        """vargas.py maps a longitude to a divisional SIGN and discards the
-        rest. The ledger says so, so the agent does not reach for a varga
-        degree, nakshatra or dignity that this build cannot supply."""
-        fact = agent_facts["varga.d9.venus"]
-        assert fact.value["degree"] is None
-        assert "Sign-level only" in fact.statement
-        from rulelib import RULES
-        assert "rule.varga.sign_level" in RULES
-        assert "not available" in RULES["rule.varga.sign_level"].text
+    def test_varga_facts_carry_a_degree_and_name_it_a_convention(self,
+                                                                 chart):
+        """Inverted 2026-09-13, and that is the milestone.
+
+        This used to assert the opposite: that a varga fact carried NO
+        degree and said so, because the build computed divisional positions
+        to the sign. It computes them to the degree now — which is what
+        makes varga nakṣatras and dignity-by-degree possible at all.
+
+        The honesty requirement did not go away, it moved. The stretch that
+        produces a divisional degree is a SCALING CONVENTION, not something
+        the classical texts assign, so every fact that carries one says so
+        and `rule.varga.degree_convention` states it in full.
+        """
+        from chartfacts import build_facts
+        import rulelib
+        facts = [f for f in build_facts(chart, AGENT_WHEN)
+                 if f.kind == "varga" and "planet" in f.value]
+        assert facts, "no per-graha varga facts"
+        for f in facts:
+            assert f.value["degree"] is not None, f.id
+            assert 0 <= f.value["degree"] < 30, (f.id, f.value["degree"])
+            assert "scaling convention" in f.statement, f.id
+        rule = rulelib.RULES["rule.varga.degree_convention"]
+        assert "SCALING CONVENTION" in rule.text
+        assert "never be quoted as a classical figure" in rule.text
+        # And the retired claim is gone rather than left contradicting it.
+        assert "rule.varga.sign_level" not in rulelib.RULES
 
     def test_all_nine_transits_are_in_the_ledger(self, chart, agent_facts):
         """A forecast answer is mostly transits. A position the agent does
@@ -3604,7 +3640,9 @@ class TestAgentEndpoint:
         page = client.post("/", data=GATE_FORM).get_data(as_text=True)
         assert 'id="agent"' in page
         assert 'href="#cat-ask"' in page     # the agent lives under Ask
-        assert page.count('class="sugq"') == 3      # three suggested questions
+        # Three in the agent panel, and three more on the Ask SCREEN, which
+        # has its own field. Both are the same three questions.
+        assert page.count('class="sugq"') == 6
         assert "Facts and rules used" in page        # the Why? pattern
         assert "thumbdown" in page
         assert 'id="agentq"' in page
@@ -4871,19 +4909,24 @@ class TestDueDiligenceReading:
 
     def test_varga_domain_houses_are_addressable(self, chart, ledger):
         """`d9.7th` in one citation, rather than nine per-planet facts the
-        agent has to assemble and did not."""
+        agent has to assemble and did not.
+
+        Widened 2026-09-13 to EVERY division this build casts. The ledger
+        carried D9 and D10 because those were the only two computed; the
+        seven that landed are addressable the same way.
+        """
         from engine import SIGNS
-        from vargas import dasamsa, navamsa
-        for label, varga in (("d9", navamsa(chart)), ("d10", dasamsa(chart))):
-            lagna = SIGNS.index(varga.lagna_sign)
+        import vargas
+        for code in vargas.SUPPORTED:
+            label = code.lower()
+            varga = vargas.varga_chart(chart, code)
+            lagna = varga.lagna_sign_index
             for house in range(1, 13):
                 fact = ledger[f"{label}.{ordinal(house)}"]
                 assert fact.value["sign"] == SIGNS[(lagna + house - 1) % 12]
                 assert fact.value["occupants"] == [
                     p for p in PLANETS if varga.planets[p].house == house]
-                # The build's own limit is restated so the agent does not
-                # reach for a varga degree that does not exist.
-                assert "no degree" in fact.statement
+                assert fact.value["varga"] == code
 
     # --- step 5: drishti, not just occupancy ----------------------------
 
@@ -6000,10 +6043,13 @@ class TestEditorialDossier:
         import html as _html
         folios = re.findall(r'<p class="folio">(.*?)</p>', page, re.S)
         joined = _html.unescape(re.sub(r"<[^>]+>", " ", " ".join(folios)))
+        # FIVE folds since Ask became a screen of its own, so the folios
+        # match the five tabs. A page marker reading "Fold 1 of 4" beside
+        # five tabs is the numbering contradicting the navigation.
         for n, name in ((1, "Today"), (2, "Readings"), (3, "Your charts"),
-                        (4, "The full chart")):
+                        (4, "The full chart"), (5, "Ask")):
             assert f"P. {n:02d}" in joined, n
-            assert f"Fold {n} of 4" in joined, n
+            assert f"Fold {n} of 5" in joined, n
             assert name in joined, name
         # Every view has one — no screen is unnumbered.
         views = len(re.findall(r'<div class="view"', page))
@@ -6079,8 +6125,14 @@ class TestEditorialDossier:
         assert '<div class="mark">' in page
 
     def test_no_shadows_no_gradients_no_stray_radius(self):
-        """Restated here because a redesign is exactly when these creep in."""
-        css = self._css()
+        """Restated here because a redesign is exactly when these creep in.
+
+        DECLARATIONS, not prose. This scanned the raw file, so a comment
+        saying "no gradient and no hue" failed the no-gradient rule — the
+        gate firing on the sentence that states it. Comments are stripped
+        first; what is being forbidden is the property.
+        """
+        css = re.sub(r"/\*.*?\*/", "", self._css(), flags=re.S)
         assert "box-shadow" not in css and "gradient" not in css
         assert sorted(set(re.findall(r"border-radius:\s*([^;]+);", css))) \
             == ["0", "50%"]
@@ -6322,10 +6374,77 @@ class TestPaperPalette:
                     f"small text must clear AA")
 
     def test_the_graphic_accent_clears_the_non_text_floor(self, tokens):
-        """AA for non-text objects — a plate stroke, a rule — is 3.0:1."""
+        """AA for non-text objects — a plate stroke, a rule — is 3.0:1.
+
+        Widened 2026-09-13 to BOTH grounds. The accent was checked on the
+        paper only, so deepening the surface tone could have pushed a plate
+        or a rule drawn on it under the floor without anything going red.
+        """
         for reading, t in tokens.items():
-            r = contrast(t["--accent"], t["--paper"])
-            assert r >= 3.0, f"{reading} accent on paper: {r:.2f}:1"
+            for ground in ("--paper", "--surface"):
+                r = contrast(t["--accent"], t[ground])
+                assert r >= 3.0, f"{reading} accent on {ground}: {r:.2f}:1"
+
+    def test_the_second_tone_is_a_tone_the_eye_can_find(self, tokens):
+        """"a second surface tone … so folds separate by tone, not just
+        rule." A token that measures 1.084 against the ground is a tone in
+        the stylesheet and nothing on the screen — which is what it was."""
+        for reading, t in tokens.items():
+            r = contrast(t["--paper"], t["--surface"])
+            assert r >= 1.15, (
+                f"{reading}: surface is {r:.3f}:1 against the paper — not a "
+                f"step anyone can see")
+            # …and not so far that it reads as a different page.
+            assert r <= 1.45, f"{reading}: {r:.3f}:1 is a panel, not a tone"
+
+    def test_the_plate_is_drawn_above_the_non_text_floor(self):
+        """The figure that carries the whole screen was the faintest thing
+        on it: `.plate-rule` at 38% ink measures 2.28:1 against the paper.
+        Every stroke that DRAWS the plate — not the halo behind a label —
+        has to clear 3.0 on the ground it is drawn on."""
+        css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
+        tokens = self._tokens_from(css)
+        checked = 0
+        for selector in (".plate-rule", ".plate-diamond"):
+            block = css[css.index(selector + " {"):]
+            block = block[:block.index("}")]
+            stroke = re.search(r"stroke:\s*([^;]+);", block).group(1).strip()
+            for reading, t in tokens.items():
+                colour = self._resolve(stroke, t)
+                assert colour, (selector, stroke)
+                r = contrast(colour, t["--paper"])
+                assert r >= 3.0, (
+                    f"{reading} {selector} is {r:.2f}:1 on the paper — "
+                    f"under the 3.0 floor for a non-text graphic")
+                checked += 1
+        assert checked == 4, checked
+
+    @staticmethod
+    def _tokens_from(css):
+        head = css[:css.index("* { box-sizing")]
+        out = {}
+        for reading, block in (
+                ("paper", head[head.index(":root,"):
+                               head.index('[data-palette="night"]')]),
+                ("night", head[head.index('[data-palette="night"]'):])):
+            out[reading] = dict(re.findall(r"(--[\w-]+):\s*(#[0-9a-fA-F]{6})",
+                                           block))
+        return out
+
+    @staticmethod
+    def _resolve(value, tokens):
+        """A stroke declaration to a hex colour, alpha composited over the
+        paper. `var(--accent)` and `rgba(var(--accent-rgb), .62)` are both
+        things this stylesheet writes."""
+        m = re.match(r"var\((--[\w-]+)\)$", value)
+        if m:
+            return tokens.get(m.group(1))
+        m = re.match(r"rgba\(var\((--[\w-]+)-rgb\),\s*([\d.]+)\)$", value)
+        if m:
+            base = tokens.get(m.group(1))
+            return _over(base, tokens["--paper"], float(m.group(2))) \
+                if base else None
+        return None
 
     def test_the_muted_ink_steps_are_still_readable_text(self, tokens):
         """Every muted step is real body text somewhere in the app, so
@@ -6349,6 +6468,474 @@ class TestPaperPalette:
         css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
         body = css[css.index("* { box-sizing"):]
         assert re.findall(r"#[0-9a-fA-F]{6}", body) == []
+
+
+class TestTheAskScreen:
+    """The founder opened Ask and found nowhere to type.
+
+    The entire block sat behind `{% if data.agent_ready %}` and the
+    deployment had no API key, so the screen rendered a paragraph of
+    explanation and no field. Whether an answer can be produced is a
+    question about the ANSWER; it is not a reason to refuse someone the
+    chance to ask.
+    """
+
+    # --- it renders, key or no key ------------------------------------------
+
+    def test_the_field_exists_without_an_api_key(self, page):
+        """The bug, pinned. `page` is rendered with no ANTHROPIC_API_KEY."""
+        import agent
+        assert not agent.is_configured(), (
+            "this gate is meaningless with a key configured")
+        view = page[page.index('id="view-ask"'):]
+        view = view[:view.index("<!-- /view-ask -->")]
+        assert 'id="askq"' in view, "no question field on the Ask screen"
+        assert 'id="askgo"' in view, "no submit control"
+        # …and it is not disabled or hidden on the way past.
+        field = re.search(r'<input id="askq"[^>]*>', view).group(0)
+        assert "disabled" not in field, field
+        assert "hidden" not in field, field
+        assert 'data-ready="0"' in view, (
+            "the screen must know the agent is off — that is what selects "
+            "the unavailable state instead of a silent failure")
+
+    def test_the_label_is_the_screen(self, page):
+        """"a large, centred question field with the label 'Put a question to
+        your chart' at display size"."""
+        view = page[page.index('id="view-ask"'):]
+        view = view[:view.index("<!-- /view-ask -->")]
+        label = re.search(r'<h1 class="asklabel">(.*?)</h1>', view, re.S)
+        assert label, "the label is not a heading"
+        assert "Put a question to your chart" in label.group(1)
+        # A real <label>, bound to the field: clicking the words focuses it.
+        assert 'for="askq"' in label.group(1)
+        css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
+        block = css[css.index(".asklabel {"):]
+        block = block[:block.index("}")]
+        assert "var(--t-title)" in block, block
+        top = css[css.index(".asktop {"):]
+        top = top[:top.index("}")]
+        assert "text-align: center" in top
+
+    def test_three_suggestions_sit_quietly_beneath(self, page):
+        view = page[page.index('id="view-ask"'):]
+        view = view[:view.index("<!-- /view-ask -->")]
+        block = view[view.index('class="asksuggest"'):]
+        block = block[:block.index("</div>")]
+        suggestions = re.findall(r'class="sugq">([^<]+)</button>', block)
+        assert len(suggestions) == 3, suggestions
+        for q in suggestions:
+            assert q.strip().endswith("?"), q
+
+    def test_the_ask_tab_opens_the_ask_screen(self, page):
+        """It used to open Explore and scroll to a section inside it."""
+        row = re.search(r'<nav class="tabs"[^>]*>(.*?)</nav>', page, re.S)
+        assert 'href="#ask" data-view="view-ask"' in row.group(1)
+        js = page[page.index("function fromHash()"):]
+        js = js[:js.index("document.addEventListener")]
+        assert 'if (h === "ask") return show("view-ask");' in js
+        # …and it is matched BEFORE the element-lookup fallback, which would
+        # otherwise find the old `#ask` lens section inside Explore.
+        assert js.index('h === "ask"') < js.index('el.closest("#view-explore")')
+
+    def test_the_folios_match_the_tab_row(self, page):
+        """Ask became a screen, so there are five folds and not four. A page
+        marker that says 'Fold 1 of 4' beside five tabs is the numbering
+        contradicting the navigation."""
+        import html as _html
+        folios = re.findall(r'<p class="folio">(.*?)</p>', page, re.S)
+        joined = _html.unescape(re.sub(r"<[^>]+>", " ", " ".join(folios)))
+        assert "Fold 5 of 5" in joined
+        assert "of 4" not in joined, "a four-fold folio survived"
+        for n, name in ((1, "Today"), (2, "Readings"), (3, "Your charts"),
+                        (4, "The full chart"), (5, "Ask")):
+            assert f"P. {n:02d}" in joined, n
+            assert name in joined, name
+
+    # --- the answer is structural -------------------------------------------
+
+    def test_the_endpoint_hands_over_a_verdict_and_paragraphs(self):
+        """Answer-first is a property of the STRUCTURE, not of the model
+        remembering to put the answer first. The verdict is its own field
+        and the page never parses prose to find it."""
+        source = (HERE / "app.py").read_text(encoding="utf-8")
+        block = source[source.index("def ask_endpoint"):]
+        block = block[:block.index("\n@app.route", 10)]
+        for field in ("verdict=", "paragraphs=", "steps=", "facts_used=",
+                      "rules_applied="):
+            assert field in block, field
+        page = (HERE / "templates" / "index.html").read_text(encoding="utf-8")
+        js = page[page.index("SCREEN 5 · ASK"):]
+        assert "d.verdict" in js
+        # No prose parsing anywhere in the render path.
+        assert "split(\".\")" not in js
+        assert "indexOf(\".\")" not in js
+
+    def test_the_six_steps_are_derived_from_cited_facts(self):
+        """"the six-step checklist the agent walked … as a compact list of
+        which steps fired, each expandable to the facts it used."
+
+        Derived from the evidence, never self-reported: a step counts as
+        walked when the answer cites a fact id that step is answerable
+        from. A model that says it considered the divisional chart and
+        cites no varga fact has not.
+        """
+        import agent
+        from chartfacts import domain_brief
+        chart = compute_chart(GATE_BIRTH)
+        brief = domain_brief(chart, "how is my career going?")
+        assert brief, "no domain detected for a career question"
+
+        cited = list(brief["fact_ids"]["NATAL"][:1]) + \
+            list(brief["fact_ids"]["DASHA"][:1])
+        answer = agent.AgentAnswer(answer="A paragraph.", verdict="A verdict.",
+                                   facts_used=cited)
+        steps = agent.steps_walked(answer, brief)
+        assert [s["step"] for s in steps] == [
+            "NATAL", "KARAKA", "VARGA", "DASHA", "TRANSIT", "SYNTHESIS"]
+        fired = {s["step"]: s["fired"] for s in steps}
+        assert fired["NATAL"] and fired["DASHA"]
+        assert not fired["KARAKA"] and not fired["VARGA"]
+        assert not fired["TRANSIT"]
+        # Each step carries the facts it actually used.
+        natal = next(s for s in steps if s["step"] == "NATAL")
+        assert natal["facts"] == cited[:1]
+        assert natal["available"] > len(natal["facts"])
+
+    def test_a_question_with_no_domain_shows_no_checklist(self):
+        """There is no checklist to walk for "what is a nakshatra", and
+        inventing one to display would be the same dishonesty pointed the
+        other way."""
+        import agent
+        answer = agent.AgentAnswer(answer="x", facts_used=["lagna"])
+        assert agent.steps_walked(answer, None) == []
+
+    def test_the_withheld_state_is_its_own_state(self, page):
+        """A reply that failed validation against the chart is the feature
+        working. It reads as a finding, not as an error in the same box as
+        a network failure."""
+        js = page[page.index("SCREEN 5 · ASK"):]
+        assert "function withheld(" in js
+        assert "is-withheld" in js
+        assert "d.withheld" in js
+        css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
+        block = css[css.index(".askanswer.is-withheld {"):]
+        block = block[:block.index("}")]
+        assert "var(--surface)" in block
+        assert "border-left" in block
+
+    def test_facts_and_rules_are_footnoted_by_id(self, page):
+        js = page[page.index("SCREEN 5 · ASK"):]
+        assert 'idlist(d.facts_used, "Facts")' in js
+        assert 'idlist(d.rules_applied, "Rules")' in js
+        assert "askfacts" in js and "<code>" in js
+
+
+class TestTheAskScreenInARealBrowser:
+    """The field renders, accepts text, submits, and both states render.
+
+    A markup gate can prove the input is in the HTML. It cannot prove that
+    typing into it and pressing Ask produces an answer on the screen — which
+    is the thing that was broken — so this drives the real page and stubs
+    `/ask` at the network so both outcomes can be exercised without a key
+    and without a model.
+    """
+
+    ANSWER = {
+        "answer": "First paragraph of the working.\nSecond paragraph.",
+        "verdict": "Saturn rules the tenth and sits at its weakest.",
+        "paragraphs": ["First paragraph of the working.",
+                       "Second paragraph."],
+        "steps": [
+            {"step": "NATAL", "do": "the domain's houses", "fired": True,
+             "facts": [{"id": "house.10", "statement": "The 10th is Taurus."}],
+             "available": 6},
+            {"step": "KARAKA", "do": "the significator", "fired": False,
+             "facts": [], "available": 2},
+            {"step": "VARGA", "do": "the divisional chart", "fired": True,
+             "facts": [{"id": "varga.d10.lagna",
+                        "statement": "The D10 lagna is Scorpio."}],
+             "available": 13},
+            {"step": "DASHA", "do": "the running period", "fired": True,
+             "facts": [{"id": "dasha.current",
+                        "statement": "Rahu mahadasha."}], "available": 10},
+            {"step": "TRANSIT", "do": "the slow movers", "fired": False,
+             "facts": [], "available": 8},
+            {"step": "SYNTHESIS", "do": "weave them", "fired": True,
+             "facts": [], "available": 0},
+        ],
+        "facts_used": [{"id": "house.10", "statement": "The 10th is Taurus."},
+                       {"id": "dasha.current",
+                        "statement": "Rahu mahadasha."}],
+        "rules_applied": [{"id": "rule.dasha.lordship",
+                           "text": "A dasha lord delivers its houses.",
+                           "source": "BPHS"}],
+        "confidence": "Interpretive",
+        "remaining": 4,
+    }
+
+    WITHHELD = {
+        "error": "Ask about the running period instead. That reply put "
+                 "Saturn in a sign it does not occupy, so it was not shown.",
+        "withheld": True,
+        "violations": ["wrong-sign: claimed Saturn in Leo; chart has Pisces"],
+        "remaining": 3,
+    }
+
+    @classmethod
+    @pytest.fixture(scope="class")
+    def driven(cls):
+        pw = pytest.importorskip("playwright.sync_api",
+                                 reason="playwright not installed")
+        import threading
+        from werkzeug.serving import make_server
+        from app import app
+        srv = make_server("127.0.0.1", 0, app, threaded=True)
+        port = srv.socket.getsockname()[1]
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        out = {}
+        try:
+            with pw.sync_playwright() as p:
+                browser = TestMaskedBirthFieldsInARealBrowser._launch(p, pytest)
+                for width in (390, 1280):
+                    pg = browser.new_context(
+                        viewport={"width": width, "height": 1000}).new_page()
+                    pg.goto(f"http://127.0.0.1:{port}/")
+                    for k, v in GATE_FORM.items():
+                        pg.evaluate(
+                            "([k,v]) => { const e = document.querySelector("
+                            "`[name=\"${k}\"]`); if (e) e.value = v; }", [k, v])
+                    with pg.expect_navigation():
+                        pg.evaluate("document.querySelector('#cast').submit()")
+                    pg.wait_for_load_state("load")
+                    pg.evaluate("location.hash = '#ask'")
+                    pg.wait_for_timeout(400)
+                    shot = {}
+
+                    # 1. EMPTY. The field is there and takes text.
+                    field = pg.query_selector("#askq")
+                    shot["field_visible"] = bool(field and field.is_visible())
+                    shot["view_open"] = pg.eval_on_selector(
+                        "#view-ask", "e => !e.hidden")
+                    pg.fill("#askq", "how is my career going?")
+                    shot["typed"] = pg.input_value("#askq")
+
+                    # 2. ANSWERED. `/ask` stubbed at the network so the
+                    #    render path is exercised without a key or a model.
+                    pg.route("**/ask", lambda route: route.fulfill(
+                        status=200, content_type="application/json",
+                        body=json.dumps(cls.ANSWER)))
+                    # The screen refuses to call when it knows there is no
+                    # key, so tell it there is one — the stub is the key.
+                    pg.evaluate(
+                        "document.getElementById('askscreen')"
+                        ".dataset.ready = '1'")
+                    pg.reload()
+                    pg.wait_for_timeout(300)
+                    pg.evaluate("location.hash = '#ask'")
+                    pg.wait_for_timeout(300)
+                    pg.evaluate(
+                        "document.getElementById('askscreen')"
+                        ".dataset.ready = '1'")
+                    pg.fill("#askq", "how is my career going?")
+                    pg.click("#askgo")
+                    pg.wait_for_selector(".askverdict", timeout=5000)
+                    pg.wait_for_timeout(200)
+                    shot["answer"] = pg.evaluate(r"""() => {
+                      const a = document.querySelector('.askanswer');
+                      const rect = e => e ? e.getBoundingClientRect().top : -1;
+                      return {
+                        verdict: (a.querySelector('.askverdict') || {})
+                          .textContent || '',
+                        paragraphs: [...a.querySelectorAll('.askpara')]
+                          .map(p => p.textContent.trim()),
+                        verdictAbove:
+                          rect(a.querySelector('.askverdict')) <
+                          rect(a.querySelector('.askpara')),
+                        steps: [...a.querySelectorAll('.askstep')].map(s => ({
+                          name: s.querySelector('.askstep-name').textContent,
+                          fired: s.classList.contains('fired'),
+                        })),
+                        factIds: [...a.querySelectorAll('.askfacts code')]
+                          .map(c => c.textContent),
+                        summaries: [...a.querySelectorAll('.askfacts > summary')]
+                          .map(x => x.textContent.trim()),
+                        withheld: a.classList.contains('is-withheld'),
+                      };
+                    }""")
+                    shot["step_facts"] = pg.evaluate(r"""() => {
+                      const s = [...document.querySelectorAll('.askstep')]
+                        .find(x => x.querySelector('.askstep-name')
+                          .textContent === 'VARGA');
+                      s.open = true;
+                      return [...s.querySelectorAll('code')]
+                        .map(c => c.textContent);
+                    }""")
+
+                    # 3. WITHHELD.
+                    pg.route("**/ask", lambda route: route.fulfill(
+                        status=422, content_type="application/json",
+                        body=json.dumps(cls.WITHHELD)))
+                    pg.fill("#askq", "will I get the job in December?")
+                    pg.click("#askgo")
+                    pg.wait_for_selector(".askanswer.is-withheld",
+                                         timeout=5000)
+                    pg.wait_for_timeout(200)
+                    shot["withheld"] = pg.evaluate(r"""() => {
+                      const a = document.querySelector('.askanswer');
+                      return {
+                        isWithheld: a.classList.contains('is-withheld'),
+                        mark: (a.querySelector('.askwithheld-mark') || {})
+                          .textContent || '',
+                        text: a.textContent,
+                        background: getComputedStyle(a).backgroundColor,
+                        borderLeft: getComputedStyle(a).borderLeftWidth,
+                      };
+                    }""")
+                    out[width] = shot
+                browser.close()
+        finally:
+            srv.shutdown()
+        return out
+
+    def test_the_field_renders_and_accepts_text(self, driven):
+        for width, shot in driven.items():
+            assert shot["view_open"], f"{width}: the Ask view did not open"
+            assert shot["field_visible"], f"{width}: no visible field"
+            assert shot["typed"] == "how is my career going?", width
+
+    def test_submitting_renders_an_answer_verdict_first(self, driven):
+        for width, shot in driven.items():
+            a = shot["answer"]
+            assert a["verdict"].startswith("Saturn rules the tenth"), width
+            assert a["paragraphs"][:2] == [
+                "First paragraph of the working.", "Second paragraph."], width
+            assert a["verdictAbove"], f"{width}: the verdict is not first"
+            assert not a["withheld"], width
+
+    def test_the_answer_shows_which_steps_fired(self, driven):
+        for width, shot in driven.items():
+            steps = shot["answer"]["steps"]
+            assert [s["name"] for s in steps] == [
+                "NATAL", "KARAKA", "VARGA", "DASHA", "TRANSIT",
+                "SYNTHESIS"], width
+            fired = {s["name"]: s["fired"] for s in steps}
+            assert fired["NATAL"] and fired["VARGA"] and fired["DASHA"], width
+            assert not fired["KARAKA"] and not fired["TRANSIT"], width
+            # …and a step opens to the facts it used.
+            assert shot["step_facts"] == ["varga.d10.lagna"], width
+
+    def test_the_answer_footnotes_the_ids_it_rests_on(self, driven):
+        for width, shot in driven.items():
+            a = shot["answer"]
+            summaries = " ".join(a["summaries"])
+            assert "Facts used" in summaries, (width, summaries)
+            assert "Rules used" in summaries, (width, summaries)
+            assert "house.10" in a["factIds"], width
+            assert "rule.dasha.lordship" in a["factIds"], width
+
+    def test_a_withheld_reply_renders_its_own_state(self, driven):
+        for width, shot in driven.items():
+            w = shot["withheld"]
+            assert w["isWithheld"], width
+            assert w["mark"].strip() == "Withheld", (width, w["mark"])
+            assert "was not shown" in w["text"], width
+            assert "wrong-sign" in w["text"], width
+            # Visibly a different state, not the same box with other words.
+            assert w["borderLeft"] == "3px", (width, w["borderLeft"])
+            assert w["background"] != "rgba(0, 0, 0, 0)", width
+
+
+class TestTextureAndContrast:
+    """The page read flat, and the fix had to stay inside the system.
+
+    Four devices, no gradients and no hue-noise: a second surface tone for
+    what sits behind the reading, a paper grain on the ground only, a
+    heavier structural rule above a section head than between two rows, and
+    the bronze used deliberately so the eye has one anchor per screen.
+    `TestPaperPalette` owns the contrast arithmetic; this owns the devices.
+    """
+
+    @staticmethod
+    def _css():
+        return (HERE / "static" / "style.css").read_text(encoding="utf-8")
+
+    def test_the_grain_is_a_background_and_can_never_be_an_overlay(self):
+        """The alpha lives INSIDE the SVG, not on a CSS overlay. A
+        low-opacity element stretched across the viewport is one stacking
+        context away from sitting on top of the text it was meant to sit
+        behind; a background image cannot do that at all."""
+        css = self._css()
+        assert "--grain:" in css
+        grain = re.search(r'--grain:\s*url\("([^"]+)"\)', css)
+        assert grain, "no grain image"
+        uri = grain.group(1)
+        assert uri.startswith("data:image/svg+xml,"), uri[:40]
+        import urllib.parse
+        svg = urllib.parse.unquote(uri.split(",", 1)[1])
+        assert "feTurbulence" in svg
+        # Desaturated: the brief said no hue-noise.
+        assert 'type="saturate" values="0"' in svg
+        alpha = float(re.search(r'opacity="([\d.]+)"', svg).group(1))
+        assert 0 < alpha <= 0.08, alpha
+        # It is applied as a background image, and nothing else uses it.
+        assert "background-image: var(--grain)" in css
+        assert css.count("var(--grain)") == 1
+        # No positioned overlay anywhere near it.
+        body = css[css.index("body {"):]
+        body = body[:body.index("}")]
+        assert "position: fixed" not in body
+
+    def test_more_contrast_turns_the_grain_off(self):
+        """Someone who asked for more contrast did not ask for texture."""
+        css = self._css()
+        block = css[css.index("@media (prefers-contrast: more)"):]
+        block = block[:block.index("}") + 1]
+        assert "--grain: none" in block
+
+    def test_a_section_head_is_ruled_harder_than_a_row(self):
+        """The page had one line weight and therefore one level of
+        hierarchy: a section head and a row divider were drawn identically,
+        so structure had to be read rather than seen."""
+        css = self._css()
+        mark = css[css.index(".mark {"):]
+        mark = mark[:mark.index("}")]
+        weight = float(re.search(r"border-top:\s*([\d.]+)px", mark).group(1))
+        assert weight >= 1.5, weight
+        # …and the hairlines did NOT all get heavier with it.
+        hairlines = [float(w) for w in re.findall(
+            r"border-(?:top|bottom):\s*([\d.]+)px solid var\(--hairline\)",
+            css)]
+        assert hairlines, "no hairlines left in the stylesheet"
+        assert max(hairlines) <= 1.0, max(hairlines)
+
+    def test_what_sits_behind_the_reading_takes_the_second_tone(self):
+        """An opened expander, an ephemeris table, a category's own rows —
+        the layers a reader drops INTO. The reading itself stays on the
+        paper, so the eye can tell which layer it is in without reading."""
+        css = self._css()
+        block = css[css.index("/* --- THE SECOND TONE"):]
+        block = block[:block.index("/* --- A YOGA AS A ROW")]
+        for selector in (".dstep[open]", ".readfold[open]", ".tablewrap"):
+            assert selector in block, selector
+        assert block.count("var(--surface)") >= 2, block.count("var(--surface)")
+        # Tone, not a box: the brief's standing rule.
+        assert "box-shadow" not in block
+        assert not re.search(r"^\s*border:\s*1px", block, re.M), block
+
+    def test_the_bronze_is_the_plate_ink_and_the_verdict_mark(self):
+        """"the bronze used deliberately as the plate's ink and for verdict
+        emphasis so the eye has an anchor per screen" — and for text it is
+        `--accent-ink`, which clears 4.5, never `--accent`, which does
+        not."""
+        css = self._css()
+        for selector in (".plate-rule", ".plate-diamond"):
+            block = css[css.index(selector + " {"):]
+            block = block[:block.index("}")]
+            assert "var(--accent)" in block, selector
+        block = css[css.index(".yverdict .vmark"):]
+        block = block[:block.index("}")]
+        assert "var(--accent-ink)" in block, block
 
 
 class TestScrollChoreography:
@@ -7111,14 +7698,19 @@ class TestExploreIndex:
                  "ask", "agent", "patha", "grahas", "learnpath")
 
     def test_the_index_lists_every_category_with_a_description(self, page):
+        # A class TOKEN, not the whole attribute: Learn carries a second
+        # class now, and matching `class="catrow"` exactly dropped it from
+        # the index silently. That mistake has broken gates in this file
+        # three times.
         rows = re.findall(
-            r'<a class="catrow" href="#cat-(\w+)"[^>]*>\s*'
+            r'<a class="catrow[^"]*" href="#cat-(\w+)"[^>]*>\s*'
             r'<span class="catrow-title">([^<]+)</span>\s*'
             r'<span class="catrow-desc">([^<]+)</span>', page, re.S)
         assert [r[0] for r in rows] == list(self.CATEGORIES), rows
         for cid, title, desc in rows:
+            desc = re.sub(r"\s+", " ", desc).strip()
             assert len(desc.split()) >= 8, (cid, desc)
-            assert desc.strip().endswith("."), (cid, desc)
+            assert desc.endswith("."), (cid, desc)
 
     def test_every_technical_section_declares_its_category(self, page):
         for section in self.TECHNICAL:
@@ -7358,25 +7950,46 @@ class TestYourChartsScreen:
                      "D30", "D60"):
             assert any(c.startswith(code + " ") for c in codes), code
 
-    def test_the_unbuilt_slots_say_so_rather_than_being_omitted(self, page):
-        """A gallery that quietly listed three charts would imply the list is
-        complete. Same honesty the disabled Upapada option gets."""
+    def test_an_unbuilt_slot_says_so_and_a_built_one_does_not(self, page):
+        """A gallery that quietly listed only what it could cast would imply
+        the list is complete.
+
+        Re-pinned 2026-09-13, and the re-pin matters: every division in the
+        gallery is cast now, so the loop over unbuilt slots iterates zero
+        times and would pass forever without asserting anything. The gate
+        states BOTH halves — that unbuilt slots are marked, and that a build
+        with none of them carries no leftover "in preparation" text.
+        """
         import app as app_module
         import vargas
-        built = {"d1"} | {k for k, code, *_ in app_module.VARGA_SLOTS
-                          if vargas.is_supported(code)}
-        expected = len(app_module.VARGA_SLOTS) - len(built)
+        unbuilt = [code for key, code, _name in app_module.VARGA_SLOTS
+                   if key != "d1" and not vargas.is_supported(code)]
         soon = re.findall(r'class="gcard gcard-soon"', page)
-        assert len(soon) == expected, (len(soon), expected)
-        assert page.count("In preparation") == expected
+        assert len(soon) == len(unbuilt), (len(soon), unbuilt)
+        assert page.count("In preparation") == len(unbuilt), unbuilt
+        if not unbuilt:
+            # The state this build is actually in. Said explicitly so the
+            # assertion above cannot go quiet.
+            assert soon == [], soon
+            assert "In preparation" not in page
+            assert len(app_module.VARGA_SLOTS) >= 10, \
+                len(app_module.VARGA_SLOTS)
 
     def test_every_entry_says_what_that_chart_reads(self, page):
         import app as app_module
-        sums = re.findall(r'<span class="gcard-sum">([^<]+)</span>', page)
+        import html as _html
+        sums = [_html.unescape(t) for t in
+                re.findall(r'<span class="gcard-sum">([^<]+)</span>', page)]
         assert len(sums) == len(app_module.VARGA_SLOTS), len(sums)
         for text in sums:
-            assert len(text.split()) >= 8, text
+            # A phrase, not a paragraph: what this division is read for.
+            assert 4 <= len(text.split()) <= 20, text
             assert text.strip().endswith("."), text
+            assert text[:1].isupper(), text
+        # …and every one of them comes from the single table, so the gallery
+        # and the ledger cannot describe the same chart differently.
+        for _key, code, _name in app_module.VARGA_SLOTS:
+            assert app_module.varga_summary(code) in sums, code
 
     def test_the_built_charts_open_into_their_own_plate(self, page):
         for key in ("d1", "d9", "d10"):
@@ -7401,7 +8014,7 @@ class TestYourChartsScreen:
         """
         import app as app_module
         import vargas
-        for key, code, name, _summary, _intended in app_module.VARGA_SLOTS:
+        for key, code, name in app_module.VARGA_SLOTS:
             computed = key == "d1" or vargas.is_supported(code)
             has_view = f'id="view-varga-{key}"' in page
             assert has_view == computed, (
@@ -7413,19 +8026,16 @@ class TestYourChartsScreen:
                 assert 'class="kundli"' in view, code
                 assert "gm gm-" in view, f"{code} plate has no graha marks"
 
-    def test_an_unbuilt_division_is_named_not_omitted(self, page):
-        """A slot marked "in preparation" is a promise the app is keeping
-        track of. It carries the division's name and what it reads, so the
-        reader knows what is missing rather than that something is."""
+    def test_every_division_in_the_gallery_is_named_and_described(self, page):
+        """Widened 2026-09-13 from "every UNBUILT division", which now
+        iterates over nothing. Every slot carries its code, its name and
+        what it is read for, whether or not it can be cast."""
         import app as app_module
-        import vargas
-        for key, code, name, summary, _intended in app_module.VARGA_SLOTS:
-            if key == "d1" or vargas.is_supported(code):
-                continue
-            assert f"{code} {name}" in page, code
-            # Jinja escapes the apostrophe in "the Sun's half".
-            import html as _html
-            assert summary in _html.unescape(page), code
+        import html as _html
+        text = _html.unescape(page)
+        for key, code, name in app_module.VARGA_SLOTS:
+            assert f"{code} {name}" in text, code
+            assert app_module.varga_summary(code) in text, code
 
     def test_each_plate_carries_a_reading_of_its_own_chart(self, page):
         """"…opening to a full plate view with its own reading."
@@ -7475,6 +8085,180 @@ class TestYourChartsScreen:
         js = js[:js.index("document.addEventListener")]
         assert 'h.startsWith("chart-")' in js
         assert 'h === "charts"' in js and 'h === "readings"' in js
+
+
+class TestEveryDivisionMatchesTheOracle:
+    """No division lights up in the gallery until it has passed this.
+
+    PyJHora, per BODY and per DIVISION, for both fictional charts — the sign
+    AND the divisional longitude. Nine divisions × ten bodies × two charts is
+    180 comparisons, and it is the only thing standing between a plausible
+    counting rule and a wrong chart: every one of these rules produces a
+    perfectly reasonable-looking plate when it is wrong.
+    """
+
+    ORACLE = json.loads(
+        (HERE / "fixtures_pyjhora.json").read_text(encoding="utf-8"))
+
+    #: Degrees. The oracle rounds to six places and we compute in full
+    #: precision; anything past a hundredth of a degree is a real difference.
+    TOLERANCE = 0.02
+
+    @classmethod
+    @pytest.fixture(scope="class")
+    def charts(cls):
+        import fixtures
+        return {k: compute_chart(fixtures.birth(k))
+                for k in ("reference", "partner")}
+
+    def test_the_oracle_covers_every_division_this_build_casts(self):
+        """A gate that silently skipped a division would be worse than no
+        gate: the gallery would light it up on the strength of a comparison
+        that never happened."""
+        import vargas
+        for key in ("reference", "partner"):
+            have = set(self.ORACLE["charts"][key]["divisional_charts"])
+            missing = [c for c in vargas.SUPPORTED if c not in have]
+            assert not missing, (key, missing)
+
+    @pytest.mark.parametrize("key", ["reference", "partner"])
+    def test_every_body_in_every_division_matches(self, charts, key):
+        import vargas
+        chart = charts[key]
+        oracle = self.ORACLE["charts"][key]["divisional_charts"]
+        checked = 0
+        for code in vargas.SUPPORTED:
+            vc = vargas.varga_chart(chart, code)
+            want = oracle[code]
+            for body, w in want.items():
+                if body == "Lagna":
+                    got_sign = vc.lagna_sign_index
+                    got_deg = vc.lagna_degree_in_sign
+                else:
+                    p = vc.planets[body]
+                    got_sign, got_deg = p.sign_index, p.degree_in_sign
+                checked += 1
+                assert got_sign == w["sign_index"], (
+                    f"{key} {code} {body}: sign {got_sign} "
+                    f"({SIGNS[got_sign]}) vs oracle {w['sign_index']} "
+                    f"({w['sign']})")
+                assert abs(got_deg - w["degree_in_sign"]) < self.TOLERANCE, (
+                    f"{key} {code} {body}: degree {got_deg:.6f} vs oracle "
+                    f"{w['degree_in_sign']:.6f}")
+        assert checked >= 90, checked
+
+    def test_the_two_charts_do_not_produce_the_same_divisions(self, charts):
+        """A comparison of two identical tables proves nothing."""
+        import vargas
+        a, b = charts["reference"], charts["partner"]
+        for code in vargas.SUPPORTED:
+            va, vb = (vargas.varga_chart(a, code), vargas.varga_chart(b, code))
+            assert [va.planets[p].sign_index for p in PLANETS] != \
+                [vb.planets[p].sign_index for p in PLANETS], code
+
+    # --- the degree, and what it is -----------------------------------------
+
+    def test_the_divisional_degree_fills_the_sign(self, charts):
+        """The stretch: a graha at the very start of its part sits at 0° of
+        the divisional sign, and one at the end approaches 30°. If it did
+        not, the degree would be an unscaled fragment and varga nakṣatras
+        computed from it would be nonsense."""
+        import vargas
+        for code in vargas.SUPPORTED:
+            span = 30.0 / vargas.DIVISIONS[code]
+            # Start of a part → 0°; just short of the next → just short of 30.
+            for base in (0.0, 30.0, 210.0):
+                sign_at_start, deg = vargas.varga_longitude(base, code)
+                assert deg == pytest.approx(0.0, abs=1e-9), (code, base)
+                _s, deg = vargas.varga_longitude(base + span * 0.9999, code)
+                assert deg == pytest.approx(30.0, abs=0.01), (code, base)
+
+    def test_a_part_boundary_moves_the_sign(self, charts):
+        """Crossing from one part to the next must change the divisional
+        sign — otherwise the division is not dividing."""
+        import vargas
+        for code in vargas.SUPPORTED:
+            span = 30.0 / vargas.DIVISIONS[code]
+            moved = 0
+            for part in range(vargas.DIVISIONS[code] - 1):
+                a = vargas.varga_sign(span * part + span / 2, code)
+                b = vargas.varga_sign(span * (part + 1) + span / 2, code)
+                if a != b:
+                    moved += 1
+            # D30's bands are unequal, so several equal parts share a sign;
+            # every other division moves at every boundary.
+            floor = 4 if code == "D30" else vargas.DIVISIONS[code] - 1
+            assert moved >= floor, (code, moved, floor)
+
+    # --- the schools, named ---------------------------------------------------
+
+    def test_a_contested_division_says_which_reading_it_uses(self):
+        """"D30's odd/even sign scheme and D60's ½°-per-division ordering are
+        the two most divergent implementations — cite the rule used and flag
+        the school on the plate." D2 is a third: the older horā gives two
+        signs and this build gives twelve.
+        """
+        import rulelib
+        import vargas
+        assert set(vargas.SCHOOL_NOTE) == {"D2", "D30", "D60"}, \
+            set(vargas.SCHOOL_NOTE)
+        for code, note in vargas.SCHOOL_NOTE.items():
+            assert len(note.split()) >= 20, code
+            rule_id = vargas.SCHOOL_RULE[code]
+            assert rule_id in rulelib.RULES, (code, rule_id)
+            rule = rulelib.RULES[rule_id]
+            # The rule names the OTHER reading, not only this one. A note
+            # that describes one school without saying another exists is not
+            # flagging anything.
+            assert any(w in rule.text.lower() for w in
+                       ("some texts", "older", "other", "different")), rule_id
+            assert rule.source.strip(), rule_id
+
+    def test_the_plate_prints_the_school_flag(self, page):
+        for code in ("D2", "D30", "D60"):
+            key = code.lower()
+            view = page[page.index(f'id="view-varga-{key}"'):]
+            view = view[:view.index(f"<!-- /view-varga-{key} -->")]
+            assert 'class="schoolflag"' in view, code
+            assert "rule.varga." in view, code
+        # …and a division that is NOT contested does not cry wolf.
+        for code in ("D3", "D9", "D12"):
+            key = code.lower()
+            view = page[page.index(f'id="view-varga-{key}"'):]
+            view = view[:view.index(f"<!-- /view-varga-{key} -->")]
+            assert 'class="schoolflag"' not in view, code
+
+    def test_d30_takes_its_sign_from_the_unequal_bands(self):
+        """The rule the founder singled out. The equal 1° part is used for
+        the degree and must never choose the sign: a graha inside an 8°
+        band has no equal-part position to take."""
+        import vargas
+        # Aries (odd) 0–5 Mars, 5–10 Saturn, 10–18 Jupiter, 18–25 Mercury,
+        # 25–30 Venus.
+        for deg, sign in ((1.0, 0), (7.0, 10), (14.0, 8), (20.0, 2),
+                          (27.0, 6)):
+            assert vargas.varga_sign(deg, "D30") == sign, deg
+        # Taurus (even) reverses: 0–5 Venus, 5–12 Mercury, 12–20 Jupiter,
+        # 20–25 Saturn, 25–30 Mars.
+        for deg, sign in ((1.0, 1), (8.0, 5), (15.0, 11), (22.0, 9),
+                          (27.0, 7)):
+            assert vargas.varga_sign(30.0 + deg, "D30") == sign, deg
+        # The bands are unequal, which is the whole point.
+        widths = [hi - lo for (hi, _), lo in
+                  zip(vargas.TRIMSAMSA_ODD, (0,) + tuple(
+                      b[0] for b in vargas.TRIMSAMSA_ODD[:-1]))]
+        assert widths == [5, 5, 8, 7, 5], widths
+
+    def test_d60_counts_half_a_degree_at_a_time(self):
+        import vargas
+        assert vargas.DIVISIONS["D60"] == 60
+        # Aries 0°00′ → Aries; 0°30′ → Taurus; 1°00′ → Gemini.
+        assert vargas.varga_sign(0.0, "D60") == 0
+        assert vargas.varga_sign(0.5, "D60") == 1
+        assert vargas.varga_sign(1.0, "D60") == 2
+        # No even-sign reversal in this build — stated on the plate.
+        assert vargas.varga_sign(30.0, "D60") == 1
+        assert vargas.varga_sign(30.5, "D60") == 2
 
 
 class TestAshtakavarga:
@@ -7846,20 +8630,30 @@ class TestAYogaIsReadNotJustDetected:
                         or "neither confirms nor weakens" in low), t.verdict
                 assert t.verdict.endswith("."), t.verdict
 
-    def test_a_varga_test_never_claims_a_degree_it_does_not_have(self):
-        """This build computes divisional positions to the SIGN. A varga
-        dignity may therefore be exalted, debilitated, own-sign or neutral —
-        never moolatrikona, which is a degree band. Claiming it would be an
-        invented fact."""
+    def test_a_varga_dignity_is_computed_from_the_divisional_degree(self):
+        """Inverted 2026-09-13, and that is the milestone.
+
+        This used to assert that a varga dignity could never be
+        moolatrikona, because moolatrikona is a degree band and the build
+        held no degree inside a divisional sign. It holds one now, so the
+        state is computed exactly as it is in the birth chart — and it must
+        agree with `dignity_at` on that division's own position, which is
+        what stops it drifting back to a sign-only shortcut.
+        """
         import yogaread
-        from vargas import varga_chart
+        import vargas
+        from yogas import dignity_at
         chart = compute_chart(GATE_BIRTH)
-        for code in ("D9", "D10"):
-            vc = varga_chart(chart, code)
+        seen = set()
+        for code in vargas.SUPPORTED:
+            vc = vargas.varga_chart(chart, code)
             for p in PLANETS:
                 state = yogaread.varga_dignity(vc, p)
-                assert state in ("exalted", "debilitated", "own sign",
-                                 "neutral"), (code, p, state)
+                assert state == dignity_at(p, vc.planets[p].sign_index,
+                                           vc.planets[p].degree_in_sign)
+                seen.add(state)
+        # The degree band is genuinely reachable, not merely permitted.
+        assert "moolatrikona" in seen, seen
 
     # --- (b) WHAT IT GIVES --------------------------------------------------
 
@@ -8028,6 +8822,145 @@ class TestAYogaIsReadNotJustDetected:
         assert "Rests on" in working and "Computed from" in working
 
 
+class TestYogasAreCollapsedRows:
+    """Nine yogas printed open was a wall of text nobody read.
+
+    Each is a single closed row now — name, a one-line verdict, its family
+    as a chip — and the full reading opens on click, one at a time.
+    """
+
+    NOW = datetime(2026, 9, 10, tzinfo=timezone.utc)
+
+    @classmethod
+    @pytest.fixture(scope="class")
+    def rows(cls, page):
+        block = page[page.index('<section class="ledger" id="yogas"'):]
+        return block[:block.index("</section>")]
+
+    def test_every_yoga_is_a_closed_row(self, rows):
+        entries = re.findall(r'<details class="yoga yogarow">', rows)
+        assert entries, "no yoga rows"
+        # A <details> with no `open` attribute is closed.
+        assert 'class="yoga yogarow" open' not in rows
+        assert "<details" in rows and rows.count("<details") >= len(entries)
+
+    def test_a_closed_row_carries_name_verdict_and_family(self, rows):
+        summaries = re.findall(r"<summary class=\"yogahead\">(.*?)</summary>",
+                               rows, re.S)
+        assert summaries, "no row summaries"
+        for block in summaries:
+            for cls in ("yoganame", "yogaline", "yogakind"):
+                assert f'class="{cls}"' in block, (cls, block[:120])
+            line = re.search(r'class="yogaline">([^<]+)<', block).group(1)
+            assert line.strip(), block[:120]
+
+    def test_the_one_line_stays_inside_the_teaser_budget(self, chart):
+        """A line that has to sit beside a name and a chip is a teaser, and
+        the teaser budget applies to it."""
+        import voice
+        import yogaread
+        readings = yogaread.read_all(chart, self.NOW)
+        assert readings
+        for r in readings:
+            assert voice.words(r.oneline) <= yogaread.ONELINE_WORDS, (
+                r.yoga.name, r.oneline)
+            assert not voice.find_vagueness(r.oneline), r.oneline
+            assert not voice.find_jargon(r.oneline), (
+                r.yoga.name, voice.find_jargon(r.oneline))
+
+    def test_the_one_line_says_whether_it_is_real_and_whether_it_runs(
+            self, chart):
+        """The two things that decide whether a reader opens the row."""
+        import yogaread
+        for r in yogaread.read_all(chart, self.NOW):
+            state, _, when = r.oneline.partition(" · ")
+            assert state in ("Held in check", "Confirmed in the ninth",
+                             "Thins in the ninth", "Formed"), r.oneline
+            assert when.strip(), r.oneline
+
+    def test_the_full_reading_is_behind_the_row(self, rows):
+        """Everything the open entry used to print is still there — it is
+        just not printed until someone asks for it."""
+        assert 'class="yverdict"' in rows
+        for label in ("Gives", "Where", "D9"):
+            assert f'class="xplabel">{label}<' in rows, label
+        assert "Rests on" in rows and "Computed from" in rows
+        # …and it sits AFTER the summary, not beside it.
+        first_summary = rows.index("<summary class=\"yogahead\">")
+        assert first_summary < rows.index('class="yverdict"')
+
+    def test_one_open_at_a_time(self, page):
+        rows = page[page.index('<section class="ledger" id="yogas"'):]
+        rows = rows[:rows.index("</section>")]
+        assert 'data-exclusive="yoga"' in rows
+        js = page[page.index("[data-exclusive]"):]
+        assert "other.open = false" in js[:600], js[:600]
+
+    def test_an_open_row_is_told_apart_by_tone(self):
+        """The second surface tone, doing the job it was introduced for."""
+        css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
+        block = css[css.index(".yogarow[open] {"):]
+        block = block[:block.index("}")]
+        assert "var(--surface)" in block, block
+
+
+class TestLearnHasAHome:
+    """"Not a spotlight, not buried." A category card of its own in the
+    Explore index, and a persistent quiet entry in the tab row."""
+
+    def test_learn_has_its_own_category_card(self, page):
+        index = page[page.index('<div class="cats">'):]
+        index = index[:index.index("</div>", index.index("cat-learn"))]
+        row = index[index.index('href="#cat-learn"'):]
+        assert 'class="catrow catrow-learn"' in index
+        assert 'class="catrow-title">Learn<' in row
+        desc = re.search(r'class="catrow-desc">(.*?)</span>', row, re.S)
+        assert desc, "no description on the Learn card"
+        text = re.sub(r"\s+", " ", desc.group(1)).strip()
+        assert text.startswith("How the chart is built"), text
+        assert len(text.split()) <= 30, text
+
+    def test_the_card_counts_the_lessons_it_actually_has(self, page):
+        """"seven short pieces" beside twenty cards would be a small lie in
+        the one place that exists to teach."""
+        from lessons import LESSONS
+        # The CARD, not the tab-row entry that also points at #cat-learn.
+        index = page[page.index('class="catrow catrow-learn"'):]
+        index = index[:index.index("</a>")]
+        text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", index))
+        assert f"in {len(LESSONS)} short pieces" in text, text
+        # And nothing anywhere still hardcodes a stale count.
+        raw = (HERE / "templates" / "index.html").read_text(encoding="utf-8")
+        learn = raw[raw.index('id="learnpath"'):]
+        learn = learn[:learn.index("</section>")]
+        assert "20 cards" not in learn, "a hardcoded lesson count survived"
+
+    def test_learn_is_in_the_tab_row_and_kept_quiet(self, page):
+        row = re.search(r'<nav class="tabs"[^>]*>(.*?)</nav>', page, re.S)
+        assert row, "no tab row"
+        entry = re.search(r'<a href="#cat-learn"[^>]*class="tab-quiet"[^>]*>'
+                          r'([^<]+)</a>', row.group(1))
+        assert entry, row.group(1)
+        assert entry.group(1).strip() == "Learn"
+        css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
+        block = css[css.index(".tabs a.tab-quiet {"):]
+        block = block[:block.index("}")]
+        # Quiet: the body face at the label colour, against the display face
+        # the five screens use. Still a real link at full reading size.
+        assert "var(--font-body)" in block
+        assert "var(--ink-50)" in block
+        assert "var(--t-body)" in block
+
+    def test_the_tab_actually_opens_the_lessons(self, page):
+        row = re.search(r'<nav class="tabs"[^>]*>(.*?)</nav>', page, re.S)
+        entry = re.search(r'<a href="#cat-learn"[^>]*>', row.group(1)).group(0)
+        assert 'data-view="view-explore"' in entry, entry
+        js = page[page.index("function fromHash()"):]
+        js = js[:js.index("document.addEventListener")]
+        assert 'h.startsWith("cat-")' in js
+        assert 'id="learnpath"' in page
+
+
 class TestNoEntryIsPrintedTwice:
     """One entry per phenomenon, in the fold and in the data behind it.
 
@@ -8168,9 +9101,13 @@ class TestTheTabRow:
             assert "numerolog" not in body, path.name
 
     def test_the_row_carries_all_five(self, page):
+        """The five screens are peers. Learn rides along quietly and
+        Numerology is named as unbuilt; neither is one of the five, and
+        neither may displace one."""
         row = re.search(r'<nav class="tabs"[^>]*>(.*?)</nav>', page, re.S)
         assert row, "no tab row"
-        labels = re.findall(r'>([^<>]+)</a>', row.group(1))
+        labels = [t for t in re.findall(r'>([^<>]+)</a>', row.group(1))
+                  if t.strip() != "Learn"]
         assert [x.strip() for x in labels] == list(self.TABS), labels
 
     def test_the_row_is_not_shown_before_a_chart_exists(self, client):

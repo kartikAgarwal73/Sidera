@@ -9,25 +9,39 @@
    TestPaperPalette recomputes them from this file on every run.
 
    The bronze splits by ROLE, because one hex cannot do both jobs:
-     --accent      #b68235  3.02:1 on paper — graphics and large display
-                            only (AA for non-text objects is 3.0)
-     --accent-ink  #8a5f1c  5.03:1 on paper, 4.64:1 on surface — links and
-                            any text below 24px. Same bronze hue (36°),
-                            darkened until it passes.
-   Using --accent for body text would fail AA at 3.02:1. That is why the
-   token is split rather than the contrast being wished away. */
+     --accent      #a37129  3.80:1 on paper, 3.19:1 on the surface tone —
+                            graphics, the plate's ink and large display only
+                            (AA for non-text objects is 3.0)
+     --accent-ink  #7d5518  5.90:1 on paper, 4.96:1 on surface — links,
+                            verdict emphasis and any text below 24px. Same
+                            bronze hue, darkened until it passes.
+   Using --accent for body text would fail AA at 3.80:1. That is why the
+   token is split rather than the contrast being wished away.
+   --accent-ink on --surface is the BINDING pair at 4.96:1: it is what stops
+   the second tone going any deeper. */
 :root,
 :root[data-palette="paper"] {
   --paper: #f3f2f2;   --paper-rgb: 243, 242, 242;
-  --surface: #eae9e9;
+  /* THE SECOND TONE. Deepened 2026-09-13 from #eae9e9: at 1.084 against the
+     paper it was a tone in the tokens and nothing on the screen, so folds
+     separated by rule alone and the page read flat. 1.189 is a step the eye
+     actually finds — and it is as far as this can go, because --accent-ink
+     on the surface is the binding pair and lands at 4.96 here. */
+  --surface: #e2dfda; --surface-rgb: 226, 223, 218;
   --ink: #201f1d;     --ink-rgb: 32, 31, 29;
-  --accent: #b68235;  --accent-rgb: 182, 130, 53;
-  --accent-ink: #8a5f1c;
+  /* Both bronzes darkened with the surface, so every pair keeps its
+     headroom on BOTH grounds rather than only on the paper. The graphic
+     bronze also became the plate's ink in the same pass, and at #b68235 it
+     drew at 3.02 on paper — exactly the floor, with nothing spare. */
+  --accent: #a37129;  --accent-rgb: 163, 113, 41;
+  --accent-ink: #7d5518;
 }
 /* Night reading — the single alternate. */
 :root[data-palette="night"] {
   --paper: #1a1826;   --paper-rgb: 26, 24, 38;
-  --surface: #262336;
+  /* Lifted to match the paper reading's tonal step — 1.218 against the
+     ground, where it was 1.144. */
+  --surface: #2b2839; --surface-rgb: 43, 40, 57;
   --ink: #ece5d8;     --ink-rgb: 236, 229, 216;
   --accent: #dcb877;  --accent-rgb: 220, 184, 119;
   --accent-ink: #e2c48c;
@@ -99,11 +113,26 @@
 @media (max-width: 560px) { :root { --rise: 8px; } }
 
 * { box-sizing: border-box; }
+
+/* PAPER GRAIN. An feTurbulence tile, desaturated, carried at 5.5% alpha
+   INSIDE the SVG rather than as a CSS opacity on an overlay — which means
+   it is a background image and can never be drawn over text, over the
+   plate, or over anything else. It is on the page ground only.
+
+   No gradient and no hue: the noise is greyscale, so it moves the ground by
+   well under one step of luminance and every contrast pair recomputes the
+   same. `prefers-contrast: more` drops it, because someone who asked for
+   more contrast did not ask for texture. */
+:root { --grain: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22180%22%20height%3D%22180%22%3E%3Cfilter%20id%3D%22g%22%3E%3CfeTurbulence%20type%3D%22fractalNoise%22%20baseFrequency%3D%220.82%22%20numOctaves%3D%223%22%20stitchTiles%3D%22stitch%22%2F%3E%3CfeColorMatrix%20type%3D%22saturate%22%20values%3D%220%22%2F%3E%3C%2Ffilter%3E%3Crect%20width%3D%22180%22%20height%3D%22180%22%20filter%3D%22url%28%23g%29%22%20opacity%3D%220.055%22%2F%3E%3C%2Fsvg%3E"); }
+@media (prefers-contrast: more) { :root { --grain: none; } }
+
 body {
+  background-image: var(--grain);
+  background-repeat: repeat;
   margin: 0 auto;
   max-width: 640px;
   min-height: 100vh;
-  background: var(--paper);
+  background-color: var(--paper);
   color: var(--ink);
   font-family: var(--font-body);
   font-size: var(--t-body);
@@ -119,8 +148,12 @@ body {
    first and the heading hangs beneath it. It is one move, applied
    consistently, and it is what stops hairlines-and-small-caps from reading
    as a newspaper. */
+/* 1.5px, against the 1px hairlines everywhere else. The page had one line
+   weight and therefore one level of hierarchy: a section head and a row
+   divider were drawn identically, so structure had to be read rather than
+   seen. This is the STRUCTURAL rule; a hairline is still a hairline. */
 .mark {
-  border-top: 1px solid var(--divider);
+  border-top: 1.5px solid var(--divider);
   padding-top: 10px; margin-top: var(--space-fold);
 }
 
@@ -372,7 +405,17 @@ details.yoga > summary::-webkit-details-marker { display: none; }
    line is the diamond that makes it a North-Indian plate. Both are drawn
    through CSS so the two readings can restate them — a presentation
    attribute in the markup cannot follow a theme. */
-.plate-rule { stroke: rgba(var(--ink-rgb), .38); }
+/* THE PLATE IS DRAWN IN BRONZE. It was drawn in 38% ink, which measures
+   2.28:1 against the paper — under the 3.0 floor for a non-text graphic, so
+   the figure that carries the whole screen was the faintest thing on it.
+   The accent is 3.80:1 and it gives the eye one anchor per screen, which is
+   what the bronze is for.
+
+   FULL STRENGTH, both of them. Drawing the frame at 62% alpha to keep it
+   under the diamond put it back at 2.16 — the same failure in a new colour.
+   The frame and the diamond are told apart by STROKE WEIGHT instead, which
+   costs no contrast at all: the markup already draws the frame thinner. */
+.plate-rule { stroke: var(--accent); }
 .plate-diamond { stroke: var(--accent); }
 .kundli .signnum text { font-family: var(--font-heading); font-size: 15px; fill: rgba(var(--ink-rgb), .34); }
 /* --- HOW A GRAHA IS MARKED ON A PLATE -----------------------------------
@@ -618,6 +661,62 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 .yogahead { display: flex; justify-content: space-between; align-items: baseline; }
 .yoganame { font-family: var(--font-heading); font-size: 17px; }
 .yogakind { font-size: var(--t-label); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-50); }
+/* --- THE SECOND TONE ----------------------------------------------------
+   Anything that sits BEHIND the reading takes the surface: an opened
+   expander, an ephemeris table, the agent's working. The reading itself
+   stays on the paper, so the eye can always tell which layer it is in
+   without reading a word. Tone, not a box — no border, no shadow, and the
+   hairlines still do the separating within a block. */
+#view-explore[data-showing] .gtable tbody tr:nth-child(odd) {
+  background: rgba(var(--surface-rgb), .55);
+}
+#view-explore[data-showing] .ledger > details[open],
+#view-explore[data-showing] .xp[open],
+.dstep[open], .readfold[open], .schoolbox[open] {
+  background: var(--surface);
+  padding: 2px 14px 14px;
+  margin-left: -14px; margin-right: -14px;
+}
+#view-explore[data-showing] .ledger > details[open] > summary,
+#view-explore[data-showing] .xp[open] > summary,
+.dstep[open] > summary, .readfold[open] > summary,
+.schoolbox[open] > summary { padding-top: 12px; }
+/* A table is a reference, and a reference sits behind. */
+.tablewrap { background: var(--surface); padding: 4px 14px 10px;
+  margin-left: -14px; margin-right: -14px; }
+
+/* --- A YOGA AS A ROW --------------------------------------------------
+   Closed by default, and closed as a LIST: name, verdict line, family. Nine
+   of these open at once was a wall of text, and a fold whose every entry is
+   expanded is not a fold. */
+.yogalist { border-top: 1px solid var(--divider); }
+.yogarow {
+  border-bottom: 1px solid var(--hairline);
+  padding: 0; margin: 0;
+}
+.yogarow > summary {
+  display: grid; grid-template-columns: 1fr auto; gap: 2px 16px;
+  align-items: baseline; padding: 14px 0; cursor: pointer;
+  list-style: none;
+}
+.yogarow > summary::-webkit-details-marker { display: none; }
+.yogarow > summary::after {
+  content: "▸"; grid-column: 2; grid-row: 1;
+  color: var(--ink-50); font-size: var(--t-label);
+}
+.yogarow[open] > summary::after { content: "▾"; color: var(--accent-ink); }
+.yogarow > summary .yoganame { grid-column: 1; grid-row: 1; }
+.yogarow > summary .yogaline {
+  grid-column: 1; grid-row: 2;
+  font-size: var(--t-body); color: var(--ink-60); line-height: 1.5;
+}
+.yogarow > summary .yogakind { grid-column: 2; grid-row: 2; }
+.yogarow[open] { background: var(--surface); }
+.yogarow[open] > summary { padding-left: 12px; }
+.yogarow[open] > *:not(summary) { padding: 0 12px; }
+.yogarow[open] > *:last-child { padding-bottom: 14px; }
+.yogarow:hover > summary .yoganame { color: var(--accent-ink); }
+
 /* --- A YOGA, READ ------------------------------------------------------
    The verdict is the entry; the four facts under it are the shape of the
    answer, each labelled with what it answers. The working — mechanism,
@@ -626,6 +725,13 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 .yverdict {
   font-family: var(--font-heading); font-size: 19px; line-height: 1.42;
   color: var(--ink); margin: 8px 0 0; max-width: 54ch;
+}
+/* ONE BRONZE ANCHOR PER SCREEN. The verdict's opening clause — "Real, and
+   confirmed", "Thinner than it looks" — is the thing the eye should land on
+   first, and it is the only bronze in the fold's body text. `--accent-ink`,
+   not `--accent`: this is text and text needs 4.5. */
+.yverdict .vmark, .dverdict .vmark, .statement .accent {
+  color: var(--accent-ink);
 }
 .yfacts {
   margin-top: 12px; padding-top: 10px;
@@ -1223,6 +1329,22 @@ button.cast.recast { margin-top: 4px; }
    yet know. Quiet, because it is true of every chart and the line above it
    is true only of this one. */
 .platewhat { margin-top: 18px; max-width: 46ch; }
+/* A division whose construction is contested says so, on its own plate.
+   Folded, because it is provenance rather than reading — but present, and
+   present on the plate itself rather than in a note somewhere else. */
+.schoolflag {
+  margin-top: 16px; max-width: 54ch; padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+}
+.schoolflag > summary {
+  font-size: var(--t-label); letter-spacing: .12em;
+  font-variant-caps: all-small-caps; color: var(--accent-ink);
+  cursor: pointer;
+}
+.schoolflag p {
+  font-size: var(--t-body); line-height: 1.6; color: var(--ink-60);
+  margin: 8px 0 0;
+}
 /* A plate on its own page is a FIGURE, at the measure of the column it
    illustrates — not a 900px breakout. Measured 2026-09-11: the D9 view let
    `.kundli` take its full width and the plate arrived twice the size of the
@@ -1383,6 +1505,14 @@ button.cast.recast { margin-top: 4px; }
 .catrow:hover .catrow-title, .catrow:hover .catrow-more {
   color: var(--accent-ink);
 }
+/* The one category that teaches rather than reports. Given the second
+   surface tone so the eye finds it without it shouting — the same device
+   the expanders and tables use to sit behind the reading. */
+.catrow-learn {
+  background: var(--surface);
+  padding-left: 14px; padding-right: 14px;
+}
+.catrow-learn .catrow-more { color: var(--accent-ink); }
 
 /* Inside a category, everything is set to be read rather than scanned. */
 #view-explore[data-showing] { font-size: var(--t-body); }
@@ -1421,6 +1551,15 @@ button.cast.recast { margin-top: 4px; }
 /* The tab row. Peers, not a hierarchy: Today, Readings and Your charts are
    three ways into the same chart, so they sit on one rule rather than behind
    one another. Same treatment as the plate's own tabs. */
+/* LEARN: always present, never loud. Set in the body face rather than the
+   display one and at the label colour, so it reads as a door rather than a
+   peer of the five screens — and it is still a real link, at full size. */
+.tabs a.tab-quiet {
+  font-family: var(--font-body); font-size: var(--t-body);
+  letter-spacing: .04em; color: var(--ink-50);
+}
+.tabs a.tab-quiet:hover { color: var(--accent-ink); }
+
 /* A screen that does not exist yet, named where it will be. Same pattern as
    the "in preparation" divisional charts: the shape of the thing is shown,
    and the fact that it is not built is stated rather than hidden. */
@@ -1432,6 +1571,17 @@ button.cast.recast { margin-top: 4px; }
 .tab-soonmark {
   font-family: var(--font-body); font-size: var(--t-label);
   font-style: italic; letter-spacing: .04em; color: var(--ink-50);
+}
+
+/* THE MASTHEAD SPANS WHAT THE PAGE SPANS. The body column is 640px and the
+   folds break out past it, so the tab row was confined to 640 while the
+   content under it ran to 1120 — and with Learn and the unbuilt Numerology
+   added it overflowed by 74px and clipped its own last word. */
+@media (min-width: 1000px) {
+  .topbar, .tabs {
+    width: min(1120px, 94vw);
+    position: relative; left: 50%; transform: translateX(-50%);
+  }
 }
 
 .tabs {
@@ -1562,3 +1712,152 @@ button.cast.recast { margin-top: 4px; }
 .gplate .minigrahas text { font-family: var(--font-heading); fill: var(--ink); }
 /* One dot per graha, where a cell cannot take a legible glyph. */
 .minidot { fill: var(--accent-ink); }
+
+
+/* ============================================================
+   SCREEN 5 · ASK
+   The strongest screen in the app, and the one that was broken: the field
+   only existed when an API key did, so a reader on an unconfigured
+   deployment found nowhere to type. It is always here now; whether an
+   answer can be produced is a question about the answer.
+   ============================================================ */
+.askscreen { padding-top: 8px; }
+.asktop { max-width: 34rem; margin: 0 auto; text-align: center; }
+
+/* Display size, and a real <label>: the question is the screen. */
+.asklabel {
+  font-family: var(--font-heading); font-weight: 400;
+  font-size: var(--t-title); line-height: 1.15; letter-spacing: -.004em;
+  margin: var(--space-fold) 0 0; color: var(--ink);
+}
+.asklabel label { cursor: text; }
+
+.askfield {
+  display: flex; gap: 10px; align-items: stretch;
+  margin-top: 22px; border-bottom: 1.5px solid var(--divider);
+  padding-bottom: 6px;
+}
+#askq {
+  flex: 1; min-width: 0; background: transparent; border: none;
+  font-family: var(--font-body); font-size: 19px; color: var(--ink);
+  padding: 10px 2px; text-align: left;
+}
+#askq::placeholder { color: var(--ink-50); }
+#askq:focus { outline: none; }
+.askfield:focus-within { border-bottom-color: var(--accent); }
+.askgo {
+  flex: none; background: transparent; border: none; cursor: pointer;
+  font-family: var(--font-heading); font-size: var(--t-body);
+  letter-spacing: .1em; font-variant-caps: all-small-caps;
+  color: var(--accent-ink); padding: 0 6px;
+}
+.askgo:disabled { color: var(--ink-50); cursor: default; }
+
+/* Three, and quiet. A wall of suggestions is a menu. */
+.asksuggest {
+  display: flex; flex-wrap: wrap; gap: 6px 20px;
+  justify-content: center; margin-top: 16px;
+}
+.asksuggest .sugq {
+  background: none; border: none; cursor: pointer; padding: 2px 0;
+  font-family: var(--font-body); font-size: var(--t-body);
+  font-style: italic; color: var(--ink-60);
+  text-decoration: underline; text-underline-offset: 3px;
+  text-decoration-color: rgba(var(--ink-rgb), .28);
+}
+.asksuggest .sugq:hover { color: var(--accent-ink); }
+.askhelp {
+  font-size: var(--t-body); line-height: 1.6; color: var(--ink-60);
+  margin: 26px 0 0; text-align: left;
+}
+
+/* --- the answer ---------------------------------------------------------
+   Verdict first, structurally: /ask hands the verdict over as its own
+   field, so the page never parses prose to find the answer. */
+.askout { max-width: 34rem; margin: 0 auto; }
+.askanswer {
+  margin-top: var(--space-fold); padding-top: 14px;
+  border-top: 1.5px solid var(--divider);
+}
+.askq {
+  font-size: var(--t-label); letter-spacing: .1em;
+  font-variant-caps: all-small-caps; color: var(--ink-50); margin: 0;
+}
+.askverdict {
+  font-family: var(--font-heading); font-weight: 600;
+  font-size: clamp(21px, 2.2vw, 27px); line-height: 1.35;
+  color: var(--ink); margin: 10px 0 0; max-width: 48ch;
+}
+.askpara {
+  font-size: var(--t-body); line-height: 1.7; color: var(--ink-70);
+  margin: 14px 0 0; max-width: 54ch;
+}
+.askanswer.is-waiting .askpara { color: var(--ink-50); font-style: italic; }
+
+/* THE WITHHELD STATE, distinctly. A reply that failed validation is the
+   feature working, so it reads as a finding rather than as an error: the
+   accent rule on the left is the only place in the app that mark appears. */
+.askanswer.is-withheld {
+  background: var(--surface);
+  border-top: none; border-left: 3px solid var(--accent);
+  padding: 14px 16px; margin-left: -16px;
+}
+.askwithheld-mark {
+  font-family: var(--font-body); font-size: var(--t-label);
+  letter-spacing: .14em; text-transform: uppercase; font-weight: 600;
+  color: var(--accent-ink); margin: 8px 0 0;
+}
+
+/* --- the six steps, and which fired ------------------------------------- */
+.asksteps { margin-top: 26px; }
+.askstep {
+  border-top: 1px solid var(--hairline); padding: 2px 0;
+}
+.askstep > summary {
+  display: grid; grid-template-columns: 1.6em 6.5em 1fr; gap: 8px;
+  align-items: baseline; padding: 9px 0; cursor: pointer;
+  font-size: var(--t-body); list-style: none;
+}
+.askstep > summary::-webkit-details-marker { display: none; }
+.askstep-mark { color: var(--accent-ink); font-weight: 600; }
+.askstep-name {
+  font-size: var(--t-label); letter-spacing: .12em; color: var(--ink);
+}
+.askstep-do { color: var(--ink-60); line-height: 1.5; }
+/* A step that did not fire says so by receding, and by its mark. */
+.askstep.skipped .askstep-mark { color: var(--ink-50); font-weight: 400; }
+.askstep.skipped .askstep-name { color: var(--ink-50); }
+.askstep[open] { background: var(--surface); padding: 2px 12px;
+  margin-left: -12px; margin-right: -12px; }
+.askstep-none {
+  font-size: var(--t-body); color: var(--ink-50); font-style: italic;
+  margin: 0 0 10px;
+}
+
+/* --- the footnote row: what it rests on --------------------------------- */
+.askcites { margin-top: 22px; }
+.askfacts { border-top: 1px solid var(--hairline); }
+.askfacts > summary {
+  padding: 10px 0; cursor: pointer;
+  font-size: var(--t-label); letter-spacing: .12em;
+  font-variant-caps: all-small-caps; color: var(--ink-60);
+}
+.askfacts[open] { background: var(--surface); padding: 0 12px;
+  margin-left: -12px; margin-right: -12px; }
+.askcount { color: var(--accent-ink); margin-left: 4px; }
+.askfact {
+  display: grid; grid-template-columns: 12em 1fr; gap: 10px;
+  font-size: var(--t-body); line-height: 1.55; color: var(--ink-70);
+  padding: 6px 0; border-top: 1px solid var(--hairline);
+}
+.askfact code {
+  font-family: var(--font-body); font-size: var(--t-label);
+  letter-spacing: .02em; color: var(--accent-ink);
+  font-variant-numeric: tabular-nums; word-break: break-all;
+}
+@media (max-width: 560px) {
+  .asklabel { font-size: clamp(26px, 8vw, 34px); }
+  .askstep > summary { grid-template-columns: 1.4em 1fr; }
+  .askstep-do { grid-column: 1 / -1; }
+  .askfact { grid-template-columns: 1fr; gap: 2px; }
+}

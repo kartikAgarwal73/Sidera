@@ -55,8 +55,8 @@ import chartfacts
 import today
 import yogaread
 import ashtakavarga as av_mod
-from yogas import (combust, detect_all, dignity, dignity_grade,
-                   natural_nature, sign_lord)
+from yogas import (combust, detect_all, dignity, dignity_at,
+                   dignity_grade, natural_nature, sign_lord)
 
 app = Flask(__name__)
 app.template_filter("ordinal")(ordinal)  # '3' → '3rd', app-wide
@@ -209,45 +209,35 @@ def parse_coord(text: str, axis: str) -> float:
 # Every varga this app can cast, plus the slots it cannot. A gallery that
 # quietly omitted D2 and D7 would imply the list is complete; saying "in
 # preparation" is the same honesty the disabled Upapada option gets.
+# SCREEN 3 — the divisional charts, in the order a reader meets them.
+#
+# The NAME and the ORDER live here; what each division is read for lives in
+# `vargas.READ_FOR`, and whether it can be cast at all lives in
+# `vargas.SUPPORTED`. Three files could disagree about the D7; only one of
+# them is allowed to have an opinion about any given thing.
 VARGA_SLOTS = (
-    ("d1", "D1", "Rāśi",
-     "The birth chart itself — every other chart is read against this one.",
-     True),
-    ("d2", "D2", "Horā",
-     "Wealth and what is kept, split between the Sun's half and the Moon's.",
-     False),
-    ("d3", "D3", "Drekkāṇa",
-     "Siblings, courage and the reach of one's own effort.",
-     False),
-    ("d7", "D7", "Saptāṃśa",
-     "Children, and what the chart carries forward past this life.",
-     False),
-    ("d9", "D9", "Navāṃśa",
-     "Marriage, and the inner strength of every planet in the birth chart.",
-     True),
-    ("d10", "D10", "Daśāṃśa",
-     "Work, standing, and the field a career actually takes place in.",
-     True),
-    ("d12", "D12", "Dvādaśāṃśa",
-     "The parents, and what was inherited before anything was chosen.",
-     False),
-    ("d16", "D16", "Ṣoḍaśāṃśa",
-     "Vehicles, comforts, and the pleasures a life is furnished with.",
-     False),
-    ("d30", "D30", "Triṃśāṃśa",
-     "Where the chart is tested, and which planet does the testing.",
-     False),
-    ("d60", "D60", "Ṣaṣṭyāṃśa",
-     "The finest division Parāśara gives, and the hardest to cast honestly.",
-     False),
+    ("d1", "D1", "Rāśi"),
+    ("d2", "D2", "Horā"),
+    ("d3", "D3", "Drekkāṇa"),
+    ("d7", "D7", "Saptāṃśa"),
+    ("d9", "D9", "Navāṃśa"),
+    ("d10", "D10", "Daśāṃśa"),
+    ("d12", "D12", "Dvādaśāṃśa"),
+    ("d16", "D16", "Ṣoḍaśāṃśa"),
+    ("d30", "D30", "Triṃśāṃśa"),
+    ("d60", "D60", "Ṣaṣṭyāṃśa"),
 )
 
-# The `True`/`False` above is the DESIGN intent — which divisions this app
-# means to plot. Whether one actually can is `vargas.SUPPORTED`, and the two
-# are reconciled at render time rather than trusted to stay in step: a slot
-# marked live that has no computation would draw an empty plate, and a
-# computation that landed while the flag said False would stay invisible.
-# `TestEveryComputedVargaIsPlotted` fails on either.
+#: The one-line summary a gallery card carries. The birth chart is not a
+#: division and has no entry in `vargas.READ_FOR`, so it gets its own.
+D1_SUMMARY = "The birth chart itself — every other chart is read against this one."
+
+
+def varga_summary(code: str) -> str:
+    if code == "D1":
+        return D1_SUMMARY
+    read_for = vargas.READ_FOR[code].strip()
+    return read_for[:1].upper() + read_for[1:] + "."
 
 
 def _and_list(names: list[str]) -> str:
@@ -257,15 +247,26 @@ def _and_list(names: list[str]) -> str:
     return ", ".join(names[:-1]) + " and " + names[-1]
 
 
+#: The division's number in plain words, for a sentence a reader can say
+#: out loud. "Rises in the D16" is a code; "rises in the sixteenth division"
+#: is English.
+_ORDINAL_WORD = {2: "second", 3: "third", 7: "seventh", 9: "ninth",
+                 10: "tenth", 12: "twelfth", 16: "sixteenth",
+                 30: "thirtieth", 60: "sixtieth"}
+
+
 def plate_reading(key: str, chart) -> str:
     """One line of reading for a plate, composed from that plate alone.
 
     A gallery of charts with no reading is a filing cabinet. Each of these
     says the one thing the division is FOR, out of this chart's own
-    placements — the lagna lord and where it stands, which planets keep
-    their sign into the ninth, what actually occupies the tenth of the
-    tenth. Plain register, no house numbers, no Sanskrit: the technical
+    placements. Plain register, no house numbers, no Sanskrit: the technical
     reading of every placement is two taps away in Explore.
+
+    GENERIC over `vargas.SUPPORTED` since the seven new divisions landed.
+    It used to have a branch per division and an `else` that fell through to
+    the D10's sentence — so the D3, the D7, the D12, the D16, the D30 and
+    the D60 all told the reader about the tenth division.
     """
     def matters(house: int) -> str:
         return HOUSE_MATTERS[house].split(",")[0].strip()
@@ -278,15 +279,17 @@ def plate_reading(key: str, chart) -> str:
         return (f"{chart.lagna.sign} rises, so {plain(lord)} rules this "
                 f"chart — and it stands in {matters(chart.planets[lord].house)}.")
 
-    if key == "d9":
-        d9 = vargas.varga_chart(chart, "D9")
-        lord = sign_lord(d9.lagna_sign_index)
-        kept = [p for p in PLANETS if d9.planets[p].vargottama]
-        head = (f"{d9.lagna_sign} rises in the ninth division, so "
+    code = key.upper()
+    vc = vargas.varga_chart(chart, code)
+    lord = sign_lord(vc.lagna_sign_index)
+    which = _ORDINAL_WORD[vargas.DIVISIONS[code]]
+
+    if code == "D9":
+        # The ninth has its own question — which grahas keep the sign they
+        # were born in — and it is the sharpest thing this division says.
+        kept = [p for p in PLANETS if vc.planets[p].vargottama]
+        head = (f"{vc.lagna_sign} rises in the {which} division, so "
                 f"{plain(lord)} carries the inner chart")
-        # The lord is named once. "…so the Moon carries the inner chart —
-        # and the Moon and Mars keep the sign they were born in" is true and
-        # reads like a template.
         rest = [plain(p) for p in kept if p != lord]
         if lord in kept:
             tail = "and it keeps the sign it was born in"
@@ -300,40 +303,101 @@ def plate_reading(key: str, chart) -> str:
                     f"{'it was' if len(rest) == 1 else 'they were'} born in.")
         return f"{head} — and no planet keeps the sign it was born in."
 
-    d10 = vargas.varga_chart(chart, "D10")
-    tenth = [plain(p) for p in PLANETS if d10.planets[p].house == 10]
-    head = (f"{d10.lagna_sign} rises in the tenth division, so "
-            f"{plain(sign_lord(d10.lagna_sign_index))} sets the field the "
-            f"work happens in")
-    if tenth:
-        return (f"{head} — and {_and_list(tenth)} "
-                f"{'stands' if len(tenth) == 1 else 'stand'} in its house of "
-                f"visible work.")
-    return f"{head} — and nothing stands in its house of visible work."
+    head = (f"{vc.lagna_sign} rises in the {which} division, so "
+            f"{plain(lord)} carries {vargas.READ_FOR[code]}")
+    # Which grahas are strong HERE — computable per division now that a
+    # divisional position carries a degree.
+    strong = [plain(p) for p in PLANETS
+              if dignity_at(p, vc.planets[p].sign_index,
+                            vc.planets[p].degree_in_sign)
+              in ("exalted", "moolatrikona", "own sign")]
+    if strong:
+        return (f"{head} — and {_and_list(strong)} "
+                f"{'is' if len(strong) == 1 else 'are'} at "
+                f"{'its' if len(strong) == 1 else 'their'} strongest here.")
+    weak = [plain(p) for p in PLANETS
+            if dignity_at(p, vc.planets[p].sign_index,
+                          vc.planets[p].degree_in_sign) == "debilitated"]
+    if weak:
+        return (f"{head} — and {_and_list(weak)} "
+                f"{'is' if len(weak) == 1 else 'are'} at "
+                f"{'its' if len(weak) == 1 else 'their'} weakest here.")
+    return f"{head} — and no graha is dignified either way here."
+
+
+# SCREEN 3 — the divisional charts, in the order a reader meets them.
+#
+# The NAME and the ORDER live here; what each division is read for lives in
+# `vargas.READ_FOR`, and whether it can be cast at all lives in
+# `vargas.SUPPORTED`. Three files could disagree about the D7; only one of
+# them is allowed to have an opinion about any given thing.
+VARGA_SLOTS = (
+    ("d1", "D1", "Rāśi"),
+    ("d2", "D2", "Horā"),
+    ("d3", "D3", "Drekkāṇa"),
+    ("d7", "D7", "Saptāṃśa"),
+    ("d9", "D9", "Navāṃśa"),
+    ("d10", "D10", "Daśāṃśa"),
+    ("d12", "D12", "Dvādaśāṃśa"),
+    ("d16", "D16", "Ṣoḍaśāṃśa"),
+    ("d30", "D30", "Triṃśāṃśa"),
+    ("d60", "D60", "Ṣaṣṭyāṃśa"),
+)
+
+#: The one-line summary a gallery card carries. The birth chart is not a
+#: division and has no entry in `vargas.READ_FOR`, so it gets its own.
+D1_SUMMARY = "The birth chart itself — every other chart is read against this one."
+
+
+def varga_summary(code: str) -> str:
+    if code == "D1":
+        return D1_SUMMARY
+    read_for = vargas.READ_FOR[code].strip()
+    return read_for[:1].upper() + read_for[1:] + "."
+
+
+def _and_list(names: list[str]) -> str:
+    """'Venus', 'Venus and Saturn', 'Venus, Saturn and Mars'."""
+    if len(names) == 1:
+        return names[0]
+    return ", ".join(names[:-1]) + " and " + names[-1]
 
 
 def varga_gallery(chart) -> list[dict]:
     """The gallery index — every division, cast where this build can cast it.
 
-    Generic over `vargas.SUPPORTED`, so a new division needs no change here:
-    add its sign function to the registry and its plate is drawn, its slot
-    stops saying "in preparation", and it gets a page of its own.
+    Generic over `vargas.SUPPORTED`: a new division needs no change here.
     """
     marks = planet_marks(chart)
     out = []
-    for key, code, name, summary, intended in VARGA_SLOTS:
-        live = key == "d1" or vargas.is_supported(code)
-        row = {"key": key, "code": code, "name": name, "summary": summary,
-               "live": live, "intended": intended}
+    for key, code, name in VARGA_SLOTS:
+        live = code == "D1" or vargas.is_supported(code)
+        row = {"key": key, "code": code, "name": name,
+               "summary": varga_summary(code), "live": live,
+               # Where the tradition splits, said on the plate rather than
+               # assumed away. None for the divisions that do not split.
+               "school": vargas.SCHOOL_NOTE.get(code),
+               "school_rule": vargas.SCHOOL_RULE.get(code)}
         if live:
-            if key == "d1":
+            if code == "D1":
                 sign_index = chart.lagna.sign_index
                 houses = {p: chart.planets[p].house for p in PLANETS}
+                degrees = {p: (chart.planets[p].degree_in_sign,
+                               chart.planets[p].retrograde) for p in PLANETS}
+                lagna_degree = chart.lagna.degree_in_sign
             else:
                 vc = vargas.varga_chart(chart, code)
                 sign_index = vc.lagna_sign_index
                 houses = {p: vc.planets[p].house for p in PLANETS}
-            row["houses"] = kundli_houses(sign_index, houses, marks=marks)
+                # A divisional chart HAS degrees now. Retrograde is a
+                # property of the real body's motion and does not divide, so
+                # it is carried through from the birth chart unchanged.
+                degrees = {p: (vc.planets[p].degree_in_sign,
+                               chart.planets[p].retrograde) for p in PLANETS}
+                lagna_degree = vc.lagna_degree_in_sign
+            row["houses"] = kundli_houses(sign_index, houses, degrees=degrees,
+                                          lagna_degree=lagna_degree,
+                                          marks=marks)
             row["lagna"] = SIGNS[sign_index]
             row["reading"] = plate_reading(key, chart)
         out.append(row)
@@ -1443,8 +1507,24 @@ def ask_endpoint():
 
     import rulelib
     facts = {f.id: f.statement for f in chartfacts.build_facts(chart, when)}
+    brief = chartfacts.domain_brief(chart, body.get("question", ""))
+    steps = agent.steps_walked(answer, brief)
     return jsonify(
         answer=answer.answer,
+        # THE ANSWER SPLIT FOR THE SCREEN. The verdict is a field of its own
+        # so answer-first is structural; the rest arrives as paragraphs the
+        # page can set without parsing prose in JavaScript.
+        verdict=answer.verdict or "",
+        paragraphs=[p.strip() for p in answer.answer.split("\n")
+                    if p.strip()],
+        # Which of the six steps the answer actually worked, from the facts
+        # it cited rather than from anything it claimed. See
+        # `agent.steps_walked`.
+        steps=[{**st,
+                "facts": [{"id": fid, "statement": facts.get(fid, "")}
+                          for fid in st["facts"]]}
+               for st in steps],
+        domain=(brief or {}).get("title") or (brief or {}).get("id") or "",
         statements=answer.statements,
         facts_used=[{"id": fid, "statement": facts.get(fid, "")}
                     for fid in answer.facts_used],
