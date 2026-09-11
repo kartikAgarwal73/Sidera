@@ -3680,10 +3680,25 @@ class TestAgentEndpoint:
         assert self._school_seen(
             client, monkeypatch, school_node_reach="not-a-school") == \
             schools.DEFAULTS["node_reach"]
+        # And the not-live guard, against an option that is not live by
+        # construction. This used to name `dual_lord`, which went live with
+        # the arudhas and took the gate with it — a guard that depends on
+        # some feature still being unbuilt expires the moment it is built.
         from app import schools_from_fields
-        assert not schools.OPTIONS["dual_lord"].live
-        assert schools_from_fields({"school_dual_lord": "stronger"})[
-            "dual_lord"] == schools.DEFAULTS["dual_lord"]
+        probe = schools.Option(
+            id="probe_unbuilt", question="Which way, once it exists?",
+            consequence="Nothing yet.", live=False,
+            unavailable="Not yet in play.",
+            answers=(
+                schools.Answer(id="a", text="One way", school="A",
+                               explain="First.", recommended=True),
+                schools.Answer(id="b", text="The other", school="B",
+                               explain="Second."),
+            ))
+        monkeypatch.setitem(schools.OPTIONS, probe.id, probe)
+        monkeypatch.setitem(schools.DEFAULTS, probe.id, probe.default)
+        assert schools_from_fields({f"school_{probe.id}": "b"})[
+            probe.id] == probe.default
 
     def test_ask_requires_a_session_id(self, client):
         r = client.post("/ask", json=self._body(sid=""))
@@ -4522,6 +4537,269 @@ class TestPlateGeometryAgainstAnIndependentRenderer:
                 f"{house_at(cx, cy)} of our plate")
 
 
+class TestArudhas:
+    """A1–A12 and the Upapada, against a second implementation.
+
+    WHAT IS GATED HOW, AND WHY THE TWO HALVES DIFFER
+    The Parāśarī school has one classical answer, and it is gated hard:
+    every pada on both fixtures, plus the counting rule asserted directly.
+
+    The Jaimini school asks which of two co-lords is stronger, and that is a
+    hierarchy the tradition states in words rather than in code. Sidera's is
+    written from the tradition and NOT transcribed from PyJHora — an oracle
+    we had copied would be a mirror, not a check. The cost is honest and
+    measured: the two agree on both fixtures and on 96% of random charts,
+    and part company at the tie-break levels. `tools/oracle/DIFFERENTIAL.md`
+    records that; this class does not paper over it by asserting agreement
+    that does not exist.
+    """
+
+    def _oracle_arudhas(self, oracle, name, answer):
+        key = {"single": "parashari", "stronger": "jaimini"}[answer]
+        return oracle["charts"][name]["bhava_arudhas"][key]["arudhas"]
+
+    @pytest.mark.parametrize("name", ["reference", "partner"])
+    @pytest.mark.parametrize("answer", ["single", "stronger"])
+    def test_every_pada_matches_the_oracle(self, oracle, name, answer):
+        import arudhas
+        import schools
+        chart = compute_chart(fixtures.birth(name))
+        with schools.use({"dual_lord": answer}):
+            ours = list(arudhas.arudhas(chart))
+        theirs = self._oracle_arudhas(oracle, name, answer)
+        assert len(ours) == 12
+        mismatches = [
+            f"A{h + 1}: ours {SIGNS[ours[h]]}, oracle {SIGNS[theirs[h]]}"
+            for h in range(12) if ours[h] != theirs[h]]
+        assert mismatches == [], (
+            f"{name}/{answer}: " + "; ".join(mismatches))
+
+    def test_the_counting_rule_is_reflection_not_a_lookup(self, chart):
+        """The pada is as far from the lord as the lord is from the house.
+        Asserted directly, so the implementation cannot drift into a table
+        that happens to agree with the oracle on two charts."""
+        import arudhas
+        import schools
+        with schools.use({"dual_lord": "single"}):
+            for house in range(1, 13):
+                house_sign = (chart.lagna.sign_index + house - 1) % 12
+                lord = arudhas.SIGN_LORDS[house_sign]
+                lord_sign = chart.planets[lord].sign_index
+                distance = (lord_sign - house_sign) % 12
+                pada = arudhas.arudha_pada(chart, house)
+                plain = (lord_sign + distance) % 12
+                if (plain - house_sign) % 12 in (0, 6):
+                    # The exception fired: the image may not stand on the
+                    # house or opposite it.
+                    assert pada == (plain + 9) % 12, house
+                    assert (pada - house_sign) % 12 not in (0, 6)
+                else:
+                    assert pada == plain, house
+
+    def test_no_arudha_ever_lands_on_its_own_house_or_opposite(self):
+        """The exception, over enough charts that it actually fires. A
+        single fixture can go a whole chart without triggering it."""
+        import arudhas
+        import schools
+        from datetime import timedelta
+        fired = 0
+        base = fixtures.birth("reference")
+        with schools.use({"dual_lord": "single"}):
+            for hours in range(0, 240, 3):
+                moment = base.local_datetime + timedelta(hours=hours)
+                chart = compute_chart(BirthData(
+                    year=moment.year, month=moment.month, day=moment.day,
+                    hour=moment.hour, minute=moment.minute,
+                    latitude=base.latitude, longitude=base.longitude,
+                    tz=base.tz, place=base.place))
+                for house in range(1, 13):
+                    house_sign = (chart.lagna.sign_index + house - 1) % 12
+                    pada = arudhas.arudha_pada(chart, house)
+                    assert (pada - house_sign) % 12 not in (0, 6), (
+                        f"A{house} landed on its own house or opposite it")
+                    lord_sign = chart.planets[
+                        arudhas.SIGN_LORDS[house_sign]].sign_index
+                    if ((lord_sign + (lord_sign - house_sign) % 12)
+                            - house_sign) % 12 in (0, 6):
+                        fired += 1
+        assert fired > 0, "the exception never fired — it is untested"
+
+    def test_the_upapada_is_the_twelfth_arudha(self, chart):
+        import arudhas
+        assert arudhas.upapada(chart) == arudhas.arudhas(chart)[11]
+        assert arudhas.upapada_house(chart) == (
+            (arudhas.upapada(chart) - chart.lagna.sign_index) % 12 + 1)
+
+    def test_the_schools_differ_only_where_a_counted_sign_has_two_lords(self):
+        """STRUCTURAL, and it must hold exactly — this is the half of the
+        Jaimini school that is not a judgement call. If the two schools
+        disagree about a house whose sign has one lord, the strength rules
+        have leaked somewhere they do not belong."""
+        import arudhas
+        from datetime import timedelta
+        base = fixtures.birth("reference")
+        checked = differed = 0
+        for hours in range(0, 480, 7):
+            moment = base.local_datetime + timedelta(hours=hours)
+            chart = compute_chart(BirthData(
+                year=moment.year, month=moment.month, day=moment.day,
+                hour=moment.hour, minute=moment.minute,
+                latitude=base.latitude, longitude=base.longitude,
+                tz=base.tz, place=base.place))
+            both = arudhas.both_schools(chart)
+            contested = arudhas.contested_houses(chart)
+            for house in range(1, 13):
+                checked += 1
+                if both["single"][house - 1] != both["stronger"][house - 1]:
+                    differed += 1
+                    assert house in contested, (
+                        f"the schools disagree about A{house}, whose sign "
+                        f"has only one lord")
+        assert checked > 100
+        assert differed > 0, (
+            "the two schools never disagreed — either the fork is not wired "
+            "or no sampled chart put a node's sign on a counted house")
+
+    def test_a_chart_with_no_contested_house_is_school_proof(self):
+        """Most charts have Scorpio and Aquarius somewhere, so this is about
+        the houses that are NOT contested being untouched by the choice."""
+        import arudhas
+        chart = compute_chart(fixtures.birth("partner"))
+        both = arudhas.both_schools(chart)
+        contested = set(arudhas.contested_houses(chart))
+        for house in range(1, 13):
+            if house not in contested:
+                assert both["single"][house - 1] == both["stronger"][house - 1]
+
+    def test_rasi_drishti_is_its_own_aspect_system(self):
+        """Used by the strength hierarchy, and NOT the graha drishti in
+        `transits.py`. Mixing the two is the kind of error that produces
+        plausible numbers, so the two are asserted to be different."""
+        import arudhas
+        from transits import aspected_signs
+        for sign in range(12):
+            seen = arudhas.rasi_drishti(sign)
+            assert sign not in seen, "a sign does not aspect itself"
+            assert len(seen) == 3, sign
+            # Mutual: rasi drishti is symmetric, which graha drishti is not.
+            for other in seen:
+                assert sign in arudhas.rasi_drishti(other), (sign, other)
+            # Movable looks at fixed, fixed at movable, dual at dual.
+            mode = arudhas.modality(sign)
+            wanted = {arudhas.MOVABLE: arudhas.FIXED,
+                      arudhas.FIXED: arudhas.MOVABLE,
+                      arudhas.DUAL: arudhas.DUAL}[mode]
+            assert all(arudhas.modality(s) == wanted for s in seen), sign
+        # And it is genuinely not the graha table.
+        assert set(arudhas.rasi_drishti(0)) != set(aspected_signs("Jupiter", 0))
+
+    def test_each_step_of_the_hierarchy_decides_when_it_should(self):
+        """Every rung, on a chart built so that exactly one of them can
+        speak. The fixtures do not reach most of these — the co-lords are
+        separated by the first rung on both — so without constructed charts
+        the hierarchy below `company` would ship untested.
+        """
+        import arudhas
+        import schools
+
+        def verdict(lagna, placements):
+            chart = synthetic_chart(lagna, placements)
+            with schools.use({"dual_lord": "stronger"}):
+                return arudhas.stronger_co_lord(chart, "Saturn", "Rahu")
+
+        # One constructed chart per rung, each found by search and pinned
+        # here, so a rung that stops firing is caught rather than silently
+        # skipped. Sign indices, Aries = 0.
+        cases = {
+            # Saturn in Aquarius, Rahu elsewhere: the count goes to Rahu,
+            # the claim that is not merely positional.
+            "occupancy": (9, "Rahu", {
+                "Sun": 2, "Moon": 8, "Mars": 1, "Mercury": 9, "Jupiter": 4,
+                "Venus": 8, "Saturn": 10, "Rahu": 2, "Ketu": 1}),
+            "company": (9, "Rahu", {
+                "Sun": 5, "Moon": 2, "Mars": 6, "Mercury": 10, "Jupiter": 0,
+                "Venus": 1, "Saturn": 8, "Rahu": 1, "Ketu": 5}),
+            "support": (1, "Saturn", {
+                "Sun": 5, "Moon": 5, "Mars": 11, "Mercury": 5, "Jupiter": 9,
+                "Venus": 7, "Saturn": 9, "Rahu": 7, "Ketu": 1}),
+            "exaltation": (6, "Rahu", {
+                "Sun": 7, "Moon": 5, "Mars": 11, "Mercury": 7, "Jupiter": 4,
+                "Venus": 9, "Saturn": 1, "Rahu": 1, "Ketu": 8}),
+            "modality": (8, "Saturn", {
+                "Sun": 5, "Moon": 4, "Mars": 3, "Mercury": 2, "Jupiter": 11,
+                "Venus": 3, "Saturn": 1, "Rahu": 9, "Ketu": 4}),
+            # Nothing separates them: the classical lord keeps the count,
+            # and the caller can SEE that nothing decided it.
+            "undecided": (0, "Saturn", {
+                "Sun": 8, "Moon": 6, "Mars": 0, "Mercury": 9, "Jupiter": 1,
+                "Venus": 3, "Saturn": 10, "Rahu": 10, "Ketu": 9}),
+        }
+        for step, (lagna, winner, placements) in cases.items():
+            assert verdict(lagna, placements) == (winner, step), step
+
+        # SUPPORT COUNTS DRISHTI, NOT ONLY COMPANY. On this chart nothing
+        # sits with either co-lord, so the rung can only speak through rasi
+        # drishti — Jupiter and the dispositor look upon Saturn's sign and
+        # upon nothing of Rahu's. Without it the rung falls silent and a
+        # later rung answers instead.
+        by_drishti = {"Sun": 0, "Moon": 10, "Mars": 1, "Mercury": 7,
+                      "Jupiter": 10, "Venus": 4, "Saturn": 6, "Rahu": 8,
+                      "Ketu": 1}
+        assert verdict(11, by_drishti) == ("Saturn", "support")
+
+        # THE LAGNA COUNTS AS COMPANY, and that is a choice — the rung is
+        # not reached on either fixture, so without this the choice could be
+        # reversed and every committed gate would still pass. Same chart,
+        # lagna moved onto Rahu's sign and off it.
+        moved = {"Sun": 5, "Moon": 2, "Mars": 6, "Mercury": 10,
+                 "Jupiter": 0, "Venus": 11, "Saturn": 8, "Rahu": 1,
+                 "Ketu": 5}
+        with_lagna = verdict(1, moved)       # lagna in Taurus, with Rahu
+        without = verdict(8, moved)          # lagna elsewhere
+        assert with_lagna != without, (
+            "moving the lagna onto a co-lord's sign changed nothing — the "
+            "lagna is not being counted as company")
+
+    def test_the_strength_verdict_names_the_step_that_decided_it(self, chart):
+        """A verdict resting on the modality of a sign is a weaker claim
+        than one resting on exaltation, and the reader is entitled to which
+        they have. Every step in the hierarchy must be reachable."""
+        import arudhas
+        winner, step = arudhas.stronger_co_lord(chart, "Saturn", "Rahu")
+        assert winner in ("Saturn", "Rahu")
+        assert step in ("occupancy", "company", "support", "exaltation",
+                        "modality", "undecided")
+
+    def test_describe_carries_what_a_marriage_reading_needs(self, chart):
+        import arudhas
+        import schools
+        with schools.use({"dual_lord": "single"}):
+            out = arudhas.describe(chart)
+        assert out["upapada_sign"] == SIGNS[out["upapada_sign_index"]]
+        assert 1 <= out["upapada_house"] <= 12
+        assert out["upapada_lord"] == arudhas.SIGN_LORDS[
+            out["upapada_sign_index"]]
+        assert set(out["upapada_occupants"]) <= set(PLANETS)
+        # The school is named on the output, not left to a settings screen.
+        assert "Parāśarī" in out["school"] or "Paras" in out["school"]
+
+    def test_every_arudha_rule_is_in_the_citation_library(self):
+        """`rulelib` is the single citation authority. An arudha rule that
+        exists only in this module's prose cannot be cited by the agent and
+        cannot be checked by the validator."""
+        import rulelib
+        for rule_id in ("rule.arudha.pada", "rule.arudha.exception",
+                        "rule.arudha.upapada",
+                        "rule.arudha.upapada_occupants",
+                        "rule.arudha.second_from_upapada",
+                        "rule.arudha.colord_school",
+                        "rule.arudha.colord_strength",
+                        "rule.arudha.rasi_drishti"):
+            assert rulelib.is_known(rule_id), rule_id
+            assert rulelib.RULES[rule_id].source.strip(), (
+                f"{rule_id} has no source — the citation IS the product")
+
+
 class TestVimshottariAgainstTheOracle:
     """The daśā timeline, boundary by boundary, against PyJHora.
 
@@ -4894,22 +5172,55 @@ class TestComputationOptions:
 
     # --- no fake controls ----------------------------------------------
 
-    def test_an_option_that_is_not_live_cannot_be_chosen(self, client):
-        """The Upapada question is real but Sidera does not compute arudha
-        padas yet, so it is shown, explained, and disabled. Offering it
-        would be a control that changes nothing."""
+    def test_an_option_that_is_not_live_cannot_be_chosen(self, client,
+                                                         monkeypatch):
+        """A question the build cannot answer yet is shown, explained and
+        disabled — and cannot be switched on by editing the request.
+
+        THE MECHANISM IS TESTED WHETHER OR NOT ANYTHING IS CURRENTLY DEAD.
+        This gate used to open by asserting that some option was not live,
+        which made it a test of the registry's contents rather than of the
+        machinery: when `dual_lord` went live with the arudhas, it failed
+        for having nothing to look at. The next unbuilt option deserves the
+        same guard the Upapada question had, so the guard is exercised
+        against one whether or not the registry ships one.
+        """
         import schools
-        dead = [o for o in schools.OPTIONS.values() if not o.live]
-        assert dead, "this test needs at least one not-yet option"
-        for opt in dead:
-            assert opt.unavailable.strip(), opt.id
-            # It cannot be switched on through the form either.
-            forced = schools.normalise({opt.id: opt.answers[-1].id})
-            assert forced[opt.id] == opt.default
-        html = client.get("/").get_data(as_text=True)
-        assert "disabled" in html
-        for opt in dead:
-            assert opt.unavailable[:40] in html, opt.id
+        real_dead = [o for o in schools.OPTIONS.values() if not o.live]
+
+        def obeys_the_rule(opt, page):
+            assert opt.unavailable.strip(), f"{opt.id}: disabled with no reason"
+            # It cannot be switched on through a form field or a JSON body.
+            for ans in opt.answers:
+                forced = schools.normalise({opt.id: ans.id})
+                assert forced[opt.id] == opt.default, (
+                    f"{opt.id}: '{ans.id}' was accepted on an option that is "
+                    f"not live")
+            assert opt.unavailable[:40] in page, opt.id
+
+        for opt in real_dead:
+            obeys_the_rule(opt, client.get("/").get_data(as_text=True))
+
+        # And the machinery itself, against an option that is not live by
+        # construction — so this cannot go vacuous again.
+        probe = schools.Option(
+            id="probe_not_live",
+            question="Which way should the unbuilt thing be counted?",
+            consequence="Nothing yet — this option exists to test the guard.",
+            live=False,
+            unavailable=("Not yet in play: this is a probe used by the gate "
+                         "suite and is never shipped."),
+            answers=(
+                schools.Answer(id="first", text="One way", school="A",
+                               explain="The first reading.", recommended=True),
+                schools.Answer(id="second", text="The other way", school="B",
+                               explain="The second reading."),
+            ),
+        )
+        monkeypatch.setitem(schools.OPTIONS, probe.id, probe)
+        monkeypatch.setitem(schools.DEFAULTS, probe.id, probe.default)
+        obeys_the_rule(probe, client.get("/").get_data(as_text=True))
+        assert "disabled" in client.get("/").get_data(as_text=True)
 
     def test_every_live_answer_actually_changes_a_computed_value(self):
         """THE INVARIANT THIS WHOLE FILE RESTS ON.
@@ -4919,6 +5230,7 @@ class TestComputationOptions:
         Asserted by computing both, so a setting cannot rot into decoration.
         """
         import schools
+        import arudhas
         from engine import PLANETS, compute_chart
         from transits import natal_aspect_table
 
@@ -4928,6 +5240,10 @@ class TestComputationOptions:
                 tuple(round(chart.planets[p].longitude, 6) for p in PLANETS),
                 tuple(sorted((a.aspecting, a.aspected, a.offset)
                              for a in natal_aspect_table(chart))),
+                # The arudhas, because `dual_lord` moves those and nothing
+                # else — a fingerprint blind to what an option changes would
+                # pass this gate by not looking.
+                arudhas.arudhas(chart),
             )
 
         with schools.use({}):

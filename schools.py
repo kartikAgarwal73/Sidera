@@ -177,20 +177,16 @@ OPTIONS: dict[str, Option] = {
             ),
         ),
     ),
-    # NOT LIVE. Kept visible because it is a real fork in the tradition and
-    # the reader deserves to know it is coming — but it is not selectable,
-    # because Sidera does not compute arudha padas yet and a control that
-    # changes nothing is worse than no control. See PROGRESS.md, milestone 3.
+    # LIVE as of the arudha work. It was shown and disabled for as long as
+    # there was nothing behind it, because a control that changes nothing is
+    # worse than no control; now that `arudhas.py` counts A1–A12 it changes
+    # a real computed value and `TestComputationOptions` proves it does.
     "dual_lord": Option(
         id="dual_lord",
         question="When a sign has two possible rulers, who decides?",
         consequence="This affects Scorpio and Aquarius only — and through "
                     "them the Upapada, the point read for marriage.",
-        affects=("arudha padas", "Upapada"),
-        live=False,
-        unavailable=("Not yet in play: Sidera does not compute arudha padas "
-                     "or the Upapada, so this choice would change nothing. "
-                     "It arrives with them."),
+        affects=("arudha padas", "Upapada", "fact ledger"),
         answers=(
             Answer(
                 id="single",

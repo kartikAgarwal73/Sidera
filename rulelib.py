@@ -378,9 +378,66 @@ _HOUSE = dict(
     for h, matters in HOUSE_MATTERS.items()
 )
 
+# --- arudhas: the image a house casts ----------------------------------------
+
+_ARUDHA = dict([
+    _r("rule.arudha.pada",
+       "A house's arudha is found by reflection: count from the house to "
+       "its lord, then count that same distance on from the lord. The house "
+       "is the matter itself; its arudha is how the matter appears to "
+       "others.",
+       "Bhava arudha, Brihat Parashara Hora Shastra ch. 29; Jaimini Sutras "
+       "1.1"),
+    _r("rule.arudha.exception",
+       "An arudha may fall neither on its own house nor on the 7th from it "
+       "— an image cannot stand where the thing itself stands, nor directly "
+       "opposite it. Where the count lands there, the 10th from that place "
+       "is taken instead.",
+       "Brihat Parashara Hora Shastra ch. 29"),
+    _r("rule.arudha.upapada",
+       "The Upapada Lagna is the arudha of the 12th house, and is read for "
+       "marriage and for the spouse: the 12th is the house of what is given "
+       "away, and a marriage is read through what one gives to it.",
+       "Upapada, Jaimini Sutras 1.4; Brihat Parashara Hora Shastra ch. 30"),
+    _r("rule.arudha.upapada_occupants",
+       "Grahas sitting on the Upapada colour the marriage directly: "
+       "benefics there support it, malefics ask more of it. The lord of the "
+       "Upapada's sign, and where that lord sits, carries the same weight.",
+       "Upapada reading, Jaimini Sutras 1.4 with Parasara's bhava rules"),
+    _r("rule.arudha.second_from_upapada",
+       "The 2nd from the Upapada is read for the durability of the "
+       "marriage, as the 2nd from any house is read for the sustenance of "
+       "that house's matter.",
+       "Bhavat bhavam applied to the Upapada — standard Jaimini practice"),
+    _r("rule.arudha.colord_school",
+       "Scorpio and Aquarius have two claimed lords each — Mars and Ketu, "
+       "Saturn and Rahu — and an arudha is counted from the lord, so the "
+       "two readings can place it in different signs. Parasari counts from "
+       "the sole classical lord; Jaimini counts from whichever co-lord is "
+       "stronger in the chart at hand. Sidera computes whichever the reader "
+       "chose and names the school on the verdict.",
+       "Parasari sole lordship vs Jaimini co-lord strength — a genuine "
+       "divergence, recorded rather than resolved"),
+    _r("rule.arudha.colord_strength",
+       "Where the stronger co-lord decides, the comparison runs in order: "
+       "a graha occupying the disputed sign yields the count to its "
+       "fellow; then the graha with more bodies in its sign, the lagna "
+       "counted among them; then the one better attended by Jupiter, "
+       "Mercury or its own dispositor, whether by company or by rasi "
+       "drishti; then the exalted one; then the one in the sign of the "
+       "stronger nature, dual above fixed above movable.",
+       "Jaimini Sutras 1.2 (bala), as applied to co-lordship"),
+    _r("rule.arudha.rasi_drishti",
+       "Rasi drishti is a sign-to-sign aspect and is not the same as graha "
+       "drishti: movable signs look upon the fixed and fixed upon the "
+       "movable, each excepting its immediate neighbour, and dual signs "
+       "look upon one another.",
+       "Rasi drishti, Jaimini Sutras 1.1"),
+])
+
 RULES: dict[str, Rule] = {
     **_DASHA, **_TRANSIT_GENERAL, **_TRANSIT_GRAHA, **_CONTACT, **_VARGA,
-    **_GRAHA_STATE, **_YOGA, **_HOUSE,
+    **_GRAHA_STATE, **_YOGA, **_HOUSE, **_ARUDHA,
 }
 
 # The general rule a contact displaces, and the rule that says so. Kept as

@@ -152,3 +152,45 @@ The comparison therefore pins PyJHora to `MEAN_SIDEREAL_YEAR`, the same constant
 
 Sidera has no Ashtakavarga module yet (milestone 2). The oracle carries BAV/SAV for both fictional fixtures; wire this up when the module lands.
 
+
+---
+
+## Arudhas: one school exact, one measured
+
+Run over **400 random charts** (seeded, uncommitted, regenerable) against
+PyJHora 4.8.7, comparing A1–A12 under both co-lord schools.
+
+| School | Charts agreeing |
+|---|---|
+| Parāśarī — sole classical lord | **400 / 400** |
+| Jaimini — stronger co-lord | 383 / 400 (95.75%) |
+
+The Parāśarī count has one classical answer and is gated body by body on
+both fixtures. The Jaimini count asks which of two co-lords is stronger,
+and that is a hierarchy the tradition states in words. **Sidera's is written
+from the tradition and deliberately not transcribed from PyJHora** — an
+oracle we had copied would be a mirror rather than a check, which is the
+same reason the ephemeris is cross-checked against ERFA and not against
+itself.
+
+The residual 4.25% is not known to be a Sidera defect. Two things are known:
+
+- PyJHora's own Rule 3 cannot fire for the second planet. Its exaltation
+  branch compares `house_strengths_of_planets[planet2]` against
+  **`planet2`** rather than `planet1`, so the test is a tautology and an
+  exalted node can never win that rung. Copying the hierarchy would have
+  meant copying that.
+- Its final tie-break runs a Narāyaṇa daśā to compare period lengths, which
+  Sidera does not compute.
+
+One reading WAS adopted on the evidence and is recorded as such: the **lagna
+counts as company** at the first rung. Dropping it moves agreement from
+95.75% to 88% (48 charts differ instead of 17). The lagna is a point of
+strength in its own right in Jaimini, so the reading is defensible on its
+own terms, and the agreement figure is corroboration rather than the reason.
+`TestArudhas` pins it on a constructed chart, because neither fixture
+reaches that rung — without that test the choice could be reversed and every
+committed gate would still pass.
+
+**Where the schools disagree, the app shows both and names each.** That is
+the point of the fork being a reader-facing question rather than a constant.

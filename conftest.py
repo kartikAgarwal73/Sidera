@@ -277,6 +277,15 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
         "external", "PyJHora's Vimshottari MD/AD boundaries for the "
                     "fictional charts — pins the sidereal-year fix the "
                     "300-chart differential run found"),
+    # MIXED, deliberately, and the class docstring says which half is which:
+    # the Parāśarī padas are gated against PyJHora body by body, while the
+    # Jaimini co-lord hierarchy is written from the tradition rather than
+    # transcribed, so its structural properties are invariants and its
+    # agreement with the oracle is measured rather than asserted.
+    "TestArudhas": (
+        "external", "PyJHora's A1–A12 under both co-lord schools for the "
+                    "fictional charts; the strength hierarchy's structure "
+                    "is checked as an invariant, not against them"),
     # A second derivation of the plate, by someone else. TestPlateGeometry
     # proves our two layers agree with each other, which a wholesale rotation
     # of the mapping would survive; this cannot be satisfied by any rotation.
