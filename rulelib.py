@@ -435,9 +435,64 @@ _ARUDHA = dict([
        "Rasi drishti, Jaimini Sutras 1.1"),
 ])
 
+# --- chara karakas: the significators the chart assigns -----------------------
+
+_KARAKA = dict([
+    _r("rule.karaka.chara",
+       "A chara karaka is assigned by the chart rather than fixed by "
+       "nature: rank the grahas by how far each has advanced into its "
+       "sign, highest first, and the offices fall out in order — "
+       "Atmakaraka for the self at the greatest degree, down to "
+       "Darakaraka for the spouse at the least.",
+       "Chara karakas, Jaimini Sutras 1.1; Brihat Parashara Hora Shastra "
+       "ch. 32"),
+    _r("rule.karaka.rahu_reversed",
+       "Rahu travels backwards, so its degree is counted backwards: a Rahu "
+       "seven degrees into a sign has twenty-three degrees behind it in its "
+       "own direction of travel, and is ranked accordingly.",
+       "Reverse reckoning for Rahu in the chara karaka scheme — standard "
+       "where the eight-karaka count is used"),
+    _r("rule.karaka.count_school",
+       "The number of offices is disputed. The seven-karaka scheme shares "
+       "them among the visible grahas alone, holding that the nodes are "
+       "shadows and signify nothing of their own. The eight-karaka scheme "
+       "admits Rahu, which inserts a Pitrikaraka and moves every office "
+       "below it down one — so the graha standing for the spouse often "
+       "differs between the two. Ketu takes no office under either.",
+       "Seven vs eight chara karakas — a genuine divergence between "
+       "Parasari and later Jaimini practice"),
+    _r("rule.karaka.tie_convention",
+       "Where two grahas stand at the identical degree of their signs, the "
+       "classical sources are silent, so Sidera compares at full precision "
+       "and, only if that is equal too, gives the more senior office to the "
+       "graha earlier in the natural order. This is a stated convention, "
+       "not a classical rule.",
+       "Sidera convention, recorded because a tie decided silently is not a "
+       "rule"),
+    _r("rule.karaka.darakaraka",
+       "The Darakaraka signifies the spouse, and is read alongside the 7th "
+       "house and the Upapada rather than instead of them: its sign, its "
+       "house, its dignity and what aspects it describe the partner and "
+       "the partnership.",
+       "Darakaraka, Jaimini Sutras 1.1 with Parasara's bhava rules"),
+    _r("rule.karaka.maturation",
+       "Each karaka is held to mature at a classical age, after which its "
+       "matters come properly into play — the tradition gives the "
+       "Darakaraka's maturity late among them. Ages are indicative of when "
+       "a significator's affairs ripen, not a date on which anything "
+       "happens.",
+       "Karaka maturity ages, Brihat Parashara Hora Shastra ch. 32"),
+    _r("rule.karaka.karakamsa",
+       "The Karakamsa is the navamsa sign the Atmakaraka occupies. The "
+       "Atmakaraka is what the life is for and the navamsa is where a natal "
+       "promise is tested, so the sign where the two meet is read as the "
+       "field in which the self is worked out.",
+       "Karakamsa, Jaimini Sutras 1.2; Brihat Parashara Hora Shastra ch. 33"),
+])
+
 RULES: dict[str, Rule] = {
     **_DASHA, **_TRANSIT_GENERAL, **_TRANSIT_GRAHA, **_CONTACT, **_VARGA,
-    **_GRAHA_STATE, **_YOGA, **_HOUSE, **_ARUDHA,
+    **_GRAHA_STATE, **_YOGA, **_HOUSE, **_ARUDHA, **_KARAKA,
 }
 
 # The general rule a contact displaces, and the rule that says so. Kept as

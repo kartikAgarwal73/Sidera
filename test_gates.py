@@ -4800,6 +4800,236 @@ class TestArudhas:
                 f"{rule_id} has no source — the citation IS the product")
 
 
+class TestCharaKarakas:
+    """The offices the chart assigns, and the Kārakāṃśa.
+
+    THE TWO HALVES ARE GATED DIFFERENTLY, and the difference is the point.
+    PyJHora ships the EIGHT-karaka scheme natively, so that half is a real
+    external check — its ordering was verified body by body across 400
+    random charts as well as both fixtures. The SEVEN-karaka scheme it does
+    not ship: the oracle file's `seven_karaka` block was DERIVED by the
+    exporter, by dropping Rahu from PyJHora's own longitudes. Agreeing with
+    a derivation from the same numbers is weaker evidence than agreeing
+    with an independent implementation, and saying so is the difference
+    between a gate and a decoration.
+
+    Sidera's seven-karaka path is therefore written from the tradition —
+    the seven visible grahas ranked by degree, no nodes at all — and what
+    the derivation corroborates is recorded as corroboration.
+    """
+
+    # The oracle writes Jñāti where we write Gnāti. Same Sanskrit word, two
+    # transliterations; the abbreviation GK is what both texts use.
+    ORACLE_OFFICE = {
+        "Atma": "Atmakaraka", "Amatya": "Amatyakaraka",
+        "Bhratri": "Bhratrikaraka", "Matri": "Matrikaraka",
+        "Pitri": "Pitrikaraka", "Putra": "Putrakaraka",
+        "Jnati": "Gnatikaraka", "Dara": "Darakaraka",
+    }
+
+    @pytest.mark.parametrize("name", ["reference", "partner"])
+    def test_eight_karaka_scheme_matches_the_oracle(self, oracle, name):
+        """THE EXTERNAL HALF. PyJHora computes this scheme itself."""
+        import karakas
+        chart = compute_chart(fixtures.birth(name))
+        block = oracle["charts"][name]["chara_karakas"]["eight_karaka"]
+        ours = karakas.karakas(chart, "eight")
+        assert [k.planet for k in ours] == block["order"]
+        assert {k.office: k.planet for k in ours} == {
+            self.ORACLE_OFFICE[o]: p
+            for o, p in block["assignment"].items()}
+        assert "Rahu" in block["source"]
+
+    @pytest.mark.parametrize("name", ["reference", "partner"])
+    def test_seven_karaka_scheme_agrees_with_the_derivation(self, oracle,
+                                                            name):
+        """THE DERIVED HALF, labelled. The oracle's seven-karaka block is
+        not an independent implementation — the exporter made it by
+        excluding Rahu from PyJHora's longitudes, and says so in its own
+        `source` field. This asserts agreement AND asserts that the file
+        still admits what it is, so the label cannot quietly disappear and
+        leave a derivation being read as a check."""
+        import karakas
+        chart = compute_chart(fixtures.birth(name))
+        block = oracle["charts"][name]["chara_karakas"]["seven_karaka"]
+        assert "DERIVED" in block["source"], (
+            "the oracle no longer admits that its seven-karaka block is a "
+            "derivation — either it became independent, which would be good "
+            "news worth rewriting this gate for, or the label was lost")
+        ours = karakas.karakas(chart, "seven")
+        assert [k.planet for k in ours] == block["order"]
+        assert {k.office: k.planet for k in ours} == {
+            self.ORACLE_OFFICE[o]: p
+            for o, p in block["assignment"].items()}
+
+    def test_the_ranking_is_by_degree_into_the_sign(self, chart):
+        """Written out directly, so the implementation cannot drift into a
+        table that happens to agree on two charts."""
+        import karakas
+        for which in ("seven", "eight"):
+            ranked = karakas.karakas(chart, which)
+            values = [k.ranked_by for k in ranked]
+            assert values == sorted(values, reverse=True), which
+            assert len(ranked) == (8 if which == "eight" else 7)
+            assert [k.office for k in ranked] == list(
+                karakas.OFFICES_8 if which == "eight" else karakas.OFFICES_7)
+            # Ketu takes no office under either scheme.
+            assert "Ketu" not in [k.planet for k in ranked]
+        assert "Rahu" not in [k.planet for k in karakas.karakas(chart, "seven")]
+        assert "Rahu" in [k.planet for k in karakas.karakas(chart, "eight")]
+
+    def test_rahu_is_ranked_backwards(self):
+        """Not a fudge — the same fact that makes Rahu's daśā run from the
+        other end. A Rahu barely into its sign ranks near the top."""
+        import karakas
+        assert karakas.ranking_value("Rahu", 7.0) == 23.0
+        assert karakas.ranking_value("Saturn", 7.0) == 7.0
+        # A chart where Rahu is at 1° and everything else is low: counted
+        # forwards Rahu would be last, counted backwards it is first.
+        placements = {p: (i, 5.0) for i, p in enumerate(
+            ("Sun", "Moon", "Mars", "Mercury", "Jupiter", "Venus", "Saturn"))}
+        placements["Rahu"] = (7, 1.0)
+        placements["Ketu"] = (1, 1.0)
+        ranked = karakas.karakas(synthetic_chart(0, placements), "eight")
+        assert ranked[0].planet == "Rahu"
+        assert ranked[0].office == "Atmakaraka"
+        assert ranked[0].reversed_for_rahu is True
+
+    def test_admitting_rahu_can_change_who_the_spouse_karaka_is(self):
+        """The reason this is a question put to the reader and not a
+        constant. An eighth office is not merely appended: Rahu can take a
+        senior one and push every office below it down, the Dārakāraka
+        included."""
+        import karakas
+        # Rahu at 29° ranks 1.0 counted backwards — below Saturn's 3.0, so
+        # it lands at the BOTTOM of the eight and takes the spouse's office
+        # outright. Under seven it is not there and Saturn keeps it.
+        takes_it = {
+            "Sun": (0, 28.0), "Moon": (1, 20.0), "Mars": (2, 18.0),
+            "Mercury": (3, 15.0), "Jupiter": (4, 12.0), "Venus": (5, 9.0),
+            "Saturn": (6, 3.0), "Rahu": (7, 29.0), "Ketu": (1, 1.0)}
+        chart = synthetic_chart(0, takes_it)
+        both = karakas.both_schemes(chart)
+        assert both["seven"]["Darakaraka"] == "Saturn"
+        assert both["eight"]["Darakaraka"] == "Rahu"
+        assert not karakas.schemes_agree_on(chart, "Darakaraka")
+
+        # And where Rahu lands mid-table it takes no office outright but
+        # still pushes every office below it down one — the Dārakāraka
+        # unchanged, the significators between it and the top all moved.
+        pushes = dict(takes_it, **{"Rahu": (7, 5.0)})   # ranks 25.0, second
+        chart = synthetic_chart(0, pushes)
+        both = karakas.both_schemes(chart)
+        assert both["eight"]["Amatyakaraka"] == "Rahu"
+        assert both["seven"]["Darakaraka"] == both["eight"]["Darakaraka"]
+        assert karakas.schemes_agree_on(chart, "Atmakaraka")
+        for office in ("Bhratrikaraka", "Matrikaraka"):
+            assert not karakas.schemes_agree_on(chart, office), office
+
+    def test_a_tie_is_broken_by_a_named_rule_not_by_sort_order(self):
+        """THE CASE THAT NEVER HAPPENS UNTIL IT DOES. Two grahas at the
+        identical degree: the order must come from a stated convention and
+        must be reported as a tie, not resolved invisibly."""
+        import karakas
+        placements = {
+            "Sun": (0, 10.0), "Moon": (1, 10.0),        # exact tie
+            "Mars": (2, 3.0), "Mercury": (3, 2.0),
+            "Jupiter": (4, 1.5), "Venus": (5, 1.0), "Saturn": (6, 0.5),
+            "Rahu": (7, 29.0), "Ketu": (1, 29.0)}
+        chart = synthetic_chart(0, placements)
+        ranked = karakas.karakas(chart, "seven")
+        # Natural order decides: Sun is earlier than Moon, so Sun is senior.
+        assert ranked[0].planet == "Sun" and ranked[1].planet == "Moon"
+        # And the tie is REPORTED rather than swallowed.
+        ties = karakas.tie_groups(chart, "seven")
+        assert ties == [["Sun", "Moon"]]
+        assert karakas.describe(chart)["ties"] == [["Sun", "Moon"]]
+        # A chart with no tie reports none — so the field means something.
+        clean = dict(placements)
+        clean["Moon"] = (1, 9.0)
+        assert karakas.tie_groups(synthetic_chart(0, clean), "seven") == []
+
+    def test_the_tie_rule_survives_the_input_order(self):
+        """The convention must not be the dictionary's insertion order
+        wearing a rule's clothes. Same chart, placements built backwards."""
+        import karakas
+        forward = {
+            "Sun": (0, 10.0), "Moon": (1, 10.0), "Mars": (2, 3.0),
+            "Mercury": (3, 2.0), "Jupiter": (4, 1.5), "Venus": (5, 1.0),
+            "Saturn": (6, 0.5), "Rahu": (7, 29.0), "Ketu": (1, 29.0)}
+        backward = dict(reversed(list(forward.items())))
+        assert list(forward) != list(backward)
+        a = [k.planet for k in karakas.karakas(
+            synthetic_chart(0, forward), "seven")]
+        b = [k.planet for k in karakas.karakas(
+            synthetic_chart(0, backward), "seven")]
+        assert a == b, "the karaka order followed the input order"
+
+    def test_karakamsa_is_the_atmakaraka_in_the_navamsa(self, chart):
+        import karakas
+        import vargas
+        for which in ("seven", "eight"):
+            ak = karakas.atmakaraka(chart, which)
+            km = karakas.karakamsa(chart, which)
+            navamsa = vargas.varga_chart(chart, "D9")
+            assert km["planet"] == ak.planet
+            assert km["sign_index"] == navamsa.planets[ak.planet].sign_index
+            assert km["house_from_d9_lagna"] == navamsa.planets[ak.planet].house
+            # The house is counted from the D9 lagna, NOT the natal one —
+            # the distinction that makes it the Kārakāṃśa rather than just
+            # "where the AK went".
+            assert km["house_from_d9_lagna"] == (
+                km["sign_index"] - navamsa.lagna_sign_index) % 12 + 1
+            assert km["d9_lagna_sign"] == navamsa.lagna_sign
+
+    def test_the_scheme_follows_the_school(self, chart):
+        import karakas
+        import schools
+        with schools.use({"karaka_count": "seven"}):
+            assert karakas.scheme() == "seven"
+            assert len(karakas.karakas(chart)) == 7
+            assert karakas.describe(chart)["scheme"] == "seven"
+        with schools.use({"karaka_count": "eight"}):
+            assert karakas.scheme() == "eight"
+            assert len(karakas.karakas(chart)) == 8
+            assert "Rahu" in [k.planet for k in karakas.karakas(chart)]
+        # Seven is the recommended default.
+        assert schools.OPTIONS["karaka_count"].default == "seven"
+
+    def test_describe_carries_what_a_marriage_reading_needs(self, chart):
+        import karakas
+        import schools
+        with schools.use({"karaka_count": "seven"}):
+            out = karakas.describe(chart)
+        assert out["darakaraka"] in PLANETS
+        assert out["darakaraka_sign"] in SIGNS
+        assert 1 <= out["darakaraka_house"] <= 12
+        assert out["atmakaraka"] == out["karakas"][0]["planet"]
+        assert out["darakaraka"] == out["karakas"][-1]["planet"]
+        assert out["karakamsa"]["planet"] == out["atmakaraka"]
+        assert isinstance(out["darakaraka_agrees_across_schemes"], bool)
+        # The school is named on the output, not left to a settings screen.
+        assert "karaka" in out["school"].lower()
+
+    def test_every_karaka_rule_is_in_the_citation_library(self):
+        """`rulelib` is the single citation authority."""
+        import rulelib
+        for rule_id in ("rule.karaka.chara", "rule.karaka.rahu_reversed",
+                        "rule.karaka.count_school",
+                        "rule.karaka.tie_convention",
+                        "rule.karaka.darakaraka",
+                        "rule.karaka.maturation",
+                        "rule.karaka.karakamsa"):
+            assert rulelib.is_known(rule_id), rule_id
+            assert rulelib.RULES[rule_id].source.strip(), (
+                f"{rule_id} has no source — the citation IS the product")
+        # The tie convention must admit it is a convention, in the text a
+        # reader sees, the way the varga degree convention does.
+        tie = rulelib.RULES["rule.karaka.tie_convention"]
+        assert "convention" in tie.text.lower()
+        assert "not a classical rule" in tie.text.lower()
+
+
 class TestVimshottariAgainstTheOracle:
     """The daśā timeline, boundary by boundary, against PyJHora.
 
@@ -5231,6 +5461,7 @@ class TestComputationOptions:
         """
         import schools
         import arudhas
+        import karakas
         from engine import PLANETS, compute_chart
         from transits import natal_aspect_table
 
@@ -5244,6 +5475,10 @@ class TestComputationOptions:
                 # else — a fingerprint blind to what an option changes would
                 # pass this gate by not looking.
                 arudhas.arudhas(chart),
+                # And the chara karakas, for `karaka_count`. Every option
+                # added from here needs its own line: the gate is only as
+                # honest as the widest thing this tuple can see.
+                tuple((k.office, k.planet) for k in karakas.karakas(chart)),
             )
 
         with schools.use({}):
@@ -5381,9 +5616,14 @@ class TestComputationOptions:
         file was written against, or half the suite is describing a chart
         nobody is served."""
         import schools
+        # Listed exhaustively on purpose: a new option arriving with a
+        # default nobody chose would otherwise re-anchor the whole suite
+        # silently. Adding a line here is the moment to check that the
+        # recommended answer is the one the other gates assume.
         assert schools.DEFAULTS == {"node_reach": "classical",
                                     "node_position": "mean",
-                                    "dual_lord": "single"}
+                                    "dual_lord": "single",
+                                    "karaka_count": "seven"}
         html = client.post("/", data=GATE_FORM).get_data(as_text=True)
         assert "Computed with the recommended settings throughout." in html
 

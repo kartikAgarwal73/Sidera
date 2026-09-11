@@ -286,6 +286,16 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
         "external", "PyJHora's A1–A12 under both co-lord schools for the "
                     "fictional charts; the strength hierarchy's structure "
                     "is checked as an invariant, not against them"),
+    # MIXED for a different reason than TestArudhas. The eight-karaka half
+    # is a true external check — PyJHora computes that scheme itself. The
+    # seven-karaka half is not: the oracle's block was derived by the
+    # exporter from the same longitudes by dropping Rahu, so agreeing with
+    # it is corroboration, not independent confirmation. The class says so
+    # and asserts that the oracle keeps admitting it.
+    "TestCharaKarakas": (
+        "external", "PyJHora's eight-karaka ordering for the fictional "
+                    "charts; the seven-karaka comparison is against a "
+                    "derivation and is labelled as one"),
     # A second derivation of the plate, by someone else. TestPlateGeometry
     # proves our two layers agree with each other, which a wholesale rotation
     # of the mapping would survive; this cannot be satisfied by any rotation.

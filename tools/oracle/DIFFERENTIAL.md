@@ -194,3 +194,55 @@ committed gate would still pass.
 
 **Where the schools disagree, the app shows both and names each.** That is
 the point of the fork being a reader-facing question rather than a constant.
+
+---
+
+## Chara karakas: one half checked, one half corroborated
+
+Same 400-chart harness, same pinned PyJHora 4.8.7.
+
+| Scheme | Charts agreeing | What the comparison is worth |
+|---|---|---|
+| Eight — Rahu admitted | **400 / 400** | An independent check. PyJHora computes this scheme itself. |
+| Seven — grahas only | 2 / 2 fixtures | **A derivation, not a check.** See below. |
+
+The asymmetry is real and is recorded rather than smoothed over. PyJHora
+ships the eight-karaka scheme only. The oracle file's `seven_karaka` block
+was produced by **our own exporter**, by dropping Rahu from PyJHora's
+longitudes and re-ranking — its `source` field says so in as many words.
+Agreeing with that is agreeing with a re-sort of numbers we already had; it
+cannot catch a mistake in what "the seven-karaka scheme" means, only a
+mistake in sorting.
+
+So Sidera's seven-karaka path is written from the tradition — the seven
+visible grahas ranked by degree, no nodes at any point — and
+`TestCharaKarakas` asserts both the agreement **and** that the oracle still
+admits the block is derived, so the label cannot quietly vanish and leave a
+derivation being read as an independent gate.
+
+The ordering rule itself was derived from the oracle empirically before the
+module was written and then verified exhaustively: rank by degree into the
+sign, descending; Rahu's degree counted **backwards** (30° − degree, because
+Rahu travels backwards); Ketu excluded under both schemes. 400 of 400.
+
+### What admitting Rahu actually does
+
+Not "adds an eighth name to the end". Rahu can take a senior office and push
+every office below it down one, so the **Dārakāraka — the significator of
+the spouse — is frequently a different graha between the two schemes**. Both
+behaviours are pinned on constructed charts: Rahu at 29° ranks last and
+takes the Dārakāraka outright; Rahu at 5° ranks second and moves the four
+offices beneath it while leaving the Dārakāraka alone.
+
+### The tie
+
+Two grahas at the identical degree is not addressed by the classical
+sources. PyJHora's `sorted()` is stable, so on a tie its answer is whatever
+order the planet dictionary happened to be in — sort order wearing a rule's
+clothes. Sidera compares at full precision and, only where that is equal
+too, gives the more senior office to the graha earlier in the natural order,
+labelled `rule.karaka.tie_convention` as a **convention and not a classical
+rule**. Ties are also reported in the output, so a reading resting on the
+convention can say so. A gate builds the tie and asserts both the order and
+the report, and a second gate feeds the same placements in reverse order to
+prove the answer is not the input's.

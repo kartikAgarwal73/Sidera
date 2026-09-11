@@ -177,6 +177,40 @@ OPTIONS: dict[str, Option] = {
             ),
         ),
     ),
+    "karaka_count": Option(
+        id="karaka_count",
+        question="Should Rahu be given a role of its own to signify?",
+        consequence="This can change which planet stands for your spouse, "
+                    "your mother and your children — not just add one more "
+                    "to the list.",
+        affects=("chara karakas", "Kārakāṃśa", "fact ledger"),
+        answers=(
+            Answer(
+                id="seven",
+                text="No — only the seven visible planets take a role",
+                school="Seven chara karakas — the older scheme",
+                explain=(
+                    "The offices are shared out among the seven planets "
+                    "anyone can see, ranked by how far each has moved into "
+                    "its sign. Rahu and Ketu are the two points where the "
+                    "Moon's path crosses the Sun's, not bodies, so on this "
+                    "reading they stand for nothing of their own."),
+                recommended=True,
+            ),
+            Answer(
+                id="eight",
+                text="Yes — Rahu takes a role too",
+                school="Eight chara karakas — Rahu admitted, Ketu not",
+                explain=(
+                    "Rahu is given a place in the ranking, which adds an "
+                    "eighth role and pushes the others down. Because Rahu "
+                    "travels backwards its degree is counted backwards, so "
+                    "it often lands high in the order — and the planet "
+                    "standing for your spouse can differ from the other "
+                    "answer entirely. Ketu is left out either way."),
+            ),
+        ),
+    ),
     # LIVE as of the arudha work. It was shown and disabled for as long as
     # there was nothing behind it, because a control that changes nothing is
     # worse than no control; now that `arudhas.py` counts A1–A12 it changes
