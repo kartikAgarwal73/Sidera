@@ -3508,20 +3508,44 @@ class TestGroundedAgent:
 
 
 class TestAgentLimitsAndLog:
-    def test_session_cap_is_ten_questions(self):
+    def test_session_cap_is_five_questions(self):
         from agent import MAX_QUESTIONS_PER_SESSION, RateLimiter
-        assert MAX_QUESTIONS_PER_SESSION == 10
+        assert MAX_QUESTIONS_PER_SESSION == 5
         limiter = RateLimiter()
-        for i in range(10):
+        for i in range(5):
             allowed, _, remaining = limiter.check("1.2.3.4", "sess")
             assert allowed, f"blocked at question {i + 1}"
-            assert remaining == 10 - i
+            assert remaining == 5 - i
             limiter.record("1.2.3.4", "sess")
         allowed, reason, remaining = limiter.check("1.2.3.4", "sess")
         assert not allowed and remaining == 0
-        assert "10-question limit" in reason
+        assert "5-question limit" in reason
         # A different session is unaffected — the cap is per session.
         assert limiter.check("1.2.3.4", "other")[0] is True
+
+    def test_the_screen_counts_down_from_the_constant_not_from_a_typed_number(
+            self, client, monkeypatch):
+        """The cap is written once. Every place the page states it — the Ask
+        screen's counter, the panel's counter, the panel's one-line limit —
+        must read the constant, or lowering it leaves the old number printed
+        somewhere and the app contradicts itself in public."""
+        import agent as agent_mod
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-not-a-real-key")
+        cap = str(agent_mod.MAX_QUESTIONS_PER_SESSION)
+        assert cap == "5"
+        page = client.post("/", data=GATE_FORM).get_data(as_text=True)
+        assert f'<span id="askremaining">{cap}</span>' in page
+        assert f'<span id="agentremaining">{cap}</span>' in page
+        assert f"Limit {cap} questions" in page
+        assert page.count("questions left this session") == 2
+        # And it FOLLOWS the constant rather than happening to match it:
+        # move the cap and all three sites move with it.
+        monkeypatch.setattr(agent_mod, "MAX_QUESTIONS_PER_SESSION", 7)
+        page = client.post("/", data=GATE_FORM).get_data(as_text=True)
+        assert '<span id="askremaining">7</span>' in page
+        assert '<span id="agentremaining">7</span>' in page
+        assert "Limit 7 questions" in page
+        assert "askremaining\">5<" not in page
 
     def test_ip_window_limits_independently_of_session(self):
         from agent import RateLimiter
@@ -3583,6 +3607,57 @@ class TestAgentEndpoint:
         r = client.post("/ask", json=self._body(sid="bad-birth", tz=""))
         assert r.status_code == 400
         assert "timezone" in r.get_json()["error"]
+
+    def test_a_question_that_never_reached_the_model_is_not_charged(
+            self, client, monkeypatch):
+        """With five questions a session, spending one on our own failure is
+        a real cost to the reader. Nothing before `ask_chart` returns — a
+        missing session id, birth details we cannot read, an unconfigured
+        deployment — may touch the counter."""
+        import agent as agent_mod
+        sid = "uncharged-session"
+        before = agent_mod.LIMITER.remaining(sid)
+
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        assert client.post("/ask", json=self._body(sid=sid)).status_code == 503
+        assert agent_mod.LIMITER.remaining(sid) == before
+
+        assert client.post(
+            "/ask", json=self._body(sid=sid, tz="")).status_code == 400
+        assert agent_mod.LIMITER.remaining(sid) == before
+
+        assert client.post(
+            "/ask", json=self._body(sid=sid, question="")).status_code == 400
+        assert agent_mod.LIMITER.remaining(sid) == before
+
+    def test_a_withheld_answer_does_spend_a_question_and_says_so(
+            self, client, tmp_path, monkeypatch):
+        """The OTHER half, pinned because it is the surprising one and it is
+        a decision rather than an accident: a reply that reached the model
+        and then failed validation HAS been generated and paid for, so it
+        counts. The reader is told — the 422 carries the new `remaining`, so
+        the counter on screen moves rather than silently disagreeing with
+        the server on the next question."""
+        import agent as agent_mod
+        from agent import AgentAnswer, Violation
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-not-a-real-key")
+        monkeypatch.setattr(agent_mod, "CORRECTIONS_LOG", tmp_path / "c.jsonl")
+        monkeypatch.setattr(
+            agent_mod, "ask_chart",
+            lambda *a, **k: AgentAnswer(
+                answer="Saturn sits in Leo, so the year is settled.",
+                model="fake",
+                violations=[Violation(kind="wrong-sign",
+                                      claim="Saturn sits in Leo",
+                                      detail="claimed Saturn in Leo")]))
+        sid = "withheld-session"
+        before = agent_mod.LIMITER.remaining(sid)
+        r = client.post("/ask", json=self._body(sid=sid))
+        assert r.status_code == 422
+        payload = r.get_json()
+        assert payload["withheld"] is True
+        assert agent_mod.LIMITER.remaining(sid) == before - 1
+        assert payload["remaining"] == before - 1
 
     def test_feedback_appends_to_the_log(self, client, tmp_path,
                                          monkeypatch):

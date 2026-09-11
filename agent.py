@@ -53,7 +53,7 @@ from chartfacts import build_facts, facts_payload
 # $2/$10 per MTok against Sonnet 4.6's $3/$15, and a newer model. Override
 # with SIDERA_ASK_MODEL if you want a different point on that curve.
 DEFAULT_MODEL = "claude-sonnet-5"
-MAX_QUESTIONS_PER_SESSION = 10
+MAX_QUESTIONS_PER_SESSION = 5
 IP_WINDOW_SECONDS = 3600
 IP_MAX_IN_WINDOW = 30
 MAX_QUESTION_CHARS = 400
