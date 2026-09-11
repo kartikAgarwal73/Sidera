@@ -3591,6 +3591,100 @@ class TestAgentEndpoint:
         body.update(over)
         return body
 
+    # --- the school travels with the request ---------------------------------
+    #
+    # THE BUG THESE PIN. /ask set no school at all, so every computation in it
+    # read the ContextVar exactly as the previous request in that worker had
+    # left it. Two consequences, both live: the reader's own choice was
+    # ignored, and under a threaded worker one reader's school answered
+    # another reader's question. The endpoint now runs inside
+    # `schools.use(...)` on a selection read from the request body.
+
+    def _school_seen(self, client, monkeypatch, **over):
+        """The school in force at the moment the agent is called."""
+        import agent as agent_mod
+        seen = {}
+
+        import schools
+
+        def spy(chart, when, question, **kw):
+            seen["node_reach"] = schools.active()["node_reach"]
+            raise agent_mod.AgentUnavailable("stopped inside the handler")
+
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-not-a-real-key")
+        monkeypatch.setattr(agent_mod, "ask_chart", spy)
+        client.post("/ask", json=self._body(**over))
+        assert "node_reach" in seen, "the handler never reached the agent"
+        return seen["node_reach"]
+
+    def test_two_questions_in_one_worker_each_get_their_own_school(
+            self, client, monkeypatch):
+        """The leak, directly. One worker, three questions, three selections
+        — and the third must not inherit the second."""
+        assert self._school_seen(
+            client, monkeypatch, school_node_reach="none") == "none"
+        assert self._school_seen(
+            client, monkeypatch, school_node_reach="opposition") == "opposition"
+        assert self._school_seen(
+            client, monkeypatch, school_node_reach="classical") == "classical"
+        # …and a selection does not survive the request that carried it.
+        # The last question here asks under a NON-default school on purpose:
+        # a handler that sets the ContextVar without restoring it leaves the
+        # default behind after a default request, and an assertion written
+        # that way passes against the very leak it exists to catch.
+        import schools
+        before = schools.active()["node_reach"]
+        assert self._school_seen(
+            client, monkeypatch, school_node_reach="none") == "none"
+        assert schools.active()["node_reach"] == before
+
+    def test_a_question_carrying_no_school_gets_the_documented_defaults(
+            self, client, monkeypatch):
+        """Not "whatever the ContextVar holds". The distinction is only
+        visible when something else has already moved it, so move it first
+        and then ask with no school fields at all."""
+        import schools
+        assert schools.DEFAULTS["node_reach"] == "classical"
+        with schools.use({"node_reach": "none"}):
+            assert schools.active()["node_reach"] == "none"   # genuinely set
+            assert self._school_seen(client, monkeypatch) == "classical"
+        # The same via the real page flow: one reader renders a chart under a
+        # non-default school, the next asks a question in that same worker.
+        client.post("/", data={**GATE_FORM, "school_node_reach": "none"})
+        assert self._school_seen(client, monkeypatch) == "classical"
+
+    def test_the_page_echoes_the_school_back_beside_the_birth_details(
+            self, client):
+        """The endpoint can only honour what the page sends it. The fields
+        are named as the form names them, so one reader parses both."""
+        import html
+        import schools
+        page = client.post(
+            "/", data={**GATE_FORM, "school_node_reach": "none"}
+        ).get_data(as_text=True)
+        payload = json.loads(html.unescape(
+            re.search(r"data-birth='([^']*)'", page).group(1)))
+        for field in ("date", "time", "lat", "lon", "tz", "place"):
+            assert field in payload
+        for option_id in schools.OPTIONS:
+            assert f"school_{option_id}" in payload
+        assert payload["school_node_reach"] == "none"
+
+    def test_a_hand_edited_school_cannot_switch_on_what_is_not_built(
+            self, client, monkeypatch):
+        """`normalise` defends the endpoint the same way it defends the form:
+        an unknown answer falls back to the recommended one, and an option
+        that is not live is forced to its default however the body is
+        written."""
+        import schools
+        assert self._school_seen(
+            client, monkeypatch, school_node_reach="not-a-school") == \
+            schools.DEFAULTS["node_reach"]
+        from app import schools_from_fields
+        assert not schools.OPTIONS["dual_lord"].live
+        assert schools_from_fields({"school_dual_lord": "stronger"})[
+            "dual_lord"] == schools.DEFAULTS["dual_lord"]
+
     def test_ask_requires_a_session_id(self, client):
         r = client.post("/ask", json=self._body(sid=""))
         assert r.status_code == 400
@@ -4639,6 +4733,86 @@ class TestComputationOptions:
     no control, so every live answer must be shown to move a real computed
     value. That is asserted by actually computing, not by inspection.
     """
+
+    # --- the selection reaches the engine, per request -------------------
+
+    def test_no_endpoint_reads_the_selection_without_setting_it(self, client):
+        """The survey that found the /ask leak, kept as a gate.
+
+        A route that computes anything reads the school through a
+        ContextVar. If it never sets one it does not get the defaults — it
+        gets whatever the previous request in that worker left behind, which
+        is the reader's choice ignored at best and another reader's chart at
+        worst. This walks every route and fails on any that reads before it
+        sets, so the next endpoint cannot reintroduce it quietly.
+        """
+        import contextlib
+        import contextvars
+        import agent as agent_mod
+        import schools
+        import app as app_mod
+        import transits
+
+        state = {}
+        real_active, real_set, real_use = (
+            schools.active, schools.set_active, schools.use)
+
+        def active():
+            state.setdefault("read_before_set", not state.get("set"))
+            return real_active()
+
+        def set_active(selection):
+            state["set"] = True
+            return real_set(selection)
+
+        @contextlib.contextmanager
+        def use(selection):
+            state["set"] = True
+            with real_use(selection) as value:
+                yield value
+
+        real_ask = agent_mod.ask_chart
+
+        def stop(*a, **kw):
+            raise agent_mod.AgentUnavailable("stopped inside the handler")
+
+        schools.active, schools.set_active, schools.use = (
+            active, set_active, use)
+        # The modules that hold their own reference to the module object.
+        for module in (app_mod, transits):
+            module.schools = schools
+        agent_mod.ask_chart = stop
+        try:
+            offenders = []
+            calls = {
+                "GET /": lambda: client.get("/"),
+                "POST /": lambda: client.post("/", data=GATE_FORM),
+                "GET /api/cities": lambda: client.get("/api/cities?q=mumbai"),
+                "POST /ask": lambda: client.post("/ask", json={
+                    "sid": "leak-survey", "question": "Where is my Moon?",
+                    **GATE_FORM}),
+                "POST /ask/feedback": lambda: client.post(
+                    "/ask/feedback", json={"question": "Q?", "answer": "A."}),
+            }
+            for label, call in calls.items():
+                state.clear()
+                # A FRESH context per route, which is the point: a route that
+                # only works because an earlier request in the same worker
+                # set the value is exactly the bug.
+                contextvars.copy_context().run(call)
+                if state.get("read_before_set"):
+                    offenders.append(label)
+        finally:
+            schools.active, schools.set_active, schools.use = (
+                real_active, real_set, real_use)
+            for module in (app_mod, transits):
+                module.schools = schools
+            agent_mod.ask_chart = real_ask
+
+        assert offenders == [], (
+            "these routes read the computation-school selection without "
+            "setting one, so they inherit whatever the previous request in "
+            "the worker left behind: " + ", ".join(offenders))
 
     # --- the presentation contract -------------------------------------
 

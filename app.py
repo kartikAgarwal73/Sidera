@@ -1120,11 +1120,22 @@ def build_dashboard(profile: Profile) -> dict:
         "agent_sid": secrets.token_urlsafe(12),
         # Echoed back with each question so no birth record is held server
         # side between requests.
+        #
+        # THE SCHOOL TRAVELS WITH THE BIRTH DATA, and for the same reason.
+        # The selection used to reach /ask only through the ContextVar, which
+        # /ask never set — so a question was answered under whatever school
+        # the last request in that worker happened to leave behind. A reader
+        # who chose "the nodes reach nowhere" got their chart on the form and
+        # the default chart in the answer, and a reader who chose nothing
+        # could get someone else's school. Same field names as the form
+        # (`school_<id>`), so one `schools.normalise` reads both surfaces.
         "agent_birth": {
             "date": f"{birth.year:04d}-{birth.month:02d}-{birth.day:02d}",
             "time": f"{birth.hour:02d}:{birth.minute:02d}",
             "lat": str(birth.latitude), "lon": str(birth.longitude),
             "tz": birth.tz, "place": birth.place,
+            **{f"school_{oid}": value
+               for oid, value in schools.active().items()},
         },
         # The school behind any section whose numbers depend on one. Printed
         # on the verdict itself, not only on the settings panel the reader
@@ -1347,6 +1358,24 @@ def _parse_date(text: str) -> datetime:
             f"{day:02d}/{month:02d}/{year} is not a real calendar date.")
 
 
+def schools_from_fields(fields) -> dict[str, str]:
+    """The computation-school selection from form or JSON fields.
+
+    The companion to `birth_from_fields`, and stateless for the same reason:
+    the selection rides with every request rather than living in worker
+    state between them.
+
+    `normalise` does the defending — an unknown option id is dropped, an
+    unknown answer falls back to the recommended one, and an option that is
+    not live is forced to its default. So a hand-edited request cannot
+    switch on a school this build cannot actually compute, and a request
+    with no school fields at all gets the documented defaults rather than
+    whatever the last caller left in the ContextVar.
+    """
+    return schools.normalise(
+        {oid: (fields.get(f"school_{oid}") or "") for oid in schools.OPTIONS})
+
+
 def birth_from_fields(fields, prefix: str = "") -> BirthData:
     """A BirthData from form or JSON fields. Shared by / and /ask.
 
@@ -1391,8 +1420,7 @@ def index():
     # The reader's answers to the computation questions, held for the whole
     # request. Everything downstream — engine, drishti, ledger — reads them
     # from the context, so no signature in six modules had to change.
-    selection = schools.normalise(
-        {oid: form.get(f"school_{oid}", "") for oid in schools.OPTIONS})
+    selection = schools_from_fields(form)
     schools.set_active(selection)
     try:
         date = _parse_date(form.get("date", ""))
@@ -1453,6 +1481,14 @@ def ask_endpoint():
     The birth details ride along with every request rather than the server
     holding a chart between calls: no birth record is stored server-side,
     and the endpoint stays as stateless as the rest of the app.
+
+    THE SCHOOL RIDES ALONG TOO, and `schools.use` scopes it to this request.
+    This endpoint used to set nothing, so everything downstream read the
+    ContextVar as the previous request in that worker had left it — the
+    reader's own choice was ignored, and under a threaded worker one
+    reader's school could answer another reader's question. `use` restores
+    the previous value on the way out, so a request can neither inherit a
+    selection nor leave one behind.
     """
     body = request.get_json(silent=True) or {}
     session_id = str(body.get("sid", "")).strip()[:64]
@@ -1472,6 +1508,17 @@ def ask_endpoint():
     except Exception as exc:
         return jsonify(error=f"Could not read the birth details: {exc}"), 400
 
+    with schools.use(schools_from_fields(body)):
+        return _answer_one_question(body, birth, ip, session_id)
+
+
+def _answer_one_question(body, birth, ip: str, session_id: str):
+    """The body of /ask, run inside the caller's school selection.
+
+    Split out so the `with` block is the whole handler and cannot be
+    half-applied: every computation below — the chart, the drishti, the
+    ledger, the agent's payload — reads the selection from the context.
+    """
     try:
         chart = compute_chart(birth)
         when = datetime.now(timezone.utc)
