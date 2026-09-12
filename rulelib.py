@@ -230,6 +230,23 @@ _VARGA = dict([
        "classical figure.",
        "Standard varga longitude construction (Jagannatha Hora, PyJHora "
        "and other modern implementations); the convention, not the text"),
+    _r("rule.varga.drekkana_school",
+       "The drekkana is counted two ways. Parasari sends each third of a "
+       "sign to that sign, the 5th from it and the 9th — the three signs "
+       "of one element, which is why it is read for siblings. The "
+       "parivritti-traya counts the thirds straight on through the zodiac "
+       "instead. Sidera computes whichever the reader chose and names the "
+       "school on the plate.",
+       "Parasari drekkana (BPHS ch. 6) vs parivritti-traya — a genuine "
+       "divergence, recorded rather than resolved"),
+    _r("rule.varga.bhamsa_school",
+       "The bhamsa begins from the sign of the element — fire from Aries, "
+       "earth from Cancer, air from Libra, water from Capricorn. Whether "
+       "the even signs then count backward from the far end, as the "
+       "trimsamsa openly does, is disputed, and the two readings move any "
+       "graha that falls in an even sign.",
+       "Nakshatramsa counting direction — texts differ on the even-sign "
+       "reversal"),
     _r("rule.varga.hora_school",
        "The D2 (hora) is computed here as the TWELVE-SIGN hora: odd signs "
        "count forward from twice the sign, even signs backward from one "

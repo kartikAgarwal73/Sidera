@@ -219,12 +219,18 @@ VARGA_SLOTS = (
     ("d1", "D1", "Rāśi"),
     ("d2", "D2", "Horā"),
     ("d3", "D3", "Drekkāṇa"),
+    ("d4", "D4", "Chaturthāṃśa"),
     ("d7", "D7", "Saptāṃśa"),
     ("d9", "D9", "Navāṃśa"),
     ("d10", "D10", "Daśāṃśa"),
     ("d12", "D12", "Dvādaśāṃśa"),
     ("d16", "D16", "Ṣoḍaśāṃśa"),
+    ("d20", "D20", "Viṃśāṃśa"),
+    ("d24", "D24", "Chaturviṃśāṃśa"),
+    ("d27", "D27", "Bhāṃśa"),
     ("d30", "D30", "Triṃśāṃśa"),
+    ("d40", "D40", "Khavedāṃśa"),
+    ("d45", "D45", "Akṣavedāṃśa"),
     ("d60", "D60", "Ṣaṣṭyāṃśa"),
 )
 
@@ -250,9 +256,16 @@ def _and_list(names: list[str]) -> str:
 #: The division's number in plain words, for a sentence a reader can say
 #: out loud. "Rises in the D16" is a code; "rises in the sixteenth division"
 #: is English.
-_ORDINAL_WORD = {2: "second", 3: "third", 7: "seventh", 9: "ninth",
-                 10: "tenth", 12: "twelfth", 16: "sixteenth",
-                 30: "thirtieth", 60: "sixtieth"}
+# One word per division, because "the D24 divides each sign into 24" reads
+# like a spec and "the twenty-fourth division" reads like a sentence. A
+# missing entry used to be a KeyError that took the whole dashboard down
+# with a 400 — `plate_reading` now falls back rather than raising, and
+# `TestYourChartsScreen` asserts every computed division has a word.
+_ORDINAL_WORD = {2: "second", 3: "third", 4: "fourth", 7: "seventh",
+                 9: "ninth", 10: "tenth", 12: "twelfth", 16: "sixteenth",
+                 20: "twentieth", 24: "twenty-fourth", 27: "twenty-seventh",
+                 30: "thirtieth", 40: "fortieth", 45: "forty-fifth",
+                 60: "sixtieth"}
 
 
 def plate_reading(key: str, chart) -> str:
@@ -282,7 +295,8 @@ def plate_reading(key: str, chart) -> str:
     code = key.upper()
     vc = vargas.varga_chart(chart, code)
     lord = sign_lord(vc.lagna_sign_index)
-    which = _ORDINAL_WORD[vargas.DIVISIONS[code]]
+    parts = vargas.DIVISIONS[code]
+    which = _ORDINAL_WORD.get(parts, f"{parts}-part")
 
     if code == "D9":
         # The ninth has its own question — which grahas keep the sign they
@@ -335,12 +349,18 @@ VARGA_SLOTS = (
     ("d1", "D1", "Rāśi"),
     ("d2", "D2", "Horā"),
     ("d3", "D3", "Drekkāṇa"),
+    ("d4", "D4", "Chaturthāṃśa"),
     ("d7", "D7", "Saptāṃśa"),
     ("d9", "D9", "Navāṃśa"),
     ("d10", "D10", "Daśāṃśa"),
     ("d12", "D12", "Dvādaśāṃśa"),
     ("d16", "D16", "Ṣoḍaśāṃśa"),
+    ("d20", "D20", "Viṃśāṃśa"),
+    ("d24", "D24", "Chaturviṃśāṃśa"),
+    ("d27", "D27", "Bhāṃśa"),
     ("d30", "D30", "Triṃśāṃśa"),
+    ("d40", "D40", "Khavedāṃśa"),
+    ("d45", "D45", "Akṣavedāṃśa"),
     ("d60", "D60", "Ṣaṣṭyāṃśa"),
 )
 

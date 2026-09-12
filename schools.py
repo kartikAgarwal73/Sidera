@@ -177,6 +177,102 @@ OPTIONS: dict[str, Option] = {
             ),
         ),
     ),
+    "hora_scheme": Option(
+        id="hora_scheme",
+        question="How should the wealth chart divide each sign?",
+        consequence="One reading spreads your planets across all twelve "
+                    "signs; the other sorts them into just two.",
+        affects=("D2 plate", "fact ledger"),
+        answers=(
+            Answer(
+                id="twelve",
+                text="Across all twelve signs",
+                school="Twelve-sign horā — the modern convention",
+                explain=(
+                    "Each half-sign is given its own sign to land in, "
+                    "counting continuously through the zodiac and turning "
+                    "back on itself in alternate signs. This is what most "
+                    "current software draws, and it gives a chart that "
+                    "looks like the others."),
+                recommended=True,
+            ),
+            Answer(
+                id="two_sign",
+                text="Into two halves only — the Sun's and the Moon's",
+                school="Traditional Parāśarī horā — Leo and Cancer only",
+                explain=(
+                    "The older reading. Every half-sign belongs either to "
+                    "the Sun or to the Moon, so every planet lands in Leo "
+                    "or in Cancer and nowhere else. That is not a fault of "
+                    "the method: the question it answers is which of the "
+                    "two halves your wealth comes through, and that "
+                    "question has two answers."),
+            ),
+        ),
+    ),
+    "drekkana_scheme": Option(
+        id="drekkana_scheme",
+        question="How should the chart of siblings divide each sign?",
+        consequence="This moves where your planets sit in the D3, and so "
+                    "what it says about siblings and courage.",
+        affects=("D3 plate", "fact ledger"),
+        answers=(
+            Answer(
+                id="parashari",
+                text="Into the three signs of the same element",
+                school="Parāśarī drekkāṇa — the sign, the 5th, the 9th",
+                explain=(
+                    "Each third of a sign goes to that sign, then to the "
+                    "fifth from it, then to the ninth — the three signs "
+                    "that share its element. This is the standard reading "
+                    "and the reason the chart is read for brothers and "
+                    "sisters, who are counted from the third house."),
+                recommended=True,
+            ),
+            Answer(
+                id="parivritti",
+                text="Straight on through the zodiac",
+                school="Parivṛtti-traya drekkāṇa — a plain cyclic count",
+                explain=(
+                    "The thirds are counted straight through the signs in "
+                    "order, three to a sign, without returning to the "
+                    "element. It is a simpler count and a genuinely "
+                    "different chart; some lineages use it throughout."),
+            ),
+        ),
+    ),
+    "bhamsa_scheme": Option(
+        id="bhamsa_scheme",
+        question="In the D27, should even signs be counted backwards?",
+        consequence="This reverses the order of the divisions in half the "
+                    "signs, moving planets that fall in them.",
+        affects=("D27 plate", "fact ledger"),
+        answers=(
+            Answer(
+                id="forward",
+                text="No — count the same way in every sign",
+                school="Nakṣatrāṃśa counted forward throughout",
+                explain=(
+                    "Every sign's twenty-seven parts are counted in the "
+                    "same direction. Each starts from the sign that "
+                    "belongs to its element — fire from Aries, earth from "
+                    "Cancer, air from Libra, water from Capricorn. This is "
+                    "the plainer of the two readings and the one most "
+                    "software draws."),
+                recommended=True,
+            ),
+            Answer(
+                id="even_reverse",
+                text="Yes — reverse the count in even signs",
+                school="Nakṣatrāṃśa with even-sign reversal",
+                explain=(
+                    "The same starting points, but in the even signs the "
+                    "parts are counted backwards from the far end. Several "
+                    "texts read the alternating signs as running the other "
+                    "way, as the triṃśāṃśa openly does."),
+            ),
+        ),
+    ),
     "karaka_count": Option(
         id="karaka_count",
         question="Should Rahu be given a role of its own to signify?",

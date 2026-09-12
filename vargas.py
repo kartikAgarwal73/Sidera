@@ -73,15 +73,47 @@ TRIMSAMSA_ODD = ((5.0, 0), (10.0, 10), (18.0, 8), (25.0, 2), (30.0, 6))
 TRIMSAMSA_EVEN = ((5.0, 1), (12.0, 5), (20.0, 11), (25.0, 9), (30.0, 7))
 
 
+def _scheme(option_id: str) -> str:
+    """The live answer to one divisional-scheme question.
+
+    Imported lazily so `vargas` stays importable by tools that never touch
+    the school registry, and so the module keeps no opinion of its own about
+    which reading is in force.
+    """
+    import schools
+    return schools.chosen(option_id).id
+
+
 def _d2(sign: int, part: int, deg: float) -> int:
-    """Horā, twelve-sign. Odd signs count forward from twice the sign; even
-    signs count BACKWARD from one past it."""
+    """Horā, under whichever scheme is in force.
+
+    TWELVE-SIGN (default): odd signs count forward from twice the sign, even
+    signs BACKWARD from one past it — every sign is reachable.
+    TWO-SIGN: the older Parāśarī horā, which has only two. The first half of
+    an odd sign is the Sun's horā (Leo) and the second the Moon's (Cancer);
+    even signs take them the other way round. Every graha in the chart lands
+    in Leo or Cancer and nowhere else, which is not a defect — the horā is
+    read for wealth through the solar or lunar half, and that is a
+    two-valued question.
+    """
+    if _scheme("hora_scheme") == "two_sign":
+        sun_first = _is_odd_sign(sign)
+        first, second = (4, 3) if sun_first else (3, 4)
+        return first if part == 0 else second
     return (2 * sign + part) % 12 if _is_odd_sign(sign) \
         else (2 * sign + 1 - part) % 12
 
 
 def _d3(sign: int, part: int, deg: float) -> int:
-    """Drekkāṇa: the sign itself, the 5th from it, the 9th from it."""
+    """Drekkāṇa, under whichever scheme is in force.
+
+    PARĀŚARĪ (default): the sign itself, the 5th from it, the 9th from it —
+    the trines, which is why the drekkāṇa is read for siblings and courage.
+    PARIVṚTTI-TRAYA: a plain cyclic count, three signs per sign, running
+    straight through the zodiac without regard to trine.
+    """
+    if _scheme("drekkana_scheme") == "parivritti":
+        return (sign * 3 + part) % 12
     return (sign + 4 * part) % 12
 
 
@@ -128,14 +160,62 @@ def _d60(sign: int, part: int, deg: float) -> int:
     return (sign + part) % 12
 
 
+def _d4(sign: int, part: int, deg: float) -> int:
+    """Chaturthāṃśa: the four kendras from the sign — itself, the 4th, the
+    7th, the 10th."""
+    return (sign + 3 * part) % 12
+
+
+def _d20(sign: int, part: int, deg: float) -> int:
+    """Viṃśāṃśa: movable signs start at Aries, fixed at Sagittarius, dual at
+    Leo."""
+    return ({0: 0, 1: 8, 2: 4}[_modality(sign)] + part) % 12
+
+
+def _d24(sign: int, part: int, deg: float) -> int:
+    """Chaturviṃśāṃśa (Siddhāṃśa): odd signs start at Leo, even at Cancer."""
+    return ((4 if _is_odd_sign(sign) else 3) + part) % 12
+
+
+#: D27's element starts: fire from Aries, earth from Cancer, air from Libra,
+#: water from Capricorn. Sign index mod 4 gives the element, Aries first.
+BHAMSA_START = {0: 0, 1: 3, 2: 6, 3: 9}
+
+
+def _d27(sign: int, part: int, deg: float) -> int:
+    """Bhāṃśa (Nakṣatrāṃśa), counted forward from the element's sign.
+
+    Equivalent in closed form to (sign × 3 + part), which is how it is
+    usually written down — the two are the same rule, not two schools.
+    The genuine fork is whether even signs REVERSE the count, and that is
+    `bhamsa_scheme` in schools.py.
+    """
+    start = BHAMSA_START[sign % 4]
+    if not _is_odd_sign(sign) and _scheme("bhamsa_scheme") == "even_reverse":
+        return (start + DIVISIONS["D27"] - 1 - part) % 12
+    return (start + part) % 12
+
+
+def _d40(sign: int, part: int, deg: float) -> int:
+    """Khavedāṃśa: odd signs start at Aries, even at Libra."""
+    return ((0 if _is_odd_sign(sign) else 6) + part) % 12
+
+
+def _d45(sign: int, part: int, deg: float) -> int:
+    """Akṣavedāṃśa: movable signs start at Aries, fixed at Leo, dual at
+    Sagittarius."""
+    return ({0: 0, 1: 4, 2: 8}[_modality(sign)] + part) % 12
+
+
 # THE REGISTRY. `varga_chart` is generic over this table, and so is the
 # gallery: a division renders as a real plate exactly when it has an entry
 # here, and as a dashed empty frame when it does not. Adding a division is
 # one line — and `TestEveryComputedVargaIsPlotted` fails if a computation
 # lands and the gallery does not plot it.
 _VARGA_FN = {
-    "D2": _d2, "D3": _d3, "D7": _d7, "D9": _d9, "D10": _d10,
-    "D12": _d12, "D16": _d16, "D30": _d30, "D60": _d60,
+    "D2": _d2, "D3": _d3, "D4": _d4, "D7": _d7, "D9": _d9, "D10": _d10,
+    "D12": _d12, "D16": _d16, "D20": _d20, "D24": _d24, "D27": _d27,
+    "D30": _d30, "D40": _d40, "D45": _d45, "D60": _d60,
 }
 
 #: How many parts each division cuts a sign into. Always int(code[1:]) — kept
@@ -154,7 +234,13 @@ READ_FOR = {
     "D9": "marriage, and the inner strength of every planet",
     "D10": "work, standing, and the field a career takes place in",
     "D12": "the parents, and what was inherited",
+    "D4": "home, land, and what one can call a fixed place",
     "D16": "vehicles, comforts, and the furnishing of a life",
+    "D20": "devotion, practice, and what one turns to",
+    "D24": "learning, and what the mind is actually trained in",
+    "D27": "underlying strength and weakness, sign by sign",
+    "D40": "what comes down the maternal line",
+    "D45": "what comes down the paternal line",
     "D30": "where the chart is tested, and which planet does the testing",
     "D60": "the finest division Parāśara gives",
 }
@@ -163,10 +249,17 @@ READ_FOR = {
 #: of any division that has an entry here — the reader is told which reading
 #: they are looking at rather than left to assume there is only one.
 SCHOOL_NOTE = {
-    "D2": ("Twelve-sign horā (Jagannātha Hora / PVR convention): odd signs "
-           "count forward from twice the sign, even signs backward from one "
-           "past it. The older horā gives only Leo and Cancer, and is a "
-           "different question, not a variant of this one."),
+    "D2": ("The horā is cut two ways and you are being shown one of them. "
+           "The twelve-sign horā counts continuously and reverses in even "
+           "signs; the older Parāśarī horā gives only the Sun's sign and "
+           "the Moon's, so every graha lands in Leo or Cancer."),
+    "D3": ("The drekkāṇa is cut two ways. Parāśarī sends each third to the "
+           "sign, the 5th and the 9th — the trines; the parivṛtti-traya "
+           "counts straight on through the zodiac instead."),
+    "D27": ("The bhāṃśa starts from the element's sign — fire from Aries, "
+            "earth from Cancer, air from Libra, water from Capricorn. "
+            "Whether the even signs then count backward is disputed, and "
+            "the answer you chose is in force."),
     "D30": ("Classical UNEQUAL triṃśāṃśa: bands of 5°, 5°, 8°, 7°, 5° ruled "
             "by Mars, Saturn, Jupiter, Mercury and Venus, reversed in even "
             "signs. The equal 1° part is used only to scale the degree, "
@@ -179,6 +272,8 @@ SCHOOL_NOTE = {
 #: The rule id in `rulelib` each division's construction rests on.
 SCHOOL_RULE = {
     "D2": "rule.varga.hora_school",
+    "D3": "rule.varga.drekkana_school",
+    "D27": "rule.varga.bhamsa_school",
     "D30": "rule.varga.trimsamsa_school",
     "D60": "rule.varga.shastyamsa_school",
 }

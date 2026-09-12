@@ -246,3 +246,60 @@ rule**. Ties are also reported in the output, so a reading resting on the
 convention can say so. A gate builds the tie and asserts both the order and
 the report, and a second gate feeds the same placements in reverse order to
 prove the answer is not the input's.
+
+---
+
+## The full ṣoḍaśavarga: sixteen divisions, zero divergence
+
+Six divisions were added to reach the classical sixteen — D4, D20, D24,
+D27, D40, D45 — joining the nine already built. With D1 that is the whole
+ṣoḍaśavarga.
+
+Same 400-chart harness, same pinned PyJHora 4.8.7, **10 bodies per chart
+including the lagna**:
+
+| Division | Rule | Bodies agreeing |
+|---|---|---|
+| D4 Chaturthāṃśa | the four kendras — sign, 4th, 7th, 10th | **4000 / 4000** |
+| D20 Viṃśāṃśa | movable→Aries, fixed→Sagittarius, dual→Leo | **4000 / 4000** |
+| D24 Chaturviṃśāṃśa | odd→Leo, even→Cancer | **4000 / 4000** |
+| D27 Bhāṃśa | fire→Aries, earth→Cancer, air→Libra, water→Capricorn | **4000 / 4000** |
+| D40 Khavedāṃśa | odd→Aries, even→Libra | **4000 / 4000** |
+| D45 Akṣavedāṃśa | movable→Aries, fixed→Leo, dual→Sagittarius | **4000 / 4000** |
+
+Every rule was derived from the oracle by searching the rule space before
+the module was written — candidate families tested against all 4,000
+observations each — rather than recalled and hoped for. Each one came back
+as a single surviving family that matches the classical statement. D2, D3
+and D16 were re-confirmed at the same time and were unchanged.
+
+**No divergence was found, so nothing was adjusted to match.** That is
+worth saying plainly given the standing instruction: had any division
+disagreed, the disagreement would be recorded here with the reasoning and
+our implementation left alone.
+
+### Three forks, both sides gated
+
+PyJHora exposes named `chart_method` variants, which makes the contested
+divisions checkable on both sides rather than only on the one we ship.
+
+| Division | Default (recommended) | Alternate | Each side |
+|---|---|---|---|
+| D2 | twelve-sign horā | traditional Parāśarī, Leo/Cancer only | **4000 / 4000** |
+| D3 | Parāśarī — sign, 5th, 9th | parivṛtti-traya, cyclic | **4000 / 4000** |
+| D27 | counted forward throughout | even signs reversed | **4000 / 4000** |
+
+24,000 comparisons across the three forks, exact. All three are live
+reader-facing questions in `schools.py`, and each moves real placements on
+the reference chart — 9 grahas of 9 for the horā, 6 for the drekkāṇa, 5 for
+the bhāṃśa — so none is a fake control.
+
+**A known limit, stated rather than papered over.** The committed oracle
+file carries each division's DEFAULT method only, so the fixtures cannot
+check the far side of a fork. A mutation proved the cost: changing the
+parivṛtti rule to a wrong cyclic step left every committed gate green,
+because "the two answers differ" is true of a wrong alternate too. The
+alternates' closed forms are now asserted directly as invariants, and the
+external check for them is this 400-chart run. Extending
+`export_pyjhora.py` to emit the variant blocks would turn those invariants
+into real external gates, and is the right next step for this file.

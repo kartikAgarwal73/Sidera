@@ -5611,6 +5611,7 @@ class TestComputationOptions:
         import schools
         import arudhas
         import karakas
+        import vargas
         from engine import PLANETS, compute_chart
         from transits import natal_aspect_table
 
@@ -5628,6 +5629,13 @@ class TestComputationOptions:
                 # added from here needs its own line: the gate is only as
                 # honest as the widest thing this tuple can see.
                 tuple((k.office, k.planet) for k in karakas.karakas(chart)),
+                # …and every divisional sign, for the three scheme forks.
+                # Keyed by division so a fork that moved the wrong chart is
+                # visible rather than merely "something changed".
+                tuple((code,) + tuple(
+                    vargas.varga_chart(chart, code).planets[p].sign_index
+                    for p in PLANETS)
+                    for code in vargas.SUPPORTED),
             )
 
         with schools.use({}):
@@ -5772,7 +5780,10 @@ class TestComputationOptions:
         assert schools.DEFAULTS == {"node_reach": "classical",
                                     "node_position": "mean",
                                     "dual_lord": "single",
-                                    "karaka_count": "seven"}
+                                    "karaka_count": "seven",
+                                    "hora_scheme": "twelve",
+                                    "drekkana_scheme": "parashari",
+                                    "bhamsa_scheme": "forward"}
         html = client.post("/", data=GATE_FORM).get_data(as_text=True)
         assert "Computed with the recommended settings throughout." in html
 
@@ -9147,15 +9158,29 @@ class TestEveryDivisionMatchesTheOracle:
     # --- the schools, named ---------------------------------------------------
 
     def test_a_contested_division_says_which_reading_it_uses(self):
-        """"D30's odd/even sign scheme and D60's ½°-per-division ordering are
-        the two most divergent implementations — cite the rule used and flag
-        the school on the plate." D2 is a third: the older horā gives two
-        signs and this build gives twelve.
+        """Every contested division carries a note and a rule, and the rule
+        admits that another reading exists.
+
+        The set is asserted as a whole rather than enumerated loosely: a
+        division quietly losing its note would be the app picking a side in
+        silence, which is the thing this file exists to prevent. D2, D3 and
+        D27 are contested and reader-selectable; D30 and D60 are contested
+        and NOT selectable, because only one reading of each is built —
+        their notes say which, and that is the whole of what is owed.
         """
         import rulelib
+        import schools
         import vargas
-        assert set(vargas.SCHOOL_NOTE) == {"D2", "D30", "D60"}, \
+        assert set(vargas.SCHOOL_NOTE) == {"D2", "D3", "D27", "D30", "D60"}, \
             set(vargas.SCHOOL_NOTE)
+        # The three that ARE selectable each have a live school option whose
+        # answers both compute, so the note is an invitation and not an
+        # apology.
+        for code, option_id in (("D2", "hora_scheme"),
+                                ("D3", "drekkana_scheme"),
+                                ("D27", "bhamsa_scheme")):
+            assert schools.OPTIONS[option_id].live, option_id
+            assert len(schools.OPTIONS[option_id].answers) == 2, option_id
         for code, note in vargas.SCHOOL_NOTE.items():
             assert len(note.split()) >= 20, code
             rule_id = vargas.SCHOOL_RULE[code]
@@ -9165,22 +9190,108 @@ class TestEveryDivisionMatchesTheOracle:
             # that describes one school without saying another exists is not
             # flagging anything.
             assert any(w in rule.text.lower() for w in
-                       ("some texts", "older", "other", "different")), rule_id
+                       ("some texts", "older", "other", "different",
+                        "two ways", "disputed", "differ", "divergence",
+                        "instead")), rule_id
             assert rule.source.strip(), rule_id
 
     def test_the_plate_prints_the_school_flag(self, page):
-        for code in ("D2", "D30", "D60"):
+        """Driven by the registry, not by a list typed here. A gate that
+        names the contested divisions goes stale the moment a fork is added
+        — which is exactly what happened when D3 and D27 became forks and
+        this test went on asserting that D3 was uncontested."""
+        import vargas
+
+        def view_of(code):
             key = code.lower()
             view = page[page.index(f'id="view-varga-{key}"'):]
-            view = view[:view.index(f"<!-- /view-varga-{key} -->")]
+            return view[:view.index(f"<!-- /view-varga-{key} -->")]
+
+        contested = set(vargas.SCHOOL_NOTE)
+        assert contested, "no division claims to be contested"
+        for code in contested:
+            view = view_of(code)
             assert 'class="schoolflag"' in view, code
-            assert "rule.varga." in view, code
+            assert vargas.SCHOOL_RULE[code] in view, code
         # …and a division that is NOT contested does not cry wolf.
-        for code in ("D3", "D9", "D12"):
-            key = code.lower()
-            view = page[page.index(f'id="view-varga-{key}"'):]
-            view = view[:view.index(f"<!-- /view-varga-{key} -->")]
-            assert 'class="schoolflag"' not in view, code
+        for code in vargas.SUPPORTED:
+            if code not in contested:
+                assert 'class="schoolflag"' not in view_of(code), code
+
+    def test_both_sides_of_every_scheme_fork_are_computed(self, charts):
+        """A fork is only real if BOTH answers compute a chart, and only
+        honest if both were checked. These three were verified against
+        PyJHora's own named variants across 400 random charts — 4,000 bodies
+        per side — before they were offered to anyone. Here they are pinned
+        on the two fixtures, plus the thing that makes them forks at all:
+        that the two answers actually disagree.
+        """
+        import schools
+        import vargas
+        forks = (("hora_scheme", "D2", "twelve", "two_sign"),
+                 ("drekkana_scheme", "D3", "parashari", "parivritti"),
+                 ("bhamsa_scheme", "D27", "forward", "even_reverse"))
+        for option_id, code, default, alternate in forks:
+            assert schools.OPTIONS[option_id].default == default, option_id
+            for name, chart in charts.items():
+                with schools.use({option_id: default}):
+                    a = vargas.varga_chart(chart, code)
+                with schools.use({option_id: alternate}):
+                    b = vargas.varga_chart(chart, code)
+                moved = [p for p in PLANETS
+                         if a.planets[p].sign_index != b.planets[p].sign_index]
+                assert moved, (
+                    f"{option_id}: the two answers produced the same {code} "
+                    f"on the {name} chart — that is a fake control")
+                # Both are real charts, not one chart and one ruin.
+                for cast in (a, b):
+                    assert 0 <= cast.lagna_sign_index < 12
+                    assert all(1 <= cast.planets[p].house <= 12
+                               for p in PLANETS)
+
+        # AND THE ALTERNATE'S RULE ITSELF, written out. The committed oracle
+        # file carries only each division's DEFAULT method, so the fixtures
+        # cannot check the far side of a fork — "the two answers differ" was
+        # true of a wrong alternate too, and a mutation proved it. The
+        # external check for these is the 400-chart run against PyJHora's
+        # own named variants, recorded in tools/oracle/DIFFERENTIAL.md;
+        # what is asserted here is the closed form that run confirmed.
+        with schools.use({"drekkana_scheme": "parivritti"}):
+            for sign in range(12):
+                for part in range(3):
+                    deg = sign * 30.0 + part * 10.0 + 1.0
+                    assert vargas.varga_sign(deg, "D3") == \
+                        (sign * 3 + part) % 12, (sign, part)
+        with schools.use({"bhamsa_scheme": "even_reverse"}):
+            for sign in range(12):
+                start = vargas.BHAMSA_START[sign % 4]
+                span = 30.0 / 27.0
+                for part in (0, 13, 26):
+                    deg = sign * 30.0 + part * span + span / 2
+                    want = ((start + part) % 12 if sign % 2 == 0
+                            else (start + 26 - part) % 12)
+                    assert vargas.varga_sign(deg, "D27") == want, (sign, part)
+
+    def test_the_two_sign_hora_uses_only_the_suns_and_moons_signs(self):
+        """The older horā has TWO values, and that is the method rather than
+        a bug in it. Every graha lands in Leo or Cancer: the first half of an
+        odd sign is the Sun's, the second the Moon's, and even signs take
+        them the other way round."""
+        import schools
+        import vargas
+        with schools.use({"hora_scheme": "two_sign"}):
+            for sign in range(12):
+                odd = sign % 2 == 0
+                first = vargas.varga_sign(sign * 30.0 + 5.0, "D2")
+                second = vargas.varga_sign(sign * 30.0 + 20.0, "D2")
+                assert {first, second} == {3, 4}, sign
+                assert first == (4 if odd else 3), sign
+                assert second == (3 if odd else 4), sign
+        # And the twelve-sign reading is genuinely twelve-valued.
+        with schools.use({"hora_scheme": "twelve"}):
+            reached = {vargas.varga_sign(s * 30.0 + d, "D2")
+                       for s in range(12) for d in (5.0, 20.0)}
+            assert len(reached) == 12
 
     def test_d30_takes_its_sign_from_the_unequal_bands(self):
         """The rule the founder singled out. The equal 1° part is used for
