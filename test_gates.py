@@ -5179,6 +5179,177 @@ class TestCharaKarakas:
         assert "not a classical rule" in tie.text.lower()
 
 
+class TestAvasthas:
+    """Bālādi and jāgradādi — and an honest note on what gates them.
+
+    NO ORACLE EXISTS FOR THIS. PyJHora implements no avasthā at all, so
+    unlike every other computation in this build there is no independent
+    implementation to disagree with ours. That is a real drop in evidence
+    and it is stated rather than glossed.
+
+    What stands in its place:
+      * bālādi is MECHANICAL — five equal bands of 6°, reversed in even
+        signs — so the partition itself is asserted: the bands tile the
+        sign with no gap and no overlap, the reversal is exact, and every
+        boundary degree lands where the rule says.
+      * jāgradādi composes from `yogas.dignity_at`, which IS oracle-gated,
+        so its inputs are checked even though its mapping is not — and the
+        mapping is asserted TOTAL over that function's whole vocabulary, so
+        a new dignity state breaks this loudly instead of being read as
+        'dreaming'.
+    """
+
+    def test_baladi_bands_tile_the_sign_exactly(self):
+        import avasthas
+        assert len(avasthas.BALADI_STATES) == 5
+        assert avasthas.BALADI_BAND * 5 == 30.0
+        for sign in range(12):
+            bands = avasthas.baladi_bands(sign)
+            assert len(bands) == 5, sign
+            # No gap, no overlap, and the whole sign covered.
+            assert bands[0][0] == 0.0 and bands[-1][1] == 30.0, sign
+            for (_, upper, _), (lower, _, _) in zip(bands, bands[1:]):
+                assert upper == lower, sign
+            # Every state appears exactly once.
+            assert sorted(state for _, _, state in bands) == sorted(
+                avasthas.BALADI_STATES), sign
+
+    def test_even_signs_reverse_the_order_exactly(self):
+        """Not 'roughly reversed' — the same degree in Aries and Taurus must
+        give states that are mirror images across the five bands."""
+        import avasthas
+        states = avasthas.BALADI_STATES
+        for degree in (0.0, 3.0, 5.999, 6.0, 14.9, 15.0, 23.5, 29.999):
+            odd = avasthas.baladi_at(0, degree)     # Aries
+            even = avasthas.baladi_at(1, degree)    # Taurus
+            assert states.index(odd) + states.index(even) == 4, (
+                degree, odd, even)
+        # And it is the SIGN NUMBER that decides, not the index: Aries is
+        # the 1st and odd, so index 0 counts forward.
+        assert avasthas.baladi_at(0, 1.0) == "bala"
+        assert avasthas.baladi_at(1, 1.0) == "mrita"
+        assert avasthas.baladi_at(2, 1.0) == "bala"
+
+    def test_every_band_boundary_lands_where_the_rule_says(self):
+        """The classic off-by-one. A degree exactly on a boundary belongs to
+        the band it opens, not the one it closes."""
+        import avasthas
+        expected = ["bala", "kumara", "yuva", "vriddha", "mrita"]
+        for index, state in enumerate(expected):
+            low = index * 6.0
+            assert avasthas.baladi_at(0, low) == state, low
+            assert avasthas.baladi_at(0, low + 5.999) == state, low
+            if index < 4:
+                assert avasthas.baladi_at(0, low + 6.0) == expected[index + 1]
+        # A degree of exactly 30 is not inside the sign, but must not raise.
+        assert avasthas.baladi_at(0, 30.0) == "mrita"
+        assert avasthas.baladi_at(1, 30.0) == "bala"
+
+    def test_the_jagradadi_mapping_is_total_over_every_dignity(self):
+        """THE GATE THAT MATTERS MOST HERE, since the mapping has no oracle.
+
+        `dignity_at` has a closed vocabulary. Every member of it must map to
+        a state, and the module must RAISE on one it does not know rather
+        than defaulting — a new dignity silently read as 'dreaming' is
+        exactly the kind of wrong that no test would otherwise catch.
+        """
+        import avasthas
+        import yogas
+        from engine import SIGNS
+        seen = set()
+        for planet in avasthas.BODIES:
+            for sign in range(12):
+                for degree in (0.5, 4.0, 14.0, 16.0, 21.0, 29.5):
+                    seen.add(yogas.dignity_at(planet, sign, degree))
+        assert seen, "no dignities sampled"
+        for dignity in seen:
+            assert dignity in avasthas.JAGRADADI_BY_DIGNITY, (
+                f"dignity_at can return {dignity!r} and the jāgradādi table "
+                f"has no entry for it")
+            assert avasthas.jagradadi_for(dignity) in \
+                avasthas.JAGRADADI_STATES
+        # The vocabulary is covered, not merely sampled.
+        assert set(avasthas.JAGRADADI_BY_DIGNITY) >= seen
+        # …and an unknown dignity is refused rather than defaulted.
+        with pytest.raises(ValueError):
+            avasthas.jagradadi_for("radiant")
+
+    def test_dignity_decides_jagradadi_and_degree_does_not(self, chart):
+        """The two states read different things, and this pins which."""
+        import avasthas
+        import yogas
+        for planet in avasthas.BODIES:
+            position = chart.planets[planet]
+            dignity = yogas.dignity_at(planet, position.sign_index,
+                                       position.degree_in_sign)
+            assert avasthas.jagradadi(chart, planet) == \
+                avasthas.jagradadi_for(dignity)
+        # Supported signs wake a graha; an obstructing one puts it to sleep.
+        assert avasthas.jagradadi_for("exalted") == "jagrat"
+        assert avasthas.jagradadi_for("own sign") == "jagrat"
+        assert avasthas.jagradadi_for("moolatrikona") == "jagrat"
+        assert avasthas.jagradadi_for("neutral") == "svapna"
+        assert avasthas.jagradadi_for("debilitated") == "sushupti"
+
+    def test_the_two_states_are_independent_and_can_disagree(self, chart):
+        """The design claim, tested on a real chart rather than asserted.
+
+        If these could not disagree, reporting both would be redundant and
+        the module would be lying about why it keeps them apart.
+        """
+        import avasthas
+        rows = avasthas.describe(chart)["avasthas"]
+        pairs = {(row["baladi"], row["jagradadi"]) for row in rows}
+        assert len({b for b, _ in pairs}) > 1, "every graha the same age"
+        assert len({j for _, j in pairs}) > 1, "every graha equally awake"
+        # On the reference chart Jupiter is spent by degree and awake by
+        # dignity — the exact case the module exists to keep visible.
+        jupiter = next(r for r in rows if r["planet"] == "Jupiter")
+        assert jupiter["baladi"] == "mrita"
+        assert jupiter["jagradadi"] == "jagrat"
+        assert jupiter["at_odds"] is True
+        assert "Jupiter" in avasthas.describe(chart)["at_odds"]
+
+    def test_the_nodes_are_not_given_an_avastha(self, chart):
+        import avasthas
+        assert "Rahu" not in avasthas.BODIES
+        assert "Ketu" not in avasthas.BODIES
+        rows = avasthas.describe(chart)["avasthas"]
+        assert {row["planet"] for row in rows} == set(avasthas.BODIES)
+        assert "dignity the nodes do not have" in \
+            avasthas.describe(chart)["nodes_excluded"]
+
+    def test_every_state_has_a_name_and_a_plain_sense(self):
+        """A state id in the output with no words behind it would reach the
+        reader as jargon."""
+        import avasthas
+        for state in avasthas.BALADI_STATES:
+            assert state in avasthas.BALADI_NAME
+            assert len(avasthas.BALADI_SENSE[state].split()) >= 5, state
+        for state in avasthas.JAGRADADI_STATES:
+            assert state in avasthas.JAGRADADI_NAME
+            assert len(avasthas.JAGRADADI_SENSE[state].split()) >= 5, state
+
+    def test_no_strength_fraction_is_invented(self):
+        """Texts attach fractions to the bālādi states and disagree about
+        them. None is computed here, and the module says why."""
+        import avasthas
+        import inspect
+        source = inspect.getsource(avasthas)
+        assert "do not agree with one" in source
+        assert "No fractions are computed here" in source
+        blob = " ".join(avasthas.BALADI_SENSE.values())
+        for fraction in ("1/4", "1/2", "quarter of", "half of", "0.25"):
+            assert fraction not in blob, fraction
+
+    def test_every_avastha_rule_is_in_the_citation_library(self):
+        import rulelib
+        for rule_id in ("rule.avastha.baladi", "rule.avastha.jagradadi",
+                        "rule.avastha.independent"):
+            assert rulelib.is_known(rule_id), rule_id
+            assert rulelib.RULES[rule_id].source.strip(), rule_id
+
+
 class TestVimsopaka:
     """Strength weighed across a group of divisions, and the group as a fork.
 

@@ -399,3 +399,39 @@ removing the close stays green and no test can catch it.
 It is kept because it is correct, and the measurement is written into the
 docstring, because a line that looks load-bearing and is not is worse than
 no line at all.
+
+---
+
+## Avasthās: the first computation with no oracle at all
+
+Bālādi and jāgradādi are built. **PyJHora implements no avasthā**, so for
+the first time in this file there is nothing to compare against — no
+divergence to report, and no agreement either. The evidence is weaker here
+than anywhere else in the repo and the gate class says so in its docstring.
+
+What stands in place of an oracle:
+
+| | How it is checked |
+|---|---|
+| **Bālādi** | Mechanical — five equal 6° bands, reversed in even signs. The gates assert the partition itself: the bands tile the sign with no gap or overlap, the reversal is exact across all twelve signs, and every boundary degree lands in the band that opens it. |
+| **Jāgradādi** | Composes from `yogas.dignity_at`, which *is* oracle-gated, so its inputs are checked. The mapping is asserted **total** over that function's entire vocabulary, and the module raises on an unknown dignity rather than defaulting. |
+
+That last point is the one doing real work. A new dignity state silently
+read as "dreaming" is exactly the failure no test would otherwise catch, so
+`jagradadi_for` refuses rather than guesses, and a mutation replacing it
+with `.get(dignity, "svapna")` turns the gate red.
+
+**No strength fractions are computed.** Several texts attach them to the
+bālādi states — a quarter for the infant, a half for the youth — and they
+do not agree. With no oracle to adjudicate and no single classical answer,
+inventing numbers would be the worst available option. The states are
+reported in words and a gate asserts no fraction appears in them.
+
+### What this means for the remaining avasthās
+
+Dīptādi (nine states), lajjitādi (six) and śayanādi (twelve) would be built
+under the same blind conditions, and they are progressively less mechanical
+— dīptādi needs a friendship table this repo has only partially, lajjitādi
+turns on conjunction and aspect conditions the texts state variously, and
+śayanādi is a separate longitude-based calculation with its own sub-states.
+Bālādi's rule can be checked by inspection; theirs cannot.

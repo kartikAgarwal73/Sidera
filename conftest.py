@@ -297,6 +297,13 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
     # Scorpio/Aquarius dispositor disagreement is recorded as a finding
     # rather than chased. Only 8 of 56 fixture cases fall in the checked
     # subset, which the gate asserts rather than glosses.
+    # INVARIANT, and unusually so for a chart computation: PyJHora
+    # implements no avastha, so there is no external anchor here at all.
+    # The class docstring says so. Bālādi's partition is asserted directly
+    # and jāgradādi's inputs come from the oracle-gated `dignity_at`.
+    "TestAvasthas": (
+        "invariant", "the bālādi partition and a total mapping over the "
+                     "dignity vocabulary — NO oracle exists for avasthās"),
     "TestVimsopaka": (
         "external", "PyJHora's vimsopaka scores for the fictional charts, "
                     "on the subset where the dispositor is not disputed; "

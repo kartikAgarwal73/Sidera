@@ -542,9 +542,34 @@ _VIMSOPAKA = dict([
        "implementations differ on whether to score the nodes at all"),
 ])
 
+# --- avasthas: the condition a graha is found in ------------------------------
+
+_AVASTHA = dict([
+    _r("rule.avastha.baladi",
+       "A sign is divided into five equal parts of six degrees and a graha "
+       "is read by how far through it has travelled, as an age: infant, "
+       "youth, adult, old, spent. The adult stretch in the middle is the "
+       "strongest and the two ends the weakest. In even signs the order "
+       "reverses, so the same degree reads as its opposite.",
+       "Baladi avastha, Brihat Parashara Hora Shastra ch. 45"),
+    _r("rule.avastha.jagradadi",
+       "A graha is awake in a sign that supports it — exalted, in its "
+       "moolatrikona or in its own — dreaming in a sign that neither helps "
+       "nor hinders, and asleep in one that obstructs it. This reads the "
+       "graha's dignity, not its degree.",
+       "Jagradadi avastha, Brihat Parashara Hora Shastra ch. 45"),
+    _r("rule.avastha.independent",
+       "The avasthas answer different questions and are not to be combined "
+       "into one verdict. A graha at the strongest point of its passage "
+       "through a sign that obstructs it is both adult and asleep, and the "
+       "disagreement is the reading — averaging the two discards it.",
+       "Sidera's reading, stated because the states are routinely conflated"),
+])
+
 RULES: dict[str, Rule] = {
     **_DASHA, **_TRANSIT_GENERAL, **_TRANSIT_GRAHA, **_CONTACT, **_VARGA,
     **_GRAHA_STATE, **_YOGA, **_HOUSE, **_ARUDHA, **_KARAKA, **_VIMSOPAKA,
+    **_AVASTHA,
 }
 
 # The general rule a contact displaces, and the rule that says so. Kept as
