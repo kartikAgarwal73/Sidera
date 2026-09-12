@@ -2678,6 +2678,141 @@ def ask_ctx(chart, timeline):
                         datetime(2026, 7, 16, tzinfo=timezone.utc))
 
 
+class TestAskOutsideTheDashaRange:
+    """A chart whose 120-year Vimśottarī has run out must still render.
+
+    THE DEFECT THIS PINS, found by the correctness audit and live in
+    production at b130268: three lenses in `ask.py` dereferenced
+    `timeline.at(now)` without asking whether there was a period to read.
+    The Vimśottarī covers 120 years from its notional start, so anyone born
+    before roughly 1912 — and anyone not yet born — has none. The dashboard
+    raised TypeError and the route rendered `400 Could not cast the chart`,
+    which was also the wrong thing to say: the chart cast perfectly, the
+    READING failed.
+
+    Six of the nine `timeline.at()` call sites already handled this and
+    `explain.explain_dasha_now` has had a purpose-written out-of-range
+    branch since Phase 7. The model was right; three callers ignored it.
+
+    The boundary moves forward one year every year, so these dates are
+    computed from the horizon rather than typed — a fixed 1905 would stop
+    exercising the bug in 2025 and quietly go green.
+    """
+
+    @staticmethod
+    def _birth(year):
+        from engine import BirthData
+        return BirthData(year=year, month=6, day=15, hour=12, minute=0,
+                         latitude=19.07283, longitude=72.88261,
+                         tz="Asia/Kolkata", place="Mumbai")
+
+    def test_a_pre_1912_chart_has_no_running_dasha(self):
+        """The precondition. If this ever fails the others are vacuous."""
+        from dashas import vimshottari
+        timeline = vimshottari(compute_chart(self._birth(1905)))
+        now = datetime.now(timezone.utc)
+        assert timeline.at(now) is None
+        assert timeline.at_depth(now) is None
+        assert timeline.mahadashas[-1].end < now
+
+    def test_the_dashboard_renders_for_a_chart_with_no_running_dasha(
+            self, client):
+        """The bug, at the surface a reader meets it."""
+        form = {"name": "", "date": "1905-06-15", "time": "12:00",
+                "lat": "19.07283", "lon": "72.88261",
+                "tz": "Asia/Kolkata", "place": "Mumbai"}
+        response = client.post("/", data=form)
+        assert response.status_code == 200, (
+            "a chart older than the Vimśottarī cycle failed to render")
+        page = response.get_data(as_text=True)
+        assert "Could not cast the chart" not in page
+        assert "NoneType" not in page
+
+    def test_every_year_from_before_the_cycle_to_the_future_renders(
+            self, client):
+        """Across the whole exposed range, not one sample. The horizon
+        advances yearly, so the span is computed from today."""
+        from datetime import date
+        this_year = date.today().year
+        years = [this_year - 130, this_year - 125, this_year - 121,
+                 this_year - 118, this_year - 30, this_year + 6]
+        for year in years:
+            form = {"name": "", "date": f"{year}-06-15", "time": "12:00",
+                    "lat": "19.07283", "lon": "72.88261",
+                    "tz": "Asia/Kolkata", "place": "Mumbai"}
+            assert client.post("/", data=form).status_code == 200, year
+
+    def test_the_dasha_lenses_go_silent_rather_than_guessing(self):
+        """They must not invent a period. No placements, no indications,
+        and a statement that says why."""
+        import ask
+        from dashas import vimshottari
+        chart = compute_chart(self._birth(1905))
+        ctx = ask.ChartContext(chart, vimshottari(chart),
+                               datetime.now(timezone.utc))
+        for lens_fn in (ask._dasha_l1, ask._dasha_l2, ask._dasha_l3):
+            placements, indications, statement = lens_fn(ctx)
+            assert placements == (), lens_fn.__name__
+            assert indications == frozenset(), lens_fn.__name__
+            assert statement == ask.OUT_OF_RANGE, lens_fn.__name__
+        assert "no period is running" in ask.OUT_OF_RANGE
+        # …and on an in-range chart they still speak.
+        live = compute_chart(fixtures.birth("reference"))
+        ctx2 = ask.ChartContext(live, vimshottari(live), AGENT_WHEN)
+        for lens_fn in (ask._dasha_l1, ask._dasha_l2):
+            placements, indications, _ = lens_fn(ctx2)
+            assert placements and indications, lens_fn.__name__
+
+    def test_a_silent_lens_is_not_reported_as_a_dissenting_one(self):
+        """THE SECOND DEFECT, found while fixing the first and live on any
+        chart at all: a lens with no indications was listed as dissent, so
+        readers whose running lords were natural enemies were told
+        "Lords' relationship points instead to ." — a sentence with its
+        object missing.
+
+        Silence and disagreement are different things and now read
+        differently.
+        """
+        import ask
+        from dashas import vimshottari
+        from datetime import timedelta
+        from yogas import natural_relation
+        chart = compute_chart(fixtures.birth("reference"))
+        timeline = vimshottari(chart)
+        moment = None
+        for md in timeline.mahadashas:
+            for ad in md.antardashas:
+                if natural_relation(md.lord, ad.lord) == "enemy":
+                    moment = ad.start + timedelta(days=1)
+                    break
+            if moment:
+                break
+        assert moment, "no enemy MD/AD pair on the reference chart"
+        verdict = ask.ask("current-dasha",
+                          ask.ChartContext(chart, timeline, moment))
+        text = verdict.disagreement or ""
+        assert "points instead to ." not in text
+        assert "instead to ;" not in text
+        assert "Silent here" in text and "Lords' relationship" in text
+
+    def test_a_wholly_silent_question_promises_no_divergence(self):
+        """With every lens silent there is no divergent testimony, and the
+        answer must not offer the reader any."""
+        import ask
+        from dashas import vimshottari
+        chart = compute_chart(self._birth(1905))
+        verdict = ask.ask(
+            "current-dasha",
+            ask.ChartContext(chart, vimshottari(chart),
+                             datetime.now(timezone.utc)))
+        assert "Divergent testimony" not in verdict.answer
+        assert verdict.convergence == 0.0
+        assert "Silent here" in (verdict.disagreement or "")
+        for lens in ("Mahadasha lord", "Antardasha lord",
+                     "Lords' relationship"):
+            assert lens in verdict.disagreement
+
+
 class TestAskYourChart:
     def test_registry_structure(self):
         from ask import REGISTRY

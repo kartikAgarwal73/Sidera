@@ -214,7 +214,14 @@ def ask(key: str, ctx: ChartContext) -> Verdict:
     else:
         modal, convergence = (), 0.0
 
-    dissenters = [f for f in findings if not (f.indications & set(modal))]
+    # A lens with NO indications is silent, not dissenting. It had nothing
+    # to say — the daśā has run out, or two lords are natural enemies and
+    # the lens declines to pool their themes — and listing it as dissent
+    # produced the sentence "Lords' relationship points instead to ." for
+    # every reader whose running lords were enemies.
+    silent = [f for f in findings if not f.indications]
+    dissenters = [f for f in findings
+                  if f.indications and not (f.indications & set(modal))]
     agreement = _agreement_label(convergence)
 
     disagreement = None
@@ -223,6 +230,13 @@ def ask(key: str, ctx: ChartContext) -> Verdict:
                  + ", ".join(sorted(f.indications)) for f in dissenters]
         disagreement = ("The lenses do not fully agree — shown side by "
                         "side, unresolved: " + "; ".join(parts) + ".")
+    if silent:
+        # Named too, because a lens that could not speak is information: it
+        # tells the reader the verdict rests on fewer testimonies than the
+        # question normally musters.
+        quiet = ("Silent here, and so carrying no weight: "
+                 + ", ".join(f.lens for f in silent) + ".")
+        disagreement = f"{disagreement} {quiet}" if disagreement else quiet
 
     # The finding now opens the sentence, so it needs a capital it did not
     # need mid-clause. Only the first character: "D9 lagna" must stay "D9".
@@ -235,7 +249,9 @@ def ask(key: str, ctx: ChartContext) -> Verdict:
                            if f.indications & set(modal)) or "none",
         pct=int(convergence * 100),
     )
-    if disagreement:
+    if dissenters:
+        # Only when lenses actually disagree. A question whose lenses were
+        # merely silent has no divergent testimony to promise the reader.
         answer += " Divergent testimony is listed below, not averaged away."
 
     confidence = _confidence_floor([f.confidence for f in findings])
@@ -432,8 +448,27 @@ def _marriage_l2(ctx):
     return pls, toks, stmt
 
 
+#: What a daśā lens says when there is no daśā to read. The Vimśottarī
+#: covers 120 years from its notional start, so a chart whose owner was born
+#: more than that ago — or has not been born yet — genuinely has no running
+#: period. `explain.explain_dasha_now` has said so since Phase 7; these three
+#: lenses dereferenced `at()` without asking, and a pre-1912 birth took the
+#: whole dashboard down with a 400 that blamed the chart.
+#:
+#: The lens returns no placements and no indications, which makes it SILENT
+#: rather than dissenting — see `ask()`.
+OUT_OF_RANGE = ("The 120-year Vimśottarī cycle from this birth has run its "
+                "course, so no period is running to read.")
+
+
+def _no_dasha() -> tuple[tuple, frozenset, str]:
+    return (), frozenset(), OUT_OF_RANGE
+
+
 def _dasha_l1(ctx):
     cur = ctx.timeline.at(ctx.now)
+    if cur is None:
+        return _no_dasha()
     md = cur[0].lord
     pos = ctx.chart.planets[md]
     from yogas import houses_owned_by
@@ -452,6 +487,8 @@ def _dasha_l1(ctx):
 
 def _dasha_l2(ctx):
     cur = ctx.timeline.at(ctx.now)
+    if cur is None:
+        return _no_dasha()
     ad = cur[1].lord
     pos = ctx.chart.planets[ad]
     return ((Placement("Antardasha lord", ctx.placement_value(ad)),),
@@ -462,6 +499,8 @@ def _dasha_l2(ctx):
 
 def _dasha_l3(ctx):
     cur = ctx.timeline.at(ctx.now)
+    if cur is None:
+        return _no_dasha()
     md, ad = cur[0].lord, cur[1].lord
     rel = natural_relation(md, ad)
     toks = (frozenset(DASHA_THEME[md].split(", "))

@@ -94,6 +94,13 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
         "external", "Sidera Framework PDF · stated fixture values"),
     "TestGunaMilan": ("invariant", "aṣṭakūṭa structural rules"),
     "TestMatchUI": ("characterization", "rendered output frozen"),
+    # The out-of-range daśā defect. An invariant of the model, not of any
+    # chart: the Vimśottarī spans 120 years and a reading outside it has
+    # nothing to read, so it must go silent rather than raise.
+    "TestAskOutsideTheDashaRange": (
+        "invariant", "product rule: a chart outside the 120-year cycle "
+                     "renders, and a lens with nothing to say is silent "
+                     "rather than dissenting"),
     "TestAskYourChart": ("characterization", "engine output frozen"),
     "TestReadingEngine": ("invariant", "pipeline structure and determinism"),
     "TestDeployability": ("invariant", "production-readiness product rules"),
