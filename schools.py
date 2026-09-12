@@ -16,6 +16,12 @@ THE RULES THIS FILE ENFORCES
   2. **The answers are plain English too.** The school name lives underneath,
      in small text, for the reader who wants it. Nobody has to know a term to
      pick.
+     TWO TO FOUR ANSWERS. It was two or three until the viṃśopaka group
+     question arrived, which has four classical answers and no honest way
+     to be three — dropping one would be picking a side by omission, which
+     is the thing this file exists to prevent. The cap was widened for that
+     reason and not to make room for a long list; a question that wants
+     five answers is probably two questions.
   3. **There is a recommended default**, pre-selected and labelled. Someone
      who does not care can ignore all of this and get the mainstream answer.
   4. **Every question says what it changes**, in one line, before you choose.
@@ -174,6 +180,58 @@ OPTIONS: dict[str, Option] = {
                     "up to about 1.8°. Where that gap crosses a sign "
                     "boundary the two options will disagree about which "
                     "sign your nodes are in."),
+            ),
+        ),
+    ),
+    "vimsopaka_group": Option(
+        id="vimsopaka_group",
+        question="How many charts should a planet's strength be judged "
+                 "across?",
+        consequence="The same planet scores differently depending on how "
+                    "many charts are weighed and how heavily each counts.",
+        affects=("Viṃśopaka bala", "fact ledger"),
+        answers=(
+            Answer(
+                id="shadvarga",
+                text="Six",
+                school="Ṣaḍvarga — D1, D2, D3, D9, D12, D30",
+                explain=(
+                    "The shortest of the four groups, and the one that "
+                    "leans hardest on the birth chart itself. It is the "
+                    "quickest read and the most forgiving, since a planet "
+                    "has fewer chances to be found homeless."),
+            ),
+            Answer(
+                id="saptavarga",
+                text="Seven",
+                school="Saptavarga — the six plus the D7",
+                explain=(
+                    "The six with the chart of children added. The weights "
+                    "shift as well as the count: the twelfth-part chart "
+                    "carries almost a quarter of the total here, more than "
+                    "in any other group."),
+            ),
+            Answer(
+                id="dashavarga",
+                text="Ten",
+                school="Daśavarga — ten charts, weighted toward the D60",
+                explain=(
+                    "Ten charts, with the sixtieth carrying a quarter of "
+                    "the score by itself. This is the group many "
+                    "practitioners treat as the standard, and it is the "
+                    "one recommended here."),
+                recommended=True,
+            ),
+            Answer(
+                id="shodasavarga",
+                text="All sixteen",
+                school="Ṣoḍaśavarga — the complete set",
+                explain=(
+                    "Every division, which is the most demanding test a "
+                    "planet can be put to. It must hold up in charts read "
+                    "for parents, for learning, for devotion and for "
+                    "lineage as well as in the familiar ones, so a planet "
+                    "that scores well here is strong by any reading."),
             ),
         ),
     ),

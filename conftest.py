@@ -292,6 +292,15 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
     # exporter from the same longitudes by dropping Rahu, so agreeing with
     # it is corroboration, not independent confirmation. The class says so
     # and asserts that the oracle keeps admitting it.
+    # MIXED again, and the class docstring is explicit about the split:
+    # the undisputed subset is checked against PyJHora exactly, while the
+    # Scorpio/Aquarius dispositor disagreement is recorded as a finding
+    # rather than chased. Only 8 of 56 fixture cases fall in the checked
+    # subset, which the gate asserts rather than glosses.
+    "TestVimsopaka": (
+        "external", "PyJHora's vimsopaka scores for the fictional charts, "
+                    "on the subset where the dispositor is not disputed; "
+                    "the divergence itself is pinned as an invariant"),
     "TestCharaKarakas": (
         "external", "PyJHora's eight-karaka ordering for the fictional "
                     "charts; the seven-karaka comparison is against a "

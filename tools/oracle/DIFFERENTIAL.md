@@ -303,3 +303,99 @@ alternates' closed forms are now asserted directly as invariants, and the
 external check for them is this 400-chart run. Extending
 `export_pyjhora.py` to emit the variant blocks would turn those invariants
 into real external gates, and is the right next step for this file.
+
+---
+
+## Viṃśopaka bala: a divergence that came from somewhere else
+
+Four groups, 400 charts, seven grahas each. And a disagreement — the first
+one in this file that is not about the thing being computed.
+
+| Where the graha's weighted divisions avoid Scorpio and Aquarius | Where they do not |
+|---|---|
+| **1043 / 1043 exact** (ṣaḍvarga) | disagrees |
+
+The divergence is **fully localised and fully explained**: it is the
+dispositor of the two signs with two claimed lords. PyJHora takes Scorpio's
+lord to be **Ketu** and Aquarius's to be **Rahu**; Sidera takes the
+classical sole lords, **Mars** and **Saturn**. Viṃśopaka asks how a graha
+stands with the lord of the sign it occupies, so that one choice moves the
+score in every division where it lands in either sign.
+
+That is the `dual_lord` question the arudhas already put to the reader,
+surfacing somewhere nobody expected it. Sidera's answer is therefore not
+hard-coded here either: `vimsopaka.dispositor` calls
+`arudhas.counting_lord`, so the reader's choice governs both. Under the
+recommended Parāśarī answer we differ from PyJHora; under the Jaimini
+answer we differ differently, because its "stronger co-lord" is a chart-by-
+chart test and PyJHora's is not.
+
+**Nothing was adjusted to match.** Recording it was the instruction, and it
+is the right call on the merits too: the sole-lord reading is the classical
+one, and matching PyJHora would mean adopting a node-lordship and a node
+friendship table that the tradition does not agree on.
+
+### The nodes are not scored at all
+
+PyJHora returns viṃśopaka for all nine bodies. Sidera returns it for the
+seven. The ladder rests on *owning a sign* and on *friendship with a sign's
+lord*, and Rahu and Ketu do neither, so both halves are undefined for them.
+Scoring them requires inventing a lordship and a friendship table first,
+and those are exactly what is not agreed.
+
+### The fixture gate is thin, and says so
+
+Only **8 of 56** fixture cases avoid the two-lord signs — and **none at all**
+under the sixteen-chart group, since weighing sixteen divisions all but
+guarantees a graha lands in Scorpio or Aquarius somewhere. The committed
+gate asserts that count exactly, so it cannot quietly become vacuous, and
+the substantive external evidence remains this 400-chart run.
+
+---
+
+## The exporter now emits variant blocks
+
+`export_pyjhora.py` gained `divisional_variants` and `vimsopaka`.
+
+The first closes a hole this file named a commit ago: the oracle carried
+only each division's default method, so the far side of every fork was
+pinned by its own closed form — a statement about our code rather than a
+check on it. A mutation proved the cost. Both readings of D2, D3 and D27 are
+now in the committed fixture under PyJHora's own `chart_method` numbering,
+and `TestEveryDivisionMatchesTheOracle` checks 108 body-placements across
+them. **The reading we offer is now checked exactly as hard as the one we
+ship.**
+
+Regenerating the fixture changed **no pre-existing value** — only the
+digest, the timestamp, and the two new blocks.
+
+---
+
+## Pratyantardaśā: the third level, exact
+
+`export_pyjhora.py` now emits all 729 MD/AD/PD boundaries per chart
+(`dhasa_level_index=PRATYANTARA`), under the same pinned
+`MEAN_SIDEREAL_YEAR` as the two levels above.
+
+| | Rows | Lord sequence | Worst boundary gap |
+|---|---|---|---|
+| reference | 729 | exact | **0.000 h** |
+| partner | 729 | exact | **0.000 h** |
+
+1,458 boundaries, agreeing to the second. That is the payoff of the
+sidereal-year fix this file recorded earlier: the third level multiplies
+any year-length error by the same factor it multiplies everything else, so
+an exact match here is a stronger statement than the MD/AD match was.
+
+### One line that cannot be tested, and is labelled as such
+
+`_subperiods` closes the last sub-period on its parent's own end rather
+than on an accumulated sum — the obvious defence against nine floating-
+point additions leaving a seam. **It is not load-bearing.** Measured across
+all 729 pratyantardaśās of the reference chart, the two strategies differ
+by exactly zero at datetime's microsecond resolution, so a mutation
+removing the close stays green and no test can catch it.
+
+It is kept because it is correct, and the measurement is written into the
+docstring, because a line that looks load-bearing and is not is worse than
+no line at all.

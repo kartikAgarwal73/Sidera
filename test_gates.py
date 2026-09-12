@@ -5179,6 +5179,225 @@ class TestCharaKarakas:
         assert "not a classical rule" in tie.text.lower()
 
 
+class TestVimsopaka:
+    """Strength weighed across a group of divisions, and the group as a fork.
+
+    WHAT IS GATED, AND WHAT IS RECORDED INSTEAD. Every value comes from the
+    oracle EXCEPT where a weighted division puts the graha in Scorpio or
+    Aquarius. There, PyJHora takes the sign's lord to be the node — Ketu for
+    Scorpio, Rahu for Aquarius — and Sidera takes the classical sole lord,
+    Mars and Saturn. That is the `dual_lord` question over again, arriving
+    somewhere nobody expected it, and the instruction was to record a
+    divergence rather than chase it. The gate therefore checks every case
+    the disagreement does NOT touch, exactly, and the disagreement itself is
+    measured in tools/oracle/DIFFERENTIAL.md.
+    """
+
+    ORACLE = json.loads(
+        (HERE / "fixtures_pyjhora.json").read_text(encoding="utf-8"))
+
+    @classmethod
+    @pytest.fixture(scope="class")
+    def charts(cls):
+        import fixtures
+        return {k: compute_chart(fixtures.birth(k))
+                for k in ("reference", "partner")}
+
+    def test_every_group_weighs_exactly_twenty(self):
+        """What makes a score out of twenty comparable across the four
+        groups. Asserted rather than trusted — the weights are transcribed
+        numbers and a typo in one would be invisible in the output."""
+        import vimsopaka
+        for name, weights in vimsopaka.GROUPS.items():
+            assert abs(sum(weights.values()) - 20.0) < 1e-9, (
+                f"{name} weighs {sum(weights.values())}, not 20")
+        assert {len(w) for w in vimsopaka.GROUPS.values()} == {6, 7, 10, 16}
+        # The group names say how many charts they weigh, and do not lie.
+        assert len(vimsopaka.GROUPS["shadvarga"]) == 6
+        assert len(vimsopaka.GROUPS["saptavarga"]) == 7
+        assert len(vimsopaka.GROUPS["dashavarga"]) == 10
+        assert len(vimsopaka.GROUPS["shodasavarga"]) == 16
+        # Every chart named is one this build can actually cast.
+        import vargas
+        for name, weights in vimsopaka.GROUPS.items():
+            for code in weights:
+                assert code == "D1" or code in vargas.SUPPORTED, (name, code)
+
+    def test_the_oracle_agrees_wherever_the_dispositor_is_not_disputed(
+            self, charts):
+        """The external gate, on every case the known divergence does not
+        touch. A graha none of whose weighted divisions land in Scorpio or
+        Aquarius must match PyJHora to the last decimal."""
+        import vimsopaka
+        import schools
+        checked = skipped = 0
+        for name, chart in charts.items():
+            block = self.ORACLE["charts"][name]["vimsopaka"]
+            for which in vimsopaka.GROUPS:
+                with schools.use({"vimsopaka_group": which}):
+                    ours = vimsopaka.scores(chart)
+                for planet in vimsopaka.BODIES:
+                    disputed = any(
+                        vimsopaka._sign_in(chart, planet, code) in (7, 10)
+                        for code in vimsopaka.GROUPS[which])
+                    if disputed:
+                        skipped += 1
+                        continue
+                    theirs = block[which][planet]["score"]
+                    assert abs(ours[planet] - theirs) < 1e-6, (
+                        f"{name}/{which}/{planet}: ours {ours[planet]} vs "
+                        f"oracle {theirs}")
+                    checked += 1
+        # AND HOW THIN THIS IS, stated rather than implied. Only 8 of the
+        # 56 fixture cases avoid the two-lord signs, and NONE of them do
+        # under the sixteen-chart group — weigh sixteen divisions and a
+        # graha will land in Scorpio or Aquarius in one of them almost
+        # every time. So this gate is a confirmation, not the evidence.
+        # The evidence is the 400-chart run in DIFFERENTIAL.md, where the
+        # undisputed subset matched 1043 of 1043.
+        assert checked == 8, (
+            f"the undisputed subset changed size ({checked} of "
+            f"{checked + skipped}) — re-measure before trusting this gate")
+        assert skipped == 48, skipped
+
+    def test_the_disputed_cases_differ_only_in_scorpio_and_aquarius(
+            self, charts):
+        """The divergence, pinned as a FINDING rather than hidden by the
+        skip above. Where a graha's weighted divisions avoid the two
+        two-lord signs, we agree; where they do not, we may not — and the
+        reason is the dispositor, not the arithmetic."""
+        import vimsopaka
+        import schools
+        found_a_disputed_case = False
+        for name, chart in charts.items():
+            for which in vimsopaka.GROUPS:
+                for planet in vimsopaka.BODIES:
+                    signs = [vimsopaka._sign_in(chart, planet, code)
+                             for code in vimsopaka.GROUPS[which]]
+                    if any(s in (7, 10) for s in signs):
+                        found_a_disputed_case = True
+        assert found_a_disputed_case, (
+            "no fixture case touches Scorpio or Aquarius, so the recorded "
+            "divergence is untested and the skip in the gate above is doing "
+            "nothing")
+        # And the mechanism itself: the dispositor of Scorpio follows the
+        # co-lord school, which is what makes the two implementations part.
+        with schools.use({"dual_lord": "single"}):
+            assert vimsopaka.dispositor(charts["reference"], 7) == "Mars"
+            assert vimsopaka.dispositor(charts["reference"], 10) == "Saturn"
+        # An uncontested sign is unaffected by that question.
+        for answer in ("single", "stronger"):
+            with schools.use({"dual_lord": answer}):
+                assert vimsopaka.dispositor(charts["reference"], 4) == "Sun"
+
+        # AND THE CO-LORD SCHOOL REALLY REACHES IN HERE. Our default is the
+        # Parāśarī sole lord, under which `counting_lord` returns exactly
+        # the plain sign-lord table — so a version that ignored the school
+        # entirely would pass every other gate in this class. A mutation
+        # proved it. Under the other answer the dispositor must move, and
+        # the score with it.
+        import arudhas
+        moved = False
+        for chart in charts.values():
+            with schools.use({"dual_lord": "stronger"}):
+                for sign in (7, 10):
+                    classical, node = arudhas.CO_LORDS[sign]
+                    if vimsopaka.dispositor(chart, sign) == node:
+                        moved = True
+            if moved:
+                break
+        assert moved, (
+            "the co-lord school never changed a dispositor on either "
+            "fixture — vimsopaka is not reading the school at all")
+        # …and a score that depends on one of those signs moves with it.
+        shifted = False
+        for name, chart in charts.items():
+            for which in vimsopaka.GROUPS:
+                with schools.use({"dual_lord": "single"}):
+                    a = vimsopaka.scores(chart, which)
+                with schools.use({"dual_lord": "stronger"}):
+                    b = vimsopaka.scores(chart, which)
+                if a != b:
+                    shifted = True
+        assert shifted, "no score moved when the co-lord school moved"
+
+    def test_the_ladder_and_the_compound_scale(self, charts):
+        import vimsopaka
+        assert vimsopaka.OWN_SIGN_VALUE == 20
+        assert vimsopaka.COMPOUND_VALUE == (5, 7, 10, 15, 18)
+        assert vimsopaka.COMPOUND_NAMES[0] == "great enemy"
+        assert vimsopaka.COMPOUND_NAMES[-1] == "great friend"
+        chart = charts["reference"]
+        # Temporary friendship is the ring around a graha, not the whole
+        # chart: the 2nd, 3rd, 4th, 10th, 11th and 12th from it.
+        assert vimsopaka.TEMPORAL_FRIEND_HOUSES == {2, 3, 4, 10, 11, 12}
+        # A graha is never its own dispositor's stranger — own sign scores
+        # 20 and is reported as such rather than as a relationship.
+        for planet in vimsopaka.BODIES:
+            for code in ("D1", "D9"):
+                value, why = vimsopaka.value_in(chart, planet, code)
+                assert value in (5, 7, 10, 15, 18, 20), (planet, code)
+                if value == 20:
+                    assert why == "own sign"
+                else:
+                    assert "of" in why
+
+    def test_the_nodes_are_not_scored_and_the_reason_is_printed(self,
+                                                                charts):
+        import vimsopaka
+        assert "Rahu" not in vimsopaka.BODIES
+        assert "Ketu" not in vimsopaka.BODIES
+        assert len(vimsopaka.BODIES) == 7
+        out = vimsopaka.describe(charts["reference"])
+        assert set(out["scores"]) == set(vimsopaka.BODIES)
+        assert "rule no sign" in out["nodes_excluded"]
+
+    def test_the_group_changes_the_score(self, charts):
+        """A fork that moved nothing would be decoration. Every pair of
+        groups must disagree about some graha on a real chart."""
+        import vimsopaka
+        import schools
+        chart = charts["reference"]
+        by_group = {}
+        for which in vimsopaka.GROUPS:
+            with schools.use({"vimsopaka_group": which}):
+                by_group[which] = vimsopaka.scores(chart)
+                assert vimsopaka.describe(chart)["group"] == which
+        names = sorted(by_group)
+        for i, a in enumerate(names):
+            for b in names[i + 1:]:
+                assert by_group[a] != by_group[b], (a, b)
+        assert schools.OPTIONS["vimsopaka_group"].default == "dashavarga"
+
+    def test_the_working_adds_up_to_the_score(self, charts):
+        """The breakdown is the arithmetic, not a parallel story about it."""
+        import vimsopaka
+        chart = charts["reference"]
+        for which in vimsopaka.GROUPS:
+            for planet in vimsopaka.BODIES:
+                rows = vimsopaka.working(chart, planet, which)
+                assert len(rows) == len(vimsopaka.GROUPS[which])
+                assert abs(sum(r["contributes"] for r in rows)
+                           - vimsopaka.score(chart, planet, which)) < 1e-6
+                assert all(0 <= r["value"] <= 20 for r in rows)
+
+    def test_a_score_never_leaves_the_scale(self, charts):
+        import vimsopaka
+        for chart in charts.values():
+            for which in vimsopaka.GROUPS:
+                for value in vimsopaka.scores(chart, which).values():
+                    assert 5.0 <= value <= 20.0, value
+
+    def test_every_vimsopaka_rule_is_in_the_citation_library(self):
+        import rulelib
+        for rule_id in ("rule.vimsopaka.bala",
+                        "rule.vimsopaka.group_school",
+                        "rule.vimsopaka.compound_relation",
+                        "rule.vimsopaka.nodes_excluded"):
+            assert rulelib.is_known(rule_id), rule_id
+            assert rulelib.RULES[rule_id].source.strip(), rule_id
+
+
 class TestVimshottariAgainstTheOracle:
     """The daśā timeline, boundary by boundary, against PyJHora.
 
@@ -5242,6 +5461,116 @@ class TestVimshottariAgainstTheOracle:
                 f"{theirs.isoformat()} — {gap / 86400:.4f} days apart")
             checked += 1
         assert checked >= 70, f"only {checked} boundaries compared"
+
+    @pytest.mark.parametrize("name", ["reference", "partner"])
+    def test_every_pratyantardasha_boundary_matches(self, oracle, name):
+        """THE THIRD LEVEL, against PyJHora — 729 rows per chart.
+
+        This is the level a reading actually points at when it names a
+        window, so it is the one most worth an external check: an invariant
+        can prove the nine PDs partition their AD without proving the
+        partition starts where anyone else thinks it does.
+        """
+        from datetime import timedelta
+        from dashas import vimshottari
+        from engine import compute_chart, resolve_timezone
+        if not fixtures.is_built_in(name):
+            pytest.skip("fixtures substituted")
+        block = oracle["charts"][name]["vimsottari"]
+        assert "pratyantardashas" in block, (
+            "the oracle carries no third level — regenerate it")
+        birth = fixtures.birth(name)
+        zone = resolve_timezone(birth.tz)
+        timeline = vimshottari(compute_chart(birth))
+
+        ours = {(md.lord, ad.lord, pd.lord): pd.start
+                for md in timeline.mahadashas
+                for ad in md.antardashas
+                for pd in ad.pratyantardashas}
+        assert len(ours) == 729, "nine lords nested three deep"
+
+        checked, worst = 0, 0.0
+        for period in block["pratyantardashas"]:
+            key = (period["md"], period["ad"], period["pd"])
+            assert key in ours, f"{name}: PyJHora has a period we do not"
+            year, month, day, hours = period["start_local"]
+            if year > 9000:
+                continue
+            theirs = (datetime(year, month, day) + timedelta(hours=hours)
+                      ).replace(tzinfo=zone).astimezone(timezone.utc)
+            gap = abs((ours[key] - theirs).total_seconds())
+            worst = max(worst, gap)
+            assert gap < self.TOLERANCE_SECONDS, (
+                f"{name} {'/'.join(key)}: {gap / 86400:.4f} days apart")
+            checked += 1
+        assert checked >= 700, f"only {checked} boundaries compared"
+
+    def test_the_three_levels_nest_exactly(self):
+        """An invariant the oracle cannot supply: each level PARTITIONS the
+        one above it, with no gap and no overlap at any boundary.
+
+        The last sub-period is closed on its parent's own end rather than on
+        an accumulated sum — without that, 729 floating-point additions
+        leave a seam the reader eventually lands in.
+        """
+        from dashas import vimshottari
+        from engine import compute_chart
+        timeline = vimshottari(compute_chart(fixtures.birth("reference")))
+        for md in timeline.mahadashas:
+            assert md.antardashas[0].start == md.start
+            assert md.antardashas[-1].end == md.end
+            for earlier, later in zip(md.antardashas, md.antardashas[1:]):
+                assert earlier.end == later.start
+            for ad in md.antardashas:
+                assert len(ad.pratyantardashas) == 9
+                assert ad.pratyantardashas[0].start == ad.start
+                assert ad.pratyantardashas[-1].end == ad.end
+                for earlier, later in zip(ad.pratyantardashas,
+                                          ad.pratyantardashas[1:]):
+                    assert earlier.end == later.start
+                # The first sub-period belongs to the parent's own lord, at
+                # every depth.
+                assert ad.pratyantardashas[0].lord == ad.lord
+            assert md.antardashas[0].lord == md.lord
+
+    def test_a_pratyantardasha_is_proportioned_like_its_parents(self):
+        """The same arithmetic at every depth: a lord's share of an AD is
+        its share of the 120 years, exactly as it is of an MD."""
+        from dashas import DASHA_SEQUENCE, TOTAL_YEARS, vimshottari
+        from engine import compute_chart
+        timeline = vimshottari(compute_chart(fixtures.birth("reference")))
+        share = dict(DASHA_SEQUENCE)
+        # Skip the first MD, which is entered part-way through at birth.
+        for md in timeline.mahadashas[1:]:
+            for ad in md.antardashas:
+                for pd in ad.pratyantardashas[:-1]:   # last one absorbs float
+                    expected = ad.years * share[pd.lord] / TOTAL_YEARS
+                    assert abs(pd.years - expected) < 1e-6, (
+                        md.lord, ad.lord, pd.lord, pd.years, expected)
+
+    def test_at_depth_finds_the_running_pratyantardasha(self):
+        """And agrees with `at()` about the two levels above it — the two
+        methods must not be able to disagree about the same moment."""
+        from datetime import timedelta
+        from dashas import vimshottari
+        from engine import compute_chart
+        timeline = vimshottari(compute_chart(fixtures.birth("reference")))
+        moments = [timeline.birth + timedelta(days=n)
+                   for n in (1, 400, 3000, 9000, 20000)]
+        for when in moments:
+            deep = timeline.at_depth(when)
+            shallow = timeline.at(when)
+            assert (deep is None) == (shallow is None), when
+            if deep is None:
+                continue
+            md, ad, pd = deep
+            assert (md, ad) == shallow
+            assert pd.contains(when), when
+            assert ad.start <= pd.start and pd.end <= ad.end
+        # Outside the 120 years there is nothing to find, at either depth.
+        beyond = timeline.mahadashas[-1].end + timedelta(days=1)
+        assert timeline.at_depth(beyond) is None
+        assert timeline.at(beyond) is None
 
     def test_the_julian_year_would_fail_this(self, oracle, monkeypatch):
         """A gate that cannot go red is decoration.
@@ -5483,7 +5812,12 @@ class TestComputationOptions:
                   "parashari", "parāśarī", "jaimini")
         for opt in schools.OPTIONS.values():
             assert opt.question.endswith("?"), opt.id
-            assert 2 <= len(opt.answers) <= 3, opt.id
+            # Two to four. Widened from three when the viṃśopaka group
+            # question arrived with four classical answers — see the
+            # contract in schools.py for why dropping one was not an
+            # option. Still a cap: a question wanting five is two
+            # questions.
+            assert 2 <= len(opt.answers) <= 4, opt.id
             haystack = f"{opt.question} {opt.consequence}".lower()
             for term in jargon:
                 assert term not in haystack, (
@@ -5612,6 +5946,7 @@ class TestComputationOptions:
         import arudhas
         import karakas
         import vargas
+        import vimsopaka
         from engine import PLANETS, compute_chart
         from transits import natal_aspect_table
 
@@ -5636,6 +5971,8 @@ class TestComputationOptions:
                     vargas.varga_chart(chart, code).planets[p].sign_index
                     for p in PLANETS)
                     for code in vargas.SUPPORTED),
+                # …and the vimsopaka scores, for `vimsopaka_group`.
+                tuple(sorted(vimsopaka.scores(chart).items())),
             )
 
         with schools.use({}):
@@ -5781,6 +6118,7 @@ class TestComputationOptions:
                                     "node_position": "mean",
                                     "dual_lord": "single",
                                     "karaka_count": "seven",
+                                    "vimsopaka_group": "dashavarga",
                                     "hora_scheme": "twelve",
                                     "drekkana_scheme": "parashari",
                                     "bhamsa_scheme": "forward"}
@@ -9249,28 +9587,49 @@ class TestEveryDivisionMatchesTheOracle:
                     assert all(1 <= cast.planets[p].house <= 12
                                for p in PLANETS)
 
-        # AND THE ALTERNATE'S RULE ITSELF, written out. The committed oracle
-        # file carries only each division's DEFAULT method, so the fixtures
-        # cannot check the far side of a fork — "the two answers differ" was
-        # true of a wrong alternate too, and a mutation proved it. The
-        # external check for these is the 400-chart run against PyJHora's
-        # own named variants, recorded in tools/oracle/DIFFERENTIAL.md;
-        # what is asserted here is the closed form that run confirmed.
-        with schools.use({"drekkana_scheme": "parivritti"}):
-            for sign in range(12):
-                for part in range(3):
-                    deg = sign * 30.0 + part * 10.0 + 1.0
-                    assert vargas.varga_sign(deg, "D3") == \
-                        (sign * 3 + part) % 12, (sign, part)
-        with schools.use({"bhamsa_scheme": "even_reverse"}):
-            for sign in range(12):
-                start = vargas.BHAMSA_START[sign % 4]
-                span = 30.0 / 27.0
-                for part in (0, 13, 26):
-                    deg = sign * 30.0 + part * span + span / 2
-                    want = ((start + part) % 12 if sign % 2 == 0
-                            else (start + 26 - part) % 12)
-                    assert vargas.varga_sign(deg, "D27") == want, (sign, part)
+    def test_every_fork_alternate_matches_the_oracle(self, charts):
+        """THE FAR SIDE OF EACH FORK, against PyJHora rather than against
+        our own closed form.
+
+        Until the oracle carried variant blocks this could not be done, and
+        the cost was measurable: a mutation to the parivṛtti step left every
+        committed gate green, because "the two readings differ" is true of a
+        wrong alternate too. `export_pyjhora.py` now emits each contested
+        division under every named `chart_method`, so the reading we offer
+        is checked exactly as hard as the one we ship.
+        """
+        import schools
+        import vargas
+        forks = {
+            "D2": ("hora_scheme",
+                   {"twelve": "twelve_sign_parivritti_even_reverse",
+                    "two_sign": "traditional_parashari_leo_cancer"}),
+            "D3": ("drekkana_scheme",
+                   {"parashari": "parashari_sign_5th_9th",
+                    "parivritti": "parivritti_traya_cyclic"}),
+            "D27": ("bhamsa_scheme",
+                    {"forward": "forward_from_element_sign",
+                     "even_reverse": "even_sign_reversal"}),
+        }
+        checked = 0
+        for name, chart in charts.items():
+            variants = self.ORACLE["charts"][name]["divisional_variants"]
+            for code, (option_id, answers) in forks.items():
+                for answer, label in answers.items():
+                    theirs = variants[code][label]["positions"]
+                    with schools.use({option_id: answer}):
+                        ours = vargas.varga_chart(chart, code)
+                    for body in PLANETS:
+                        assert ours.planets[body].sign_index == \
+                            theirs[body]["sign_index"], (
+                                f"{name}/{code}/{answer}/{body}: ours "
+                                f"{ours.planets[body].sign} vs oracle "
+                                f"{theirs[body]['sign']}")
+                        checked += 1
+                    assert ours.lagna_sign_index == \
+                        theirs["Lagna"]["sign_index"], (name, code, answer)
+        # 2 charts x 3 divisions x 2 readings x 9 bodies.
+        assert checked == 108, checked
 
     def test_the_two_sign_hora_uses_only_the_suns_and_moons_signs(self):
         """The older horā has TWO values, and that is the method rather than

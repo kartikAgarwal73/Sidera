@@ -507,9 +507,44 @@ _KARAKA = dict([
        "Karakamsa, Jaimini Sutras 1.2; Brihat Parashara Hora Shastra ch. 33"),
 ])
 
+# --- vimsopaka: strength weighed across the divisions ------------------------
+
+_VIMSOPAKA = dict([
+    _r("rule.vimsopaka.bala",
+       "A graha's strength is weighed across a GROUP of divisional charts "
+       "rather than in the birth chart alone. In each chart it is worth "
+       "twenty if it sits in its own sign, and otherwise as much as its "
+       "standing with that sign's lord allows — eighteen for a great "
+       "friend down to five for a great enemy. Each chart carries a weight, "
+       "the weights of a group sum to twenty, and the result is a score out "
+       "of twenty.",
+       "Vimsopaka bala, Brihat Parashara Hora Shastra ch. 7"),
+    _r("rule.vimsopaka.group_school",
+       "How many charts are weighed is disputed, and it changes the number. "
+       "The shadvarga weighs six, the saptavarga seven, the dasavarga ten "
+       "and the shodasavarga all sixteen, each with its own weights — so "
+       "the same graha scores differently under each, and a score means "
+       "nothing without the group it was taken in.",
+       "The four varga groups, BPHS ch. 6-7 — a genuine divergence in "
+       "practice, recorded rather than resolved"),
+    _r("rule.vimsopaka.compound_relation",
+       "Standing with the sign's lord is the five-fold relation: the "
+       "natural friendship of the two grahas combined with the temporary "
+       "friendship they take from this chart, where grahas in the 2nd, "
+       "3rd, 4th, 10th, 11th and 12th from each other are temporary "
+       "friends and the rest are temporary enemies.",
+       "Pancadha maitri, Brihat Parashara Hora Shastra ch. 3"),
+    _r("rule.vimsopaka.nodes_excluded",
+       "Rahu and Ketu take no vimsopaka score. The measure rests on owning "
+       "a sign and on friendship with a sign's lord, and the nodes rule "
+       "nothing, so neither half of it is defined for them.",
+       "Sidera's reading of the classical scheme, stated because "
+       "implementations differ on whether to score the nodes at all"),
+])
+
 RULES: dict[str, Rule] = {
     **_DASHA, **_TRANSIT_GENERAL, **_TRANSIT_GRAHA, **_CONTACT, **_VARGA,
-    **_GRAHA_STATE, **_YOGA, **_HOUSE, **_ARUDHA, **_KARAKA,
+    **_GRAHA_STATE, **_YOGA, **_HOUSE, **_ARUDHA, **_KARAKA, **_VIMSOPAKA,
 }
 
 # The general rule a contact displaces, and the rule that says so. Kept as

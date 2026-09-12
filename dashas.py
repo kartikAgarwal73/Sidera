@@ -108,8 +108,20 @@ class Period:
 
 
 @dataclass(frozen=True)
+class AntarDasha(Period):
+    """An AD, with its nine pratyantardaśās.
+
+    A subclass rather than a new field on `Period` so every existing caller
+    that reads `md.antardashas` as a sequence of periods keeps working: the
+    third level is an addition, not a change of shape.
+    """
+
+    pratyantardashas: tuple[Period, ...] = ()
+
+
+@dataclass(frozen=True)
 class MahaDasha(Period):
-    antardashas: tuple[Period, ...] = ()
+    antardashas: tuple[AntarDasha, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -136,17 +148,68 @@ class VimshottariTimeline:
                 return md, md.antardashas[-1]  # float-edge fallback
         return None
 
+    def at_depth(self, when: datetime
+                 ) -> tuple[MahaDasha, AntarDasha, Period] | None:
+        """(Mahadasha, Antardasha, Pratyantardasha) running at `when`.
 
-def _antardashas(md_lord_index: int, start: datetime, md_years: float,
-                 md_end: datetime) -> tuple[Period, ...]:
-    """The nine ADs of an MD, beginning with the MD lord's own AD."""
-    ads = []
+        A separate method rather than a third element on `at()`: that
+        signature is read in half a dozen places and a reading that wants
+        two levels should not be handed three it must then ignore.
+        """
+        found = self.at(when)
+        if found is None:
+            return None
+        md, ad = found
+        for pd in ad.pratyantardashas:
+            if pd.contains(when):
+                return md, ad, pd
+        return md, ad, ad.pratyantardashas[-1]   # float-edge fallback
+
+
+def _subperiods(lord_index: int, start: datetime, span_years: float,
+                end_at: datetime) -> tuple[tuple[str, datetime, datetime], ...]:
+    """The nine sub-periods of any period, in Vimśottarī proportion.
+
+    The same arithmetic at every depth — an AD divides its MD exactly as a
+    PD divides its AD — so it is written once.
+
+    The last sub-period is closed on the parent's own end rather than on an
+    accumulated sum. That is defensive rather than load-bearing, and the
+    measurement is recorded so nobody mistakes it for a fix: over all 729
+    pratyantardaśās of the reference chart the two strategies differ by
+    EXACTLY ZERO at datetime's microsecond resolution. No test can catch
+    the difference, and a mutation removing the close stays green — said
+    here because an unfalsifiable line that looks load-bearing is worse
+    than none.
+    """
+    out = []
     t = start
     for j in range(9):
-        lord, ad_years = DASHA_SEQUENCE[(md_lord_index + j) % 9]
-        end = md_end if j == 8 else t + _years(md_years * ad_years / TOTAL_YEARS)
-        ads.append(Period(lord=lord, start=t, end=end))
-        t = end
+        lord, share = DASHA_SEQUENCE[(lord_index + j) % 9]
+        stop = end_at if j == 8 else t + _years(
+            span_years * share / TOTAL_YEARS)
+        out.append((lord, t, stop))
+        t = stop
+    return tuple(out)
+
+
+def _antardashas(md_lord_index: int, start: datetime, md_years: float,
+                 md_end: datetime) -> tuple[AntarDasha, ...]:
+    """The nine ADs of an MD, each with its own nine PDs."""
+    ads = []
+    for lord, ad_start, ad_end in _subperiods(
+            md_lord_index, start, md_years, md_end):
+        ad_years = (ad_end - ad_start).total_seconds() / (
+            DAYS_PER_YEAR * 86400)
+        index = next(i for i, (name, _) in enumerate(DASHA_SEQUENCE)
+                     if name == lord)
+        ads.append(AntarDasha(
+            lord=lord, start=ad_start, end=ad_end,
+            pratyantardashas=tuple(
+                Period(lord=pd_lord, start=pd_start, end=pd_end)
+                for pd_lord, pd_start, pd_end in _subperiods(
+                    index, ad_start, ad_years, ad_end)),
+        ))
     return tuple(ads)
 
 

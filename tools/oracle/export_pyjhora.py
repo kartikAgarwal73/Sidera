@@ -198,6 +198,62 @@ def divisional_charts(jd, place) -> dict:
     return out
 
 
+# THE VARIANTS, AND WHY THEY ARE HERE
+#
+# Several divisions are cut more than one classical way, and Sidera puts the
+# choice to the reader rather than picking one. Until this block existed the
+# oracle carried only each division's DEFAULT method, so the gate suite could
+# check the reading we ship and not the one we offer alongside it — the far
+# side of every fork was pinned by its own closed form, which is a statement
+# about our code rather than a check on it.
+#
+# A mutation proved that costs something real: changing the parivṛtti
+# drekkāṇa's step to a wrong value left every committed gate green, because
+# "the two readings differ" is true of a wrong alternate too.
+#
+# PyJHora exposes the variants through `chart_method`, so both sides of each
+# fork can be gated against an implementation that is not ours. The numbers
+# below are ITS method numbering, and the labels are what its own docstrings
+# call them — recorded here so a reader can check the mapping rather than
+# trust it.
+VARIANT_METHODS = {
+    2: {1: "twelve_sign_parivritti_even_reverse",
+        2: "traditional_parashari_leo_cancer"},
+    3: {1: "parashari_sign_5th_9th",
+        2: "parivritti_traya_cyclic"},
+    27: {1: "forward_from_element_sign",
+         2: "even_sign_reversal"},
+}
+
+
+def divisional_variants(jd, place) -> dict:
+    """Each contested division under EVERY named method, not just the default.
+
+    Keyed by division then by our own label for the method, with PyJHora's
+    `chart_method` number carried alongside so the mapping is checkable.
+    """
+    from jhora.horoscope.chart import charts
+    out = {}
+    for dvf, methods in VARIANT_METHODS.items():
+        block = {}
+        for number, label in methods.items():
+            pin_ayanamsa()
+            pp = charts.divisional_chart(
+                jd, place, divisional_chart_factor=dvf, chart_method=number)
+            block[label] = {
+                "pyjhora_chart_method": number,
+                "positions": positions(pp),
+            }
+        default_label = methods[1]
+        block["note"] = (
+            f"D{dvf} under each named method. PyJHora's chart_method=1 "
+            f"({default_label}) is what `divisional_charts` above reports "
+            f"as D{dvf}; the others are the alternates Sidera offers as "
+            f"reader-facing choices.")
+        out[f"D{dvf}"] = block
+    return out
+
+
 def _arudhas_under(pp, scorpio_lord, aquarius_lord) -> list[int]:
     """A1..A12 with the Sc/Aq co-lord question decided one way.
 
@@ -390,7 +446,28 @@ def vimsottari(jd, place) -> dict:
              "start_local": [int(y), int(m), int(d), round(float(h), 9)],
              "years": round(float(years), 9)}
             for (md, ad), (y, m, d, h), years in rows],
+        # THE THIRD LEVEL. 729 rows, which is a lot of fixture — but a
+        # pratyantardasha is where a reading actually points when it says
+        # "this window", so it is the level most worth checking and the one
+        # an invariant alone cannot anchor. Same year length, same pinning.
+        "pratyantardashas": pratyantardashas(jd, place),
     }
+
+
+def pratyantardashas(jd, place) -> list:
+    """Every MD/AD/PD boundary. See `vimsottari` for the pinning."""
+    from jhora.horoscope.dhasa.graha import vimsottari as vim
+    pin_ayanamsa()
+    _seed, rows = vim.get_vimsottari_dhasa_bhukthi(
+        jd, place,
+        dhasa_level_index=const.MAHA_DHASA_DEPTH.PRATYANTARA,
+        dhasa_duration_type=const.DHASA_YEAR_DURATION.MEAN_SIDEREAL_YEAR)
+    return [
+        {"md": DASHA_LORDS[int(lords[0])], "ad": DASHA_LORDS[int(lords[1])],
+         "pd": DASHA_LORDS[int(lords[2])],
+         "start_local": [int(y), int(m), int(d), round(float(h), 9)],
+         "years": round(float(years), 9)}
+        for lords, (y, m, d, h), years in rows]
 
 
 def sphutas(dob, tob, place) -> dict:
@@ -486,6 +563,8 @@ def export_chart(name: str, birth: dict) -> dict:
             "mean_minus_true_arcsec": node_gap,
         },
         "divisional_charts": divisional_charts(jd, place),
+        "divisional_variants": divisional_variants(jd, place),
+        "vimsopaka": vimsopaka_block(jd, place),
         "vimsottari": vimsottari(jd, place),
         "bhava_arudhas": arudha_block(pp),
         "chara_karakas": chara_karakas(pp),
@@ -493,6 +572,45 @@ def export_chart(name: str, birth: dict) -> dict:
         "sphutas": sphutas(dob, tob, place),
         "shadbala": shadbala(jd, place),
     }
+
+
+def vimsopaka_block(jd, place) -> dict:
+    """Vimsopaka bala under all four classical varga groups.
+
+    PyJHora scores the nodes as well as the seven; Sidera scores only the
+    seven, because the ladder rests on owning a sign and on friendship with
+    the sign's lord and the nodes do neither. The node rows are exported
+    anyway so the difference stays visible in the file rather than living
+    only in a commit message.
+    """
+    from jhora.horoscope.chart import charts
+    groups = {
+        "shadvarga": charts.vimsopaka_shadvarga_of_planets,
+        "saptavarga": charts.vimsopaka_sapthavarga_of_planets,
+        "dashavarga": charts.vimsopaka_dhasavarga_of_planets,
+        "shodasavarga": charts.vimsopaka_shodhasavarga_of_planets,
+    }
+    out = {"note": ("Scores out of 20 per graha, per group. `own_or_exalted` "
+                    "is PyJHora's count of divisions where the graha is in "
+                    "its own sign or exalted; `score` is the weighted "
+                    "total. THE DISPOSITOR OF SCORPIO AND AQUARIUS IS TAKEN "
+                    "AS THE NODE HERE, which is where Sidera and PyJHora "
+                    "part company — see tools/oracle/DIFFERENTIAL.md."),
+           "weights": {
+               "shadvarga": dict(const.shadvarga_amsa_vimsopaka),
+               "saptavarga": dict(const.sapthavarga_amsa_vimsopaka),
+               "dashavarga": dict(const.dhasavarga_amsa_vimsopaka),
+               "shodasavarga": dict(const.shodhasa_varga_amsa_vimsopaka)},
+           "ladder": list(const.vimsopaka_bala_scores)}
+    for name, fn in groups.items():
+        pin_ayanamsa()
+        result = fn(jd, place)
+        out[name] = {
+            BODIES[int(p) + 1]: {
+                "own_or_exalted": int(v[0]),
+                "score": round(float(v[2]), 6),
+            } for p, v in result.items()}
+    return out
 
 
 def main() -> int:
