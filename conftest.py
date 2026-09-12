@@ -218,6 +218,14 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
         "external", "PyJHora — an independent implementation, compared per "
                     "body and per division for both fictional charts, sign "
                     "AND divisional longitude"),
+    # The thresholds that turn a gated number into an ungated sentence.
+    # A mutation survey moved STRONG_FLOOR from 28 to 20 — taking the
+    # reference chart from four strong houses to twelve — and the whole
+    # suite stayed green. These are product rules about where the bands
+    # sit, so they are invariants, not oracle values.
+    "TestInterpretationThresholds": (
+        "invariant", "product rule: where the strong/middling/thin bands "
+                     "fall, and that both SAV consumers agree"),
     "TestAshtakavarga": (
         "external", "PyJHora — an independent implementation, compared per "
                     "SIGN for both fictional charts; plus the classical "

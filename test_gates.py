@@ -9991,6 +9991,176 @@ class TestEveryDivisionMatchesTheOracle:
         assert vargas.varga_sign(30.5, "D60") == 2
 
 
+class TestInterpretationThresholds:
+    """The four constants that turn a number into a sentence.
+
+    WHY THIS CLASS EXISTS. The correctness audit ran a mutation survey and
+    six of seven mutations died instantly — including the Ashtakavarga
+    bindu offset, which is gated per-sign against PyJHora. The survivor was
+    `STRONG_FLOOR = 28 -> 20`, which takes the reference chart from FOUR
+    houses called strong to all twelve, and the whole 655-test suite stayed
+    green.
+
+    The shape of that gap is worth naming: the hard part was gated and the
+    visible part was not. The bindu tables are checked body by body against
+    a second implementation; the two constants that convert those numbers
+    into "your strongest houses are..." were checked by nothing at all. The
+    same hole existed in `vimsopaka`.
+
+    So these assert BOUNDARIES, not existence — a value at the threshold,
+    one either side of it, and the bands they produce. A test that only
+    said `assert STRONG_FLOOR == 28` would pin the number while leaving the
+    comparison free to be the wrong one.
+    """
+
+    # --- ashtakavarga ------------------------------------------------------
+
+    def test_the_sav_bands_are_exactly_where_the_constants_say(self):
+        import ashtakavarga as av
+        assert av.STRONG_FLOOR == 28
+        assert av.THIN_CEILING == 25
+        assert av.THIN_CEILING < av.STRONG_FLOOR, (
+            "the bands overlap — a score cannot be both")
+
+    @pytest.mark.parametrize("score,band", [
+        (0, "thin"), (24, "thin"),
+        (25, "thin"),        # AT the ceiling: inclusive, see the note below
+        (26, "middling"), (27, "middling"),
+        (28, "strong"),      # AT the floor: inclusive
+        (38, "strong"), (56, "strong"),
+    ])
+    def test_every_sav_band_boundary(self, score, band):
+        """THE BOUNDARY ITSELF, including both inclusive edges.
+
+        25 is thin and 28 is strong; 26 and 27 are neither. The audit found
+        the module docstring saying "under 25" — a strict comparison — while
+        both consumers implement `<= 25`, so a house at exactly 25 was
+        labelled thin by the app and unremarkable by its own documentation.
+        On the reference chart that is house 12. The prose was corrected to
+        match the shipped behaviour; nothing a reader sees moved.
+        """
+        import ashtakavarga as av
+        computed = ("strong" if score >= av.STRONG_FLOOR
+                    else "thin" if score <= av.THIN_CEILING
+                    else "middling")
+        assert computed == band, score
+
+    def test_both_sav_consumers_agree_about_every_band(self):
+        """`app.py` and `chartfacts.py` each carry their own copy of the
+        comparison. They must not drift apart — a house called strong on
+        the plate and thin in the ledger is one chart contradicting
+        itself."""
+        import ashtakavarga as av
+        import chartfacts
+        import fixtures
+        from app import ashtakavarga_view
+        chart = compute_chart(fixtures.birth("reference"))
+        rows = {r["house"]: r["band"]
+                for r in ashtakavarga_view(chart)["rows"]}
+        assert len(rows) == 12
+        facts = {f.id: f for f in chartfacts.build_facts(chart, AGENT_WHEN)}
+        for house in range(1, 13):
+            fact = facts[f"sav.house.{house}"]
+            score = fact.value["bindus"]
+            expected = ("strong" if score >= av.STRONG_FLOOR
+                        else "thin" if score <= av.THIN_CEILING
+                        else "middling")
+            assert rows[house] == expected, (house, score)
+            # The ledger says the same thing in words.
+            if expected == "strong":
+                assert "among its strongest" in fact.statement, house
+            elif expected == "thin":
+                assert "among its thinnest" in fact.statement, house
+            else:
+                assert "among its" not in fact.statement, house
+
+    def test_moving_the_sav_floor_changes_what_a_reader_is_told(self):
+        """The mutation that survived, turned into a gate. If the floor can
+        move without changing any verdict, the constant is decoration."""
+        import ashtakavarga as av
+        import fixtures
+        chart = compute_chart(fixtures.birth("reference"))
+        sav = av.ashtakavarga(chart).sav_by_house
+        at_28 = [h for h, v in sav.items() if v >= 28]
+        at_20 = [h for h, v in sav.items() if v >= 20]
+        assert len(at_28) == 4, at_28
+        assert len(at_20) == 12, at_20
+        assert at_28 != at_20, (
+            "the shipped floor and a badly wrong one agree on this chart, "
+            "so this chart cannot witness the constant")
+
+    # --- vimsopaka ---------------------------------------------------------
+
+    def test_the_vimsopaka_bands_are_exactly_where_the_constants_say(self):
+        import vimsopaka as vp
+        assert vp.STRONG_FLOOR == 15.0
+        assert vp.THIN_CEILING == 10.0
+        assert vp.THIN_CEILING < vp.STRONG_FLOOR
+        # The scale it divides is 0-20, so the bands must sit inside it.
+        assert 0 < vp.THIN_CEILING < vp.STRONG_FLOOR < vp.OWN_SIGN_VALUE
+
+    @pytest.mark.parametrize("score,band", [
+        (0.0, "thin"), (9.99, "thin"),
+        (10.0, "middling"),   # AT the ceiling: EXCLUSIVE here, unlike SAV
+        (12.5, "middling"), (14.99, "middling"),
+        (15.0, "strong"),     # AT the floor: inclusive, same as SAV
+        (20.0, "strong"),
+    ])
+    def test_every_vimsopaka_band_boundary(self, score, band):
+        """Note the asymmetry with Ashtakavarga, which is REAL and is the
+        reason these are parametrised separately rather than shared.
+
+        `vimsopaka.band` uses a strict `<` for thin where Ashtakavarga uses
+        `<=`, so a score of exactly 10.0 is middling while a SAV of exactly
+        25 is thin. No fixture value currently sits on the vimsopaka
+        boundary, so nothing observable depends on it — which is precisely
+        why it needs a test rather than a reader noticing one day.
+        """
+        import vimsopaka as vp
+        assert vp.band(score) == band, score
+
+    def test_the_two_modules_disagree_about_their_lower_edge(self):
+        """Pinned deliberately, as a FINDING rather than a preference.
+
+        Ashtakavarga treats its ceiling as inclusive and vimsopaka treats
+        its own as exclusive. Both are defensible; having both without
+        knowing it is not. This asserts the current behaviour so that
+        aligning them later is a decision someone makes, not a drift.
+        """
+        import ashtakavarga as av
+        import vimsopaka as vp
+        sav_at_edge = ("thin" if av.THIN_CEILING <= av.THIN_CEILING
+                       else "middling")
+        assert sav_at_edge == "thin"
+        assert vp.band(vp.THIN_CEILING) == "middling"
+
+    def test_moving_the_vimsopaka_floor_changes_what_a_reader_is_told(self):
+        import schools
+        import vimsopaka as vp
+        import fixtures
+        chart = compute_chart(fixtures.birth("reference"))
+        with schools.use({}):
+            scores = vp.scores(chart)
+        at_15 = [p for p, v in scores.items() if v >= 15.0]
+        at_10 = [p for p, v in scores.items() if v >= 10.0]
+        assert len(at_15) == 2, at_15
+        assert len(at_10) == 7, at_10
+        assert at_15 != at_10
+
+    def test_every_band_name_is_one_of_three(self):
+        """No fourth band can appear by accident from either module."""
+        import ashtakavarga as av
+        import vimsopaka as vp
+        names = {"strong", "middling", "thin"}
+        for score in range(0, 57):
+            computed = ("strong" if score >= av.STRONG_FLOOR
+                        else "thin" if score <= av.THIN_CEILING
+                        else "middling")
+            assert computed in names, score
+        for tenth in range(0, 201):
+            assert vp.band(tenth / 10.0) in names, tenth
+
+
 class TestAshtakavarga:
     """Milestone 2 — raw BAV and SAV.
 

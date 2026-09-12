@@ -237,8 +237,18 @@ def ashtakavarga(chart: Chart) -> Ashtakavarga:
 # --- the reading --------------------------------------------------------------
 
 #: Where the tradition draws its own lines. A sign carrying 28 or more is
-#: read as well supported and one under 25 as thin; the middle band is
-#: unremarkable and is not dressed up as a finding.
+#: read as well supported and one carrying 25 OR FEWER as thin; 26 and 27
+#: are unremarkable and are not dressed up as a finding.
+#:
+#: BOTH EDGES ARE INCLUSIVE, and this comment used to say "under 25" — a
+#: strict comparison — while `app.py` and `chartfacts.py` both implemented
+#: `<= 25`. On the reference chart the 12th sits at exactly 25 and was
+#: called thin by the app and unremarkable by its own documentation. The
+#: prose was wrong, not the code: nothing a reader sees moved.
+#:
+#: `TestInterpretationThresholds` now pins both edges. It exists because a
+#: mutation survey moved STRONG_FLOOR from 28 to 20 — taking this chart
+#: from four strong houses to twelve — and the entire suite stayed green.
 STRONG_FLOOR = 28
 THIN_CEILING = 25
 
