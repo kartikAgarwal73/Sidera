@@ -48,6 +48,7 @@ from pathlib import Path
 
 from engine import SIGNS, PLANETS, Chart
 from chartfacts import build_facts, facts_payload
+from dashas import NAKSHATRAS as _NAKSHATRA_NAMES
 
 # The commission said "claude-sonnet-4-6 or cheaper". Sonnet 5 is both:
 # $2/$10 per MTok against Sonnet 4.6's $3/$15, and a newer model. Override
@@ -77,11 +78,23 @@ WHAT YOU MAY DRAW ON
 `transit.*` is TODAY'S SKY, and the same graha is usually in a different sign \
 in each. Say which you mean — "transiting Jupiter", "your natal Jupiter" — \
 never a bare "Jupiter is in ...".
-`varga.d9.*` and `varga.d10.*` are DIVISIONAL charts — a third and fourth \
-sky. Venus can be in Cancer at birth, Virgo in the D9 and Gemini in the D10, \
-all true at once. Always name the chart: "in the D9, Venus is in ...". These \
-are sign-level only; there is no degree within a divisional sign, so never \
-give a varga degree, nakshatra or dignity-by-degree.
+`varga.*` and `d9.*`/`d10.*` are DIVISIONAL charts — further skies. Venus \
+can be in Cancer at birth, Virgo in the D9 and Gemini in the D10, all true \
+at once. Always name the chart: "in the D9, Venus is in ...". D9 and D10 \
+arrive in full; the other divisions usually arrive as their lagna only, \
+plus whichever division the question's own domain is tested by.
+
+These facts DO carry a degree within the divisional sign. Use it when the \
+fact you are citing carries one — "in the D9, Venus is at 24°51′ of Virgo" \
+is a statement the ledger supports. Two limits on it, both hard. First, the \
+divisional degree is a SCALING CONVENTION — the position within the part, \
+stretched over a full 30° — and not a figure the classical texts assign, so \
+do not lean on it as though a text had given it; the fact says as much and \
+so should you. Second, the ledger carries the divisional sign, degree, \
+house and vargottama status and NOTHING ELSE: there is no varga nakshatra \
+and no varga dignity in it. Asked for one, say it is not computed rather \
+than deriving it — a degree you were given is not permission to compute \
+what was withheld.
 `contact.*` — a transiting graha sitting within 3° of a NATAL graha or the \
 lagna. These are the sharpest facts in the ledger; use them.
 `rules` — the classical rules you interpret through. Cite by id.
@@ -600,6 +613,58 @@ def _frame_positions(chart: Chart, when: datetime) -> dict:
     }
 
 
+def _varga_degrees(chart: Chart) -> dict:
+    """{frame: {planet: degree-in-divisional-sign}}.
+
+    Separate from `_frame_positions` because it is checked separately: a
+    degree claim is only made some of the time, and a missing degree is not
+    a violation — an answer that names the sign and stops is complete.
+    """
+    from vargas import dasamsa, navamsa
+    return {
+        "d9": {n: p.degree_in_sign for n, p in navamsa(chart).planets.items()},
+        "d10": {n: p.degree_in_sign
+                for n, p in dasamsa(chart).planets.items()},
+    }
+
+
+# A degree figure following a placement: "24°51′", "24.85°", "24 degrees".
+# Minutes are optional; the precision of what was written sets the tolerance
+# the claim is judged at, so an honest rounding passes and a wrong figure
+# does not.
+_DEGREE_FIGURE = re.compile(
+    r"(\d{1,2}(?:\.\d+)?)\s*(?:°|\bdeg(?:rees?)?\b)"
+    r"(?:\s*(\d{1,2})\s*(?:['′]|\bmin(?:utes?)?\b))?",
+    re.IGNORECASE)
+
+
+def _parse_degree(match) -> tuple[float, float]:
+    """(value, tolerance) for a written degree figure.
+
+    The tolerance IS the precision the writer chose: a claim written to the
+    arcminute is judged to the arcminute, one written as a whole number is
+    judged to the degree. Rounding honestly is not a violation; being wrong
+    is.
+    """
+    whole = float(match.group(1))
+    if match.group(2) is not None:
+        return whole + float(match.group(2)) / 60.0, 1.0 / 60.0
+    if "." in match.group(1):
+        places = len(match.group(1).split(".")[1])
+        return whole, 10.0 ** -places
+    return whole, 1.0
+
+
+#: Dignities and nakshatras are NOT in the ledger for a divisional chart —
+#: it carries sign, degree, house and vargottama status and nothing else.
+#: A claim of either inside a varga clause is unsupported however plausible
+#: it sounds, and plausible is exactly the problem.
+_VARGA_UNCOMPUTED = re.compile(
+    r"\b(exalted|debilitated|moolatrikona|m[uū]latrikona|own\s+sign|"
+    + "|".join(re.escape(n) for n in _NAKSHATRA_NAMES)
+    + r")\b", re.IGNORECASE)
+
+
 _FRAME_LABEL = {"natal": "", "transit": "transiting ",
                 "d9": "in the D9, ", "d10": "in the D10, "}
 
@@ -655,13 +720,40 @@ def validate_answer(text: str, chart: Chart, when: datetime,
             f"{_FRAME_LABEL.get(frame, '')}{planet} is in "
             f"{'house ' if unit == 'house' else ''}{actual}, not {claimed}")
 
+    degrees = _varga_degrees(chart)
+
     for m in _CLAIM_SIGN.finditer(text):
         planet = _canon(m.group(1), PLANETS)
         claimed = _canon(m.group(2), SIGNS)
-        bad = _check(planet, claimed, _frame(text, m.start(), m.end()),
-                     0, m.group(0), "sign")
+        frame = _frame(text, m.start(), m.end())
+        bad = _check(planet, claimed, frame, 0, m.group(0), "sign")
         if bad:
             out.append(bad)
+            continue
+
+        # THE DEGREE, WHERE ONE WAS GIVEN. The ledger carries divisional
+        # degrees now, so the prompt asks the model to use them — and a
+        # figure the model is invited to state is a figure that has to be
+        # checked. A claim with no degree is complete as it stands; only a
+        # stated one is judged, at the precision it was written to.
+        if frame not in ("d9", "d10", "varga"):
+            continue
+        tail = text[m.end():m.end() + 24]
+        figure = _DEGREE_FIGURE.match(tail.lstrip(" ,—-–at"))
+        if not figure:
+            continue
+        claimed_deg, tolerance = _parse_degree(figure)
+        candidates = ([degrees[frame][planet]] if frame in degrees
+                      else [degrees["d9"][planet], degrees["d10"][planet]])
+        if any(abs(claimed_deg - actual) <= tolerance + 1e-9
+               for actual in candidates):
+            continue
+        actual = " or ".join(f"{c:.2f}°" for c in candidates)
+        out.append(Violation(
+            "wrong-varga-degree", m.group(0) + figure.group(0),
+            f"in the {frame.upper() if frame != 'varga' else 'divisional'} "
+            f"chart {planet} is at {actual} of {claimed}, "
+            f"not {claimed_deg:.2f}°"))
 
     for m in _CLAIM_HOUSE.finditer(text):
         planet = _canon(m.group(1), PLANETS)
@@ -677,6 +769,20 @@ def validate_answer(text: str, chart: Chart, when: datetime,
             out.append(Violation(
                 "wrong-lagna", m.group(0),
                 f"the lagna is {chart.lagna.sign}, not {claimed}"))
+
+    # WHAT A DIVISIONAL CHART DOES NOT CARRY. Sign, degree, house and
+    # vargottama status, and nothing else — no nakshatra, no dignity. Being
+    # given a degree is not permission to compute what was withheld, and a
+    # derived dignity reads exactly like a looked-up one, which is why this
+    # is checked rather than merely asked for.
+    for m in _VARGA_UNCOMPUTED.finditer(text):
+        if _frame(text, m.start(), m.end()) not in ("d9", "d10", "varga"):
+            continue
+        out.append(Violation(
+            "varga-not-computed", m.group(0),
+            f"'{m.group(0)}' in a divisional chart is not in the ledger — "
+            f"it carries the divisional sign, degree, house and vargottama "
+            f"status only"))
 
     return out
 

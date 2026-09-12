@@ -3168,6 +3168,129 @@ class TestGroundedAgent:
         assert not result.ok
         assert any(v.kind == "wrong-d9-sign" for v in result.violations)
 
+    def test_a_degree_level_varga_answer_is_ledger_backed_not_withheld(
+            self, chart):
+        """THE STALE-PROMPT BUG, pinned at both ends.
+
+        Until the divisions were cast at degree level the prompt told the
+        model there was no degree inside a divisional sign and forbade
+        stating one. The ledger has carried those degrees since cc308c7, so
+        the instruction was telling the model to withhold a fact it had
+        been handed. Both halves are asserted here: the prompt now says the
+        degrees are there and are to be used, AND a true degree-level
+        answer survives validation instead of being withheld.
+        """
+        from agent import SYSTEM_PROMPT, ask_chart
+        from vargas import navamsa
+
+        # The instruction itself. The retired prohibition must be gone —
+        # not merely contradicted somewhere else in the prompt.
+        assert "there is no degree within a divisional sign" not in \
+            SYSTEM_PROMPT
+        assert "never give a varga degree" not in SYSTEM_PROMPT
+        assert "DO carry a degree within the divisional sign" in SYSTEM_PROMPT
+        # …and the two limits that replaced it are still stated.
+        assert "SCALING CONVENTION" in SYSTEM_PROMPT
+        assert "no varga nakshatra" in SYSTEM_PROMPT
+
+        venus = navamsa(chart).planets["Venus"]
+        answer = (f"In the D9, Venus is in {venus.sign} at {venus.dms}, "
+                  f"in the {ordinal(venus.house)} house from the D9 lagna.")
+        result = ask_chart(
+            chart, AGENT_WHEN, "Where exactly is my Venus in the D9?",
+            client=FakeClient([_reply(answer, facts=["varga.d9.venus"])]),
+            model="test-model")
+        assert result.ok, (
+            "a true degree-level varga answer was withheld: "
+            f"{[v.kind for v in result.violations]}")
+        assert venus.dms in result.answer
+
+    def test_a_wrong_varga_degree_is_still_caught(self, chart):
+        """The other side of the same change. Inviting the model to state a
+        degree means the degree has to be checked — an invitation without a
+        check is a wider fence, not a better one."""
+        from agent import ask_chart
+        from vargas import navamsa
+        venus = navamsa(chart).planets["Venus"]
+        wrong = (venus.degree_in_sign + 12.0) % 30.0
+        client = FakeClient([_reply(
+            f"In the D9, Venus is in {venus.sign} at {wrong:.2f}°.",
+            facts=["varga.d9.venus"])])
+        result = ask_chart(chart, AGENT_WHEN, "Where is D9 Venus?",
+                           client=client, model="test-model")
+        assert not result.ok
+        assert any(v.kind == "wrong-varga-degree" for v in result.violations)
+
+        # The same, written to the arcminute — which is the form the ledger
+        # itself renders, and so the form a model is most likely to copy.
+        # Judged at its own precision, not at the looser one a decimal
+        # claim gets.
+        wrong_dms = f"{int(wrong)}°{int((wrong % 1) * 60):02d}′"
+        dms = ask_chart(
+            chart, AGENT_WHEN, "Where is D9 Venus?",
+            client=FakeClient([_reply(
+                f"In the D9, Venus is in {venus.sign} at {wrong_dms}.",
+                facts=["varga.d9.venus"])]),
+            model="test-model")
+        assert not dms.ok
+        assert any(v.kind == "wrong-varga-degree" for v in dms.violations)
+        # A two-arcminute error is an error. The tolerance is the precision
+        # the writer chose, not a band wide enough to hide a wrong figure.
+        near = venus.degree_in_sign + 2.0 / 60.0
+        near_dms = f"{int(near)}°{int(round((near % 1) * 60)):02d}′"
+        close = ask_chart(
+            chart, AGENT_WHEN, "Where is D9 Venus?",
+            client=FakeClient([_reply(
+                f"In the D9, Venus is in {venus.sign} at {near_dms}.",
+                facts=["varga.d9.venus"])]),
+            model="test-model")
+        assert not close.ok, f"{near_dms} passed against {venus.dms}"
+
+        # Rounding honestly is not being wrong. The claim is judged at the
+        # precision it was written to, so a whole-degree figure passes and
+        # an arcminute figure is held to the arcminute.
+        for figure in (f"{venus.degree_in_sign:.0f}°",
+                       f"{venus.degree_in_sign:.1f}°", venus.dms):
+            ok = ask_chart(
+                chart, AGENT_WHEN, "Where is D9 Venus?",
+                client=FakeClient([_reply(
+                    f"In the D9, Venus is in {venus.sign} at {figure}.",
+                    facts=["varga.d9.venus"])]),
+                model="test-model")
+            assert ok.ok, f"an honest rounding was rejected: {figure}"
+
+    def test_a_varga_nakshatra_or_dignity_is_withheld_as_uncomputed(
+            self, chart):
+        """The ledger carries divisional sign, degree, house and vargottama
+        status — and nothing else. Being given a degree is not permission to
+        compute what was withheld, and a derived dignity reads exactly like
+        a looked-up one."""
+        from agent import ask_chart
+        from vargas import navamsa
+        venus = navamsa(chart).planets["Venus"]
+        for claim in (f"In the D9, Venus is in {venus.sign} in Hasta "
+                      f"nakshatra.",
+                      f"In the D9, Venus is in {venus.sign} and is exalted "
+                      f"there."):
+            result = ask_chart(
+                chart, AGENT_WHEN, "Venus in the D9?",
+                client=FakeClient([_reply(claim,
+                                          facts=["varga.d9.venus"])]),
+                model="test-model")
+            assert not result.ok, claim
+            assert any(v.kind == "varga-not-computed"
+                       for v in result.violations), claim
+
+        # And it does NOT fire on a natal dignity, which IS in the ledger.
+        natal = ask_chart(
+            chart, AGENT_WHEN, "How is my Moon?",
+            client=FakeClient([_reply(
+                "Your natal Moon is in moolatrikona.",
+                facts=["planet.moon"])]),
+            model="test-model")
+        assert not any(v.kind == "varga-not-computed"
+                       for v in natal.violations)
+
     def test_an_unnamed_divisional_claim_accepts_either_varga(self, chart):
         """'in the divisional chart' without saying which is the writer's
         ambiguity, not a falsehood — it passes if either varga supports it,
@@ -3739,14 +3862,18 @@ class TestAgentEndpoint:
             "/ask", json=self._body(sid=sid, question="")).status_code == 400
         assert agent_mod.LIMITER.remaining(sid) == before
 
-    def test_a_withheld_answer_does_spend_a_question_and_says_so(
+    def test_a_withheld_answer_does_not_spend_a_question(
             self, client, tmp_path, monkeypatch):
-        """The OTHER half, pinned because it is the surprising one and it is
-        a decision rather than an accident: a reply that reached the model
-        and then failed validation HAS been generated and paid for, so it
-        counts. The reader is told — the 422 carries the new `remaining`, so
-        the counter on screen moves rather than silently disagreeing with
-        the server on the next question."""
+        """A withhold is OUR validator catching OUR model, and the reader
+        does not pay for that.
+
+        This used to assert the opposite, on the reasoning that the API call
+        had been made and paid for. That reasoning was about our costs. At
+        five questions a session a withheld answer takes a fifth of what the
+        reader has and returns nothing — the cost of a failed generation is
+        ours to carry, not theirs. `LIMITER.record` therefore sits BELOW the
+        `answer.ok` branch, and the 422 reports the counter unmoved so the
+        screen and the server do not disagree on the next question."""
         import agent as agent_mod
         from agent import AgentAnswer, Violation
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-not-a-real-key")
@@ -3765,8 +3892,30 @@ class TestAgentEndpoint:
         assert r.status_code == 422
         payload = r.get_json()
         assert payload["withheld"] is True
+        assert agent_mod.LIMITER.remaining(sid) == before, (
+            "a withheld answer charged the reader a question")
+        assert payload["remaining"] == before
+
+        # Repeatedly, too. A withhold that cost nothing once but drained the
+        # session over five tries would be the same bug wearing a slower
+        # clock — and this is the case that matters, because a chart the
+        # validator keeps catching produces withhold after withhold.
+        for _ in range(6):
+            assert client.post(
+                "/ask", json=self._body(sid=sid)).status_code == 422
+        assert agent_mod.LIMITER.remaining(sid) == before
+
+        # And a GOOD answer still spends one, or the counter means nothing.
+        monkeypatch.setattr(
+            agent_mod, "ask_chart",
+            lambda *a, **k: AgentAnswer(
+                answer="Your Moon is in Taurus, in the 10th.",
+                verdict="Your Moon is in Taurus.", model="fake",
+                facts_used=["planet.moon"], statements=[]))
+        good = client.post("/ask", json=self._body(sid=sid))
+        assert good.status_code == 200
         assert agent_mod.LIMITER.remaining(sid) == before - 1
-        assert payload["remaining"] == before - 1
+        assert good.get_json()["remaining"] == before - 1
 
     def test_feedback_appends_to_the_log(self, client, tmp_path,
                                          monkeypatch):

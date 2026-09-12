@@ -230,9 +230,9 @@ if the counts below drift from reality, or if a dependency loses its pin.
 | Provenance | Tests | Share | What a failure means |
 |---|---|---|---|
 | `external` | 129 | 21% | anchored outside this build — a red one means the code is wrong |
-| `invariant` | 406 | 66% | true by definition or product rule — a red one means the code is wrong |
+| `invariant` | 409 | 66% | true by definition or product rule — a red one means the code is wrong |
 | `characterization` | 80 | 13% | froze observed output — protects continuity, not correctness |
-| **total** | 615 | | |
+| **total** | 618 | | |
 <!-- /HYGIENE-COUNTS -->
 
 **Failure modes this build has actually suffered**, and what now catches them:

@@ -1528,14 +1528,18 @@ def _answer_one_question(body, birth, ip: str, session_id: str):
     except agent.AgentUnavailable as exc:
         return jsonify(error=str(exc)), 503
 
-    agent.LIMITER.record(ip, session_id)
-    remaining = agent.LIMITER.remaining(session_id)
-
     if not answer.ok:
         # The model asserted something the chart does not support. The
         # answer is withheld rather than shown with a warning: a caveat
         # under a fluent wrong sentence is not a correction, and this is
         # exactly the failure the feature exists to prevent.
+        #
+        # AND IT IS NOT CHARGED. The limiter is recorded below this branch,
+        # not above it: a withheld answer is our validator catching our
+        # model, and billing the reader a question for it makes them pay
+        # for our failure. At five questions a session that is a fifth of
+        # what they have. The API call was made and cost us something —
+        # that is our problem, not theirs.
         agent.log_correction(
             body.get("question", ""), answer.answer,
             reason="withheld: failed ledger validation",
@@ -1550,7 +1554,12 @@ def _answer_one_question(body, birth, ip: str, session_id: str):
             error=f"{hint} That reply {why}, so it was not shown.",
             withheld=True,
             violations=[f"{v.kind}: {v.detail}" for v in answer.violations],
-            remaining=remaining), 422
+            # Unchanged, and said so out loud: the counter on screen must
+            # not move, or the reader is told they were charged.
+            remaining=agent.LIMITER.remaining(session_id)), 422
+
+    agent.LIMITER.record(ip, session_id)
+    remaining = agent.LIMITER.remaining(session_id)
 
     import rulelib
     facts = {f.id: f.statement for f in chartfacts.build_facts(chart, when)}
