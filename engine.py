@@ -10,7 +10,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import swisseph as swe
 
@@ -104,13 +104,39 @@ def ephemeris_backend() -> str:
 
 
 def resolve_timezone(tz: str):
-    """Accept an IANA name ('Asia/Kolkata') or a fixed offset ('+05:30')."""
-    m = _OFFSET_RE.match(tz.strip())
+    """Accept an IANA name ('Asia/Kolkata') or a fixed offset ('+05:30').
+
+    RAISES ValueError, NOT ZoneInfoNotFoundError, for anything it cannot
+    resolve. The routes catch ValueError and render its text to the reader;
+    everything else falls through to "Could not cast the chart: <repr>",
+    which told a reader who typed a stale zone name that their birth data
+    was broken. The birth data was fine; the name was one the installed
+    database did not carry.
+
+    Legacy aliases like 'Asia/Calcutta' and 'Asia/Saigon' resolve normally
+    — they are backward links in the IANA database, and `tzdata` is pinned
+    in requirements.txt partly so they are always present rather than
+    depending on how complete the host's system tzdb happens to be.
+    """
+    name = (tz or "").strip()
+    if not name:
+        raise ValueError(
+            "No timezone given. Pick a city from the suggestions, which "
+            "sets it for you, or enter an IANA name such as 'Asia/Kolkata' "
+            "or a fixed offset such as '+05:30'.")
+    m = _OFFSET_RE.match(name)
     if m:
         sign = 1 if m.group(2) == "+" else -1
         delta = timedelta(hours=int(m.group(3)), minutes=int(m.group(4)))
-        return timezone(sign * delta, name=tz.strip())
-    return ZoneInfo(tz)
+        return timezone(sign * delta, name=name)
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError) as exc:
+        raise ValueError(
+            f"Unknown timezone {name!r}. Pick a city from the suggestions, "
+            f"which sets the timezone for you, or enter an IANA name such "
+            f"as 'Asia/Kolkata' or a fixed offset such as '+05:30'."
+        ) from exc
 
 
 def julian_day_ut(when: datetime) -> float:

@@ -223,6 +223,12 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
     # reference chart from four strong houses to twelve — and the whole
     # suite stayed green. These are product rules about where the bands
     # sit, so they are invariants, not oracle values.
+    # The IANA database is an outside source, and the Indian offsets below
+    # are published history — four distinct values, including the 1942-45
+    # wartime +6:30 — not this build's own output.
+    "TestTimezoneResolution": (
+        "external", "the IANA time zone database — published historical "
+                    "offsets, and the backward links for legacy aliases"),
     "TestInterpretationThresholds": (
         "invariant", "product rule: where the strong/middling/thin bands "
                      "fall, and that both SAV consumers agree"),

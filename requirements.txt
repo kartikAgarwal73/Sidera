@@ -8,6 +8,20 @@ pyswisseph==2.10.3.2
 Flask==3.1.3
 gunicorn==23.0.0
 #
+# THE TIME ZONE DATABASE IS A NUMERICAL DEPENDENCY, not a convenience.
+# `engine.resolve_timezone` hands an IANA name to `zoneinfo`, and the offset
+# it returns decides the UTC moment every position is computed from. Without
+# this package Python falls back to whatever tzdb the host happens to carry
+# — a file that changes several times a year and is absent entirely on some
+# slim images. Either way the chart moves without a line of code changing,
+# which is the exact failure this file exists to prevent.
+#
+# It also settles the legacy aliases. `Asia/Calcutta` — which older birth
+# records and city databases still use — is a backward link that ships here
+# and is missing from some system installs; without it that name raised
+# ZoneInfoNotFoundError and surfaced as an unreadable 400.
+tzdata==2026.4
+#
 # 'Ask about this chart' (v1.1). Optional at runtime: with no
 # ANTHROPIC_API_KEY the agent panel explains that it is unconfigured and
 # every computed section still works, so a deploy without a key is valid.

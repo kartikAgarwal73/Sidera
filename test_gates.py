@@ -9991,6 +9991,116 @@ class TestEveryDivisionMatchesTheOracle:
         assert vargas.varga_sign(30.5, "D60") == 2
 
 
+class TestTimezoneResolution:
+    """The tz database is a NUMERICAL dependency, and bad names fail readably.
+
+    An IANA offset decides the UTC moment every position is computed from, so
+    the database that supplies it is as load-bearing as the ephemeris — and
+    it changes several times a year. The correctness audit found it unpinned
+    in a requirements file whose own header says an unpinned environment lets
+    a dependency change look like a code regression.
+    """
+
+    def test_the_timezone_database_is_pinned_like_everything_else(self):
+        reqs = (HERE / "requirements.txt").read_text(encoding="utf-8")
+        installed = [ln.strip() for ln in reqs.splitlines()
+                     if ln.strip() and not ln.strip().startswith("#")]
+        assert any(ln.startswith("tzdata==") for ln in installed), (
+            "tzdata is not pinned — the chart then depends on whichever tz "
+            "database the host happens to carry")
+        import tzdata
+        assert tzdata.__version__
+
+    def test_historical_indian_offsets_are_real_not_a_flat_five_thirty(self):
+        """India has had four offsets, and a birth chart must use the one in
+        force at the birth moment. A build that assumed +5:30 throughout
+        would be wrong for every chart before 1906 and for the war years."""
+        from engine import resolve_timezone
+        zone = resolve_timezone("Asia/Kolkata")
+        expected = {
+            (1853, 1, 1): timedelta(hours=5, minutes=53, seconds=28),   # LMT
+            (1860, 1, 1): timedelta(hours=5, minutes=53, seconds=20),   # HMT
+            (1880, 1, 1): timedelta(hours=5, minutes=21, seconds=10),   # MMT
+            (1905, 6, 15): timedelta(hours=5, minutes=21, seconds=10),
+            (1906, 6, 15): timedelta(hours=5, minutes=30),              # IST
+            (1942, 8, 15): timedelta(hours=5, minutes=30),
+            (1942, 10, 15): timedelta(hours=6, minutes=30),   # wartime
+            (1943, 6, 15): timedelta(hours=6, minutes=30),
+            (1945, 11, 15): timedelta(hours=5, minutes=30),
+            (1990, 3, 15): timedelta(hours=5, minutes=30),
+        }
+        for (year, month, day), offset in expected.items():
+            actual = datetime(year, month, day, 12, tzinfo=zone).utcoffset()
+            assert actual == offset, (year, month, day, actual, offset)
+        # …and the five are genuinely different, so this cannot pass
+        # against a database that flattened them: local mean time, Howrah,
+        # Madras, IST, and the wartime hour. (LMT and HMT differ by eight
+        # SECONDS — 5:53:28 against 5:53:20 — which is why this counts five
+        # and not the four a glance suggests.)
+        assert len(set(expected.values())) == 5
+
+    def test_the_legacy_alias_resolves_and_agrees(self):
+        """'Asia/Calcutta' is a backward link that older birth records and
+        city databases still carry. It was raising ZoneInfoNotFoundError,
+        which surfaced to the reader as an unreadable 400."""
+        from engine import resolve_timezone
+        legacy = resolve_timezone("Asia/Calcutta")
+        current = resolve_timezone("Asia/Kolkata")
+        for year in (1880, 1905, 1942, 1943, 1990, 2026):
+            moment = datetime(year, 10, 15, 12)
+            assert moment.replace(tzinfo=legacy).utcoffset() == \
+                moment.replace(tzinfo=current).utcoffset(), year
+        # A few more backward links, since the point is the class not the one.
+        for alias in ("Asia/Saigon", "Europe/Kiev", "America/Buenos_Aires"):
+            assert resolve_timezone(alias) is not None, alias
+
+    def test_an_unknown_zone_raises_ValueError_not_ZoneInfoNotFoundError(self):
+        """The routes catch ValueError and render its text. Anything else
+        falls through to 'Could not cast the chart: <repr>', which tells a
+        reader their birth data is broken when it is the NAME that is."""
+        from zoneinfo import ZoneInfoNotFoundError
+        from engine import resolve_timezone
+        for bad in ("Mars/Olympus", "Asia/Kolkatta", "GMT+5.5", "?"):
+            with pytest.raises(ValueError) as caught:
+                resolve_timezone(bad)
+            assert not isinstance(caught.value, ZoneInfoNotFoundError), bad
+            message = str(caught.value)
+            assert bad in message, bad
+            # It says what to do, not merely what went wrong.
+            assert "Pick a city" in message and "Asia/Kolkata" in message
+        for empty in ("", "   ", None):
+            with pytest.raises(ValueError) as caught:
+                resolve_timezone(empty)
+            assert "No timezone given" in str(caught.value)
+
+    def test_the_reader_sees_the_readable_message(self, client):
+        """End to end: a stale name renders its own explanation, and the
+        legacy alias renders a chart."""
+        def cast(tz):
+            return client.post("/", data={
+                "name": "", "date": "1990-06-15", "time": "12:00",
+                "lat": "22.57", "lon": "88.36", "tz": tz, "place": "Kolkata"})
+        bad = cast("Mars/Olympus")
+        assert bad.status_code == 400
+        page = bad.get_data(as_text=True)
+        assert "Unknown timezone" in page
+        assert "Could not cast the chart" not in page
+        assert "ZoneInfoNotFound" not in page
+        assert cast("Asia/Calcutta").status_code == 200
+        assert cast("Asia/Kolkata").status_code == 200
+
+    def test_a_fixed_offset_still_works_and_has_no_history(self):
+        """'+05:30' means exactly that at every moment — it is what a reader
+        supplies when they know the offset but not the zone."""
+        from engine import resolve_timezone
+        fixed = resolve_timezone("+05:30")
+        for year in (1880, 1942, 2026):
+            assert datetime(year, 10, 15, 12, tzinfo=fixed).utcoffset() == \
+                timedelta(hours=5, minutes=30), year
+        assert datetime(2026, 1, 1, tzinfo=resolve_timezone("-08:00")
+                        ).utcoffset() == timedelta(hours=-8)
+
+
 class TestInterpretationThresholds:
     """The four constants that turn a number into a sentence.
 
