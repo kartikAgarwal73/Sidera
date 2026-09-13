@@ -9991,6 +9991,200 @@ class TestEveryDivisionMatchesTheOracle:
         assert vargas.varga_sign(30.5, "D60") == 2
 
 
+class TestTheNewLedgerFacts:
+    """Arudhas, karakas, viṃśopaka, avasthās and the running PD, in the
+    ledger — so a reading can cite them and the validator can check them.
+
+    The correctness audit found five modules computed, gated against
+    PyJHora, and reachable by nothing: no ledger fact, no template, no
+    import outside their own tests. This is the first half of closing that.
+    """
+
+    @classmethod
+    @pytest.fixture(scope="class")
+    def ledger(cls):
+        import chartfacts
+        return {f.id: f for f in chartfacts.build_facts(
+            compute_chart(fixtures.birth("reference")), AGENT_WHEN)}
+
+    def test_every_arudha_is_addressable(self, ledger):
+        import arudhas
+        for house in range(1, 13):
+            fact = ledger[f"arudha.a{house}"]
+            assert fact.kind == "arudha"
+            assert fact.value["sign"] in SIGNS
+            assert 1 <= fact.value["house_from_lagna"] <= 12
+            assert set(fact.value["occupants"]) <= set(PLANETS)
+        upapada = ledger["arudha.upapada"]
+        chart = compute_chart(fixtures.birth("reference"))
+        assert upapada.value["sign"] == SIGNS[arudhas.upapada(chart)]
+        assert upapada.value["sign"] == ledger["arudha.a12"].value["sign"], (
+            "the Upapada is A12 — the two facts must not disagree")
+        assert "read for marriage" in upapada.statement
+
+    def test_a_contested_arudha_carries_both_schools(self):
+        """Where `dual_lord` splits the two readings the ledger records
+        BOTH. A fact that carried only the live one would let a reading
+        assert the Upapada while the reader never learns the other school
+        puts it elsewhere."""
+        import arudhas
+        import chartfacts
+        import schools
+        chart = compute_chart(fixtures.birth("reference"))
+        both = arudhas.both_schools(chart)
+        split = [h for h in range(1, 13)
+                 if both["single"][h - 1] != both["stronger"][h - 1]]
+        assert split, "no arudha splits on this chart — gate is vacuous"
+        ledger = {f.id: f for f in chartfacts.build_facts(chart, AGENT_WHEN)}
+        for house in split:
+            fact = ledger[f"arudha.a{house}"]
+            assert fact.value["schools_differ"] is True, house
+            assert fact.value["parashari"] != fact.value["jaimini"], house
+            # Both named in the prose, not only in the structured value.
+            assert fact.value["parashari"] in fact.statement, house
+            assert fact.value["jaimini"] in fact.statement, house
+            assert "disagree" in fact.statement, house
+        for house in set(range(1, 13)) - set(split):
+            assert ledger[f"arudha.a{house}"].value["schools_differ"] is False
+
+    def test_every_chara_karaka_and_the_karakamsa_are_addressable(self,
+                                                                  ledger):
+        import karakas
+        chart = compute_chart(fixtures.birth("reference"))
+        for karaka in karakas.karakas(chart):
+            fact = ledger[f"karaka.chara.{karaka.office.lower()}"]
+            assert fact.value["planet"] == karaka.planet
+            assert fact.value["signifies"] == karaka.signifies
+            assert karaka.abbr in fact.statement
+        km = ledger["karaka.karakamsa"]
+        assert km.value["planet"] == karakas.atmakaraka(chart).planet
+        assert km.value["sign"] in SIGNS
+        assert "navamsa sign" in km.statement
+
+    def test_the_darakaraka_and_upapada_are_both_present_and_not_merged(
+            self, ledger):
+        """They can point different ways — one reads the 7th lord's
+        condition, the other the 12th's arudha — and composing them into a
+        single verdict is the resolver's job, not the ledger's. Both facts
+        stand on their own."""
+        dk = ledger["karaka.chara.darakaraka"]
+        ul = ledger["arudha.upapada"]
+        assert "spouse" in dk.value["signifies"]
+        assert "marriage" in ul.statement
+        # Neither fact mentions the other or draws a conclusion from it.
+        assert "Upapada" not in dk.statement
+        assert "Darakaraka" not in ul.statement
+
+    def test_vimsopaka_carries_its_group_and_its_working(self, ledger):
+        import vimsopaka
+        group = ledger["vimsopaka.group"]
+        assert group.value["group"] in vimsopaka.GROUPS
+        assert "rule no sign" in group.statement, (
+            "the group fact must say why the nodes are absent")
+        for planet in vimsopaka.BODIES:
+            fact = ledger[f"vimsopaka.{planet.lower()}"]
+            assert 5.0 <= fact.value["score"] <= 20.0
+            assert fact.value["band"] in ("strong", "middling", "thin")
+            working = fact.value["working"]
+            assert len(working) == len(vimsopaka.GROUPS[group.value["group"]])
+            assert abs(sum(r["contributes"] for r in working)
+                       - fact.value["score"]) < 1e-6
+        for node in ("Rahu", "Ketu"):
+            assert f"vimsopaka.{node.lower()}" not in ledger
+
+    def test_every_avastha_is_addressable_and_keeps_both_states(self,
+                                                                ledger):
+        import avasthas
+        for planet in avasthas.BODIES:
+            fact = ledger[f"avastha.{planet.lower()}"]
+            assert fact.value["baladi"] in avasthas.BALADI_STATES
+            assert fact.value["jagradadi"] in avasthas.JAGRADADI_STATES
+            assert fact.value["baladi_name"] in fact.statement
+            assert fact.value["jagradadi_name"] in fact.statement
+        # The disagreement is stated where it happens.
+        jupiter = ledger["avastha.jupiter"]
+        assert jupiter.value["at_odds"] is True
+        assert "different ways" in jupiter.statement
+        for node in ("Rahu", "Ketu"):
+            assert f"avastha.{node.lower()}" not in ledger
+
+    def test_the_running_pratyantardasha_is_one_fact_not_seven_hundred(
+            self, ledger):
+        """The ledger is what the agent reads. The whole third level would
+        swamp it; the full tree stays queryable in `dashas`."""
+        import chartfacts
+        pd_facts = [i for i in ledger if i.startswith("dasha.pratyantar")]
+        assert pd_facts == ["dasha.pratyantar"]
+        fact = ledger["dasha.pratyantar"]
+        chart = compute_chart(fixtures.birth("reference"))
+        from dashas import vimshottari
+        maha, antara, pratyantara = vimshottari(chart).at_depth(AGENT_WHEN)
+        assert fact.value["maha"] == maha.lord
+        assert fact.value["antara"] == antara.lord
+        assert fact.value["pratyantara"] == pratyantara.lord
+        # It agrees with the MD/AD fact beside it rather than restating it.
+        current = ledger["dasha.current"].value
+        assert current["mahadasha"] == maha.lord
+        assert current["antardasha"] == antara.lord
+
+    def test_an_out_of_range_chart_simply_omits_the_pd_fact(self):
+        """No running period, no fact — and the ledger still builds."""
+        import chartfacts
+        from engine import BirthData
+        from datetime import date
+        birth = BirthData(year=date.today().year - 130, month=6, day=15,
+                          hour=12, minute=0, latitude=19.07283,
+                          longitude=72.88261, tz="Asia/Kolkata",
+                          place="Mumbai")
+        facts = chartfacts.build_facts(compute_chart(birth),
+                                       datetime.now(timezone.utc))
+        ids = {f.id for f in facts}
+        assert "dasha.pratyantar" not in ids
+        assert len(facts) > 400, "the rest of the ledger must still build"
+
+    def test_the_payload_slice_is_declared_and_bounded(self):
+        """A fact left out of the prompt is a fact the model cannot reach.
+        It is NOT a fact the validator stops checking — answers are
+        validated against the LEDGER — so the cost is reach, never
+        accuracy. This pins exactly what is dropped and why."""
+        import chartfacts
+        chart = compute_chart(fixtures.birth("reference"))
+        ledger = chartfacts.build_facts(chart, AGENT_WHEN)
+        payload = chartfacts.facts_payload(chart, AGENT_WHEN)
+        sent = {f["id"] for f in payload["facts"]}
+        held = {f.id for f in ledger} - sent
+        # The ONLY non-varga facts withheld are the twelve numbered
+        # arudhas. A12 is among them because the Upapada travels under its
+        # own id, carrying the same sign plus the reading attached to it —
+        # so nothing about the 12th's arudha is actually lost.
+        non_varga_held = {i for i in held
+                          if not (i.startswith("varga.")
+                                  or re.match(r"^d\d+\.", i))}
+        assert non_varga_held == {f"arudha.a{h}" for h in range(1, 13)}, \
+            non_varga_held
+        assert "arudha.upapada" in sent
+        assert "arudha.a12" not in sent
+        upapada = next(f for f in ledger if f.id == "arudha.upapada")
+        a12 = next(f for f in ledger if f.id == "arudha.a12")
+        assert upapada.value["sign"] == a12.value["sign"], (
+            "A12 is withheld from the prompt on the grounds that the "
+            "Upapada fact carries it — so they must agree")
+        for kind in ("karaka", "vimsopaka", "avastha"):
+            in_ledger = {f.id for f in ledger if f.kind == kind}
+            assert in_ledger <= sent, f"{kind} facts were dropped silently"
+        assert "dasha.pratyantar" in sent
+
+    def test_every_new_fact_kind_is_registered_in_the_ledger_contract(
+            self, ledger):
+        """A kind the rest of the app does not know about would render
+        nowhere and validate against nothing."""
+        kinds = {f.kind for f in ledger.values()}
+        for kind in ("arudha", "karaka", "vimsopaka", "avastha"):
+            assert kind in kinds, kind
+        # Ids stay unique and addressable across the whole enlarged ledger.
+        assert len(ledger) == len({f.id for f in ledger.values()})
+
+
 class TestTimezoneResolution:
     """The tz database is a NUMERICAL dependency, and bad names fail readably.
 
@@ -10211,38 +10405,43 @@ class TestInterpretationThresholds:
 
     @pytest.mark.parametrize("score,band", [
         (0.0, "thin"), (9.99, "thin"),
-        (10.0, "middling"),   # AT the ceiling: EXCLUSIVE here, unlike SAV
-        (12.5, "middling"), (14.99, "middling"),
+        (10.0, "thin"),       # AT the ceiling: inclusive, ALIGNED with SAV
+        (10.01, "middling"), (12.5, "middling"), (14.99, "middling"),
         (15.0, "strong"),     # AT the floor: inclusive, same as SAV
         (20.0, "strong"),
     ])
     def test_every_vimsopaka_band_boundary(self, score, band):
-        """Note the asymmetry with Ashtakavarga, which is REAL and is the
-        reason these are parametrised separately rather than shared.
+        """Both edges inclusive, MATCHING Ashtakavarga.
 
-        `vimsopaka.band` uses a strict `<` for thin where Ashtakavarga uses
-        `<=`, so a score of exactly 10.0 is middling while a SAV of exactly
-        25 is thin. No fixture value currently sits on the vimsopaka
-        boundary, so nothing observable depends on it — which is precisely
-        why it needs a test rather than a reader noticing one day.
+        `vimsopaka.band` used a strict `<` for thin where Ashtakavarga uses
+        `<=`, so a score of exactly 10.0 was middling while a SAV of exactly
+        25 was thin. The audit found it only because these gates assert
+        boundaries rather than constants, and it was aligned before either
+        number reached a reader — two thresholds that differ by accident are
+        worse than either choice made on purpose. Nothing observable moved:
+        no fixture value sits on the edge.
         """
         import vimsopaka as vp
         assert vp.band(score) == band, score
 
-    def test_the_two_modules_disagree_about_their_lower_edge(self):
-        """Pinned deliberately, as a FINDING rather than a preference.
+    def test_the_two_modules_agree_about_their_lower_edge(self):
+        """ONE RULE ACROSS THE APP, asserted as such.
 
-        Ashtakavarga treats its ceiling as inclusive and vimsopaka treats
-        its own as exclusive. Both are defensible; having both without
-        knowing it is not. This asserts the current behaviour so that
-        aligning them later is a decision someone makes, not a drift.
+        This test previously pinned the opposite — vimsopaka exclusive,
+        ashtakavarga inclusive — as a finding rather than a preference. The
+        finding was accepted and the two were aligned: a reader meeting a
+        SAV band and a vimsopaka band on the same screen meets one rule.
+        Here it is asserted from both sides so neither can drift again.
         """
         import ashtakavarga as av
         import vimsopaka as vp
-        sav_at_edge = ("thin" if av.THIN_CEILING <= av.THIN_CEILING
+        sav_at_edge = ("strong" if av.THIN_CEILING >= av.STRONG_FLOOR
+                       else "thin" if av.THIN_CEILING <= av.THIN_CEILING
                        else "middling")
         assert sav_at_edge == "thin"
-        assert vp.band(vp.THIN_CEILING) == "middling"
+        assert vp.band(vp.THIN_CEILING) == "thin"
+        # Just above each ceiling, both are middling.
+        assert vp.band(vp.THIN_CEILING + 0.01) == "middling"
 
     def test_moving_the_vimsopaka_floor_changes_what_a_reader_is_told(self):
         import schools

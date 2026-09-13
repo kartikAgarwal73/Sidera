@@ -23,7 +23,7 @@ from datetime import datetime
 
 from dashas import nakshatra_table, vimshottari
 from doshas import doshas_all, transit_weather
-from engine import PLANETS, Chart
+from engine import PLANETS, SIGNS, Chart
 from explain import ordinal
 import schools
 from rulelib import (
@@ -46,6 +46,10 @@ from transits import (
     transit_snapshot,
 )
 from vargas import dasamsa, navamsa
+import arudhas
+import avasthas
+import karakas
+import vimsopaka
 from ashtakavarga import BODIES as AV_BODIES
 from ashtakavarga import REDUCTIONS_NOTE, STRONG_FLOOR as av_strong
 from ashtakavarga import THIN_CEILING as av_thin
@@ -785,6 +789,172 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
                    "cancellations": list(dosha.cancellations)},
         ))
 
+    # --- arudhas and the Upapada -------------------------------------------
+    #
+    # A12 is read for marriage, so where the co-lord school splits the two
+    # readings BOTH are carried. A ledger that recorded only the live one
+    # would let a reading assert the Upapada without the reader ever
+    # learning that the other school puts it elsewhere.
+    arudha_view = arudhas.describe(chart)
+    both_arudhas = arudhas.both_schools(chart)
+    contested = set(arudha_view["contested_houses"])
+    for house in range(1, 13):
+        sign_index = arudha_view["arudhas"][house - 1]
+        sign = SIGNS[sign_index]
+        occupants = [p for p in PLANETS
+                     if chart.planets[p].sign_index == sign_index]
+        split = (both_arudhas["single"][house - 1]
+                 != both_arudhas["stronger"][house - 1])
+        facts.append(Fact(
+            id=f"arudha.a{house}",
+            kind="arudha",
+            statement=(
+                f"A{house}, the arudha of the {ordinal(house)} house, "
+                f"falls in {sign} — the {ordinal((sign_index - chart.lagna.sign_index) % 12 + 1)} "
+                f"house from the lagna"
+                + (f", with {_and_list(occupants)} in it." if occupants
+                   else ", with no graha in it.")
+                + (f" The two co-lord readings disagree here: "
+                   f"{SIGNS[both_arudhas['single'][house - 1]]} under the "
+                   f"sole classical lord, "
+                   f"{SIGNS[both_arudhas['stronger'][house - 1]]} under the "
+                   f"stronger co-lord." if split else "")
+                + school_note("dual_lord")),
+            value={"house": house, "sign": sign, "sign_index": sign_index,
+                   "house_from_lagna":
+                       (sign_index - chart.lagna.sign_index) % 12 + 1,
+                   "occupants": occupants,
+                   "lord": arudhas.SIGN_LORDS[sign_index],
+                   "contested": house in contested,
+                   "schools_differ": split,
+                   "parashari": SIGNS[both_arudhas["single"][house - 1]],
+                   "jaimini": SIGNS[both_arudhas["stronger"][house - 1]]},
+        ))
+    facts.append(Fact(
+        id="arudha.upapada",
+        kind="arudha",
+        statement=(
+            f"The Upapada Lagna — the arudha of the 12th — is "
+            f"{arudha_view['upapada_sign']}, the "
+            f"{ordinal(arudha_view['upapada_house'])} house from the lagna, "
+            f"ruled by {arudha_view['upapada_lord']}"
+            + (f", with {_and_list(arudha_view['upapada_occupants'])} on it."
+               if arudha_view["upapada_occupants"] else ", with no graha on it.")
+            + " It is read for marriage and for the spouse."
+            + ("" if arudha_view["schools_agree"] else
+               " The two co-lord readings do not agree across this chart.")
+            + school_note("dual_lord")),
+        value={"sign": arudha_view["upapada_sign"],
+               "sign_index": arudha_view["upapada_sign_index"],
+               "house_from_lagna": arudha_view["upapada_house"],
+               "lord": arudha_view["upapada_lord"],
+               "occupants": arudha_view["upapada_occupants"],
+               "contested": arudha_view["upapada_contested"],
+               "schools_agree": arudha_view["schools_agree"]},
+    ))
+
+    # --- chara karakas ------------------------------------------------------
+    for karaka in karakas.karakas(chart):
+        position = chart.planets[karaka.planet]
+        facts.append(Fact(
+            id=f"karaka.chara.{karaka.office.lower()}",
+            kind="karaka",
+            statement=(
+                f"{karaka.planet} is the {karaka.office} ({karaka.abbr}), "
+                f"signifying {karaka.signifies}. It sits in "
+                f"{position.sign} at {position.degree_in_sign:.2f}°, in the "
+                f"{ordinal(position.house)} house"
+                + (" — ranked by its degree counted BACKWARDS, since Rahu "
+                   "travels that way." if karaka.reversed_for_rahu else ".")
+                + school_note("karaka_count")),
+            value={"office": karaka.office, "abbr": karaka.abbr,
+                   "planet": karaka.planet, "sign": position.sign,
+                   "house": position.house,
+                   "degree_in_sign": round(karaka.degree_in_sign, 4),
+                   "ranked_by": round(karaka.ranked_by, 4),
+                   "signifies": karaka.signifies},
+        ))
+    karakamsa = karakas.karakamsa(chart)
+    facts.append(Fact(
+        id="karaka.karakamsa",
+        kind="karaka",
+        statement=(
+            f"The Karakamsa is {karakamsa['sign']} — the navamsa sign the "
+            f"Atmakaraka ({karakamsa['planet']}) occupies, the "
+            f"{ordinal(karakamsa['house_from_d9_lagna'])} house from the D9 "
+            f"lagna ({karakamsa['d9_lagna_sign']})."
+            + school_note("karaka_count")),
+        value=karakamsa,
+    ))
+
+    # --- vimsopaka bala -----------------------------------------------------
+    vimsopaka_view = vimsopaka.describe(chart)
+    facts.append(Fact(
+        id="vimsopaka.group",
+        kind="vimsopaka",
+        statement=(
+            f"Vimsopaka bala here is weighed across the "
+            f"{vimsopaka_view['group_label']}: "
+            + ", ".join(vimsopaka_view["charts"]) + ". "
+            + vimsopaka_view["nodes_excluded"]
+            + school_note("vimsopaka_group")),
+        value={"group": vimsopaka_view["group"],
+               "charts": vimsopaka_view["charts"],
+               "strongest": vimsopaka_view["strongest"],
+               "thinnest": vimsopaka_view["thinnest"]},
+    ))
+    for planet in vimsopaka.BODIES:
+        value = vimsopaka_view["scores"][planet]
+        facts.append(Fact(
+            id=f"vimsopaka.{planet.lower()}",
+            kind="vimsopaka",
+            statement=(
+                f"{planet} scores {value:.2f} of 20 on vimsopaka bala across "
+                f"the {vimsopaka_view['group_label']} — "
+                f"{vimsopaka_view['bands'][planet]}."
+                + school_note("vimsopaka_group", "dual_lord")),
+            value={"planet": planet, "score": value,
+                   "band": vimsopaka_view["bands"][planet],
+                   "group": vimsopaka_view["group"],
+                   "working": vimsopaka.working(chart, planet)},
+        ))
+
+    # --- avasthas -----------------------------------------------------------
+    for row in avasthas.describe(chart)["avasthas"]:
+        facts.append(Fact(
+            id=f"avastha.{row['planet'].lower()}",
+            kind="avastha",
+            statement=(
+                f"{row['planet']} is {row['baladi_name']} by degree — "
+                f"{row['baladi_sense']} — and {row['jagradadi_name']} by "
+                f"dignity — {row['jagradadi_sense']}."
+                + (" The two point different ways, which is itself the "
+                   "reading." if row["at_odds"] else "")),
+            value=row,
+        ))
+
+    # --- the running pratyantardasha ---------------------------------------
+    #
+    # ONE fact, not 729. The ledger is what the agent reads, and the whole
+    # third level would swamp a payload that carries 189 facts in total.
+    # The full tree stays queryable in `dashas`.
+    running = timeline.at_depth(when)
+    if running is not None:
+        maha, antara, pratyantara = running
+        facts.append(Fact(
+            id="dasha.pratyantar",
+            kind="dasha",
+            statement=(
+                f"Within {maha.lord}/{antara.lord}, the running "
+                f"pratyantardasha is {pratyantara.lord}, from "
+                f"{pratyantara.start:%d %b %Y} to "
+                f"{pratyantara.end:%d %b %Y}."),
+            value={"maha": maha.lord, "antara": antara.lord,
+                   "pratyantara": pratyantara.lord,
+                   "start": pratyantara.start.isoformat(),
+                   "end": pratyantara.end.isoformat()},
+        ))
+
     return facts
 
 
@@ -875,6 +1045,28 @@ def _varga_in_prompt(fact_id: str, wanted: frozenset[str]) -> bool:
     return False
 
 
+#: Arudhas that travel in the agent payload. A1-A11 stay in the LEDGER —
+#: the validator can check any claim about them — but they are a systematic
+#: table of twelve undifferentiated rows that almost no question touches,
+#: and eleven of them would be weight without reach. A12 is different: the
+#: Upapada is read for marriage and carries an actual reading.
+_PROMPT_ARUDHAS = frozenset({"arudha.upapada"})
+
+
+def _in_prompt(fact: Fact) -> bool:
+    """Whether a fact travels to the agent, beyond the varga slice.
+
+    THE RULE THIS ANSWERS TO, set when the vargas were sliced: a smaller
+    prompt must not become a smaller truth. Everything excluded here stays
+    in the ledger, and `validate_payload` checks answers against the LEDGER,
+    not against the payload — so leaving a fact out costs the model reach,
+    never the reader accuracy.
+    """
+    if fact.kind == "arudha":
+        return fact.id in _PROMPT_ARUDHAS
+    return True
+
+
 def facts_payload(chart: Chart, when: datetime,
                   question: str = "") -> dict:
     """The ledger as the JSON the agent is given. Sorted, so it caches."""
@@ -886,6 +1078,7 @@ def facts_payload(chart: Chart, when: datetime,
     wanted = frozenset(wanted)
     facts = [f for f in facts
              if f.kind != "varga" or _varga_in_prompt(f.id, wanted)]
+    facts = [f for f in facts if _in_prompt(f)]
     payload = {
         "as_of": when.date().isoformat(),
         "system": "sidereal, Lahiri ayanamsa, Whole Sign houses",

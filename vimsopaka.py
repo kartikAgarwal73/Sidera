@@ -192,9 +192,23 @@ THIN_CEILING = 10.0
 
 
 def band(value: float) -> str:
+    """'strong' | 'middling' | 'thin', with BOTH edges inclusive.
+
+    Aligned 2026-09-13 from a strict `<` to `<=`, to match
+    `ashtakavarga`. The two modules had drifted apart — a SAV of exactly 25
+    was thin while a vimsopaka score of exactly 10.0 was middling — and the
+    correctness audit found it only because a gate was written to assert
+    the boundaries rather than the constants. Two thresholds that differ by
+    accident are worse than either choice made on purpose, and a reader
+    meeting both numbers on one screen should meet one rule.
+
+    Nothing observable moved: no fixture value sits on the edge. The change
+    is here so that when one eventually does, both modules answer the same
+    way.
+    """
     if value >= STRONG_FLOOR:
         return "strong"
-    if value < THIN_CEILING:
+    if value <= THIN_CEILING:
         return "thin"
     return "middling"
 

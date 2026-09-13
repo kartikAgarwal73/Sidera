@@ -226,6 +226,11 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
     # The IANA database is an outside source, and the Indian offsets below
     # are published history — four distinct values, including the 1942-45
     # wartime +6:30 — not this build's own output.
+    # The ledger must describe the chart it came from — same standing as
+    # TestChartFactLedger, for the five modules the audit found unreachable.
+    "TestTheNewLedgerFacts": (
+        "invariant", "the ledger must describe the chart it came from, and "
+                     "the payload slice must be declared rather than silent"),
     "TestTimezoneResolution": (
         "external", "the IANA time zone database — published historical "
                     "offsets, and the backward links for legacy aliases"),
