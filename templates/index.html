@@ -655,6 +655,46 @@
     {% endfor %}
   </div>
 </section>
+
+<section class="fold" id="strength">
+  <div class="foldhead"><span class="mark"></span>
+    <h2>Strength across the divisions</h2></div>
+  <p class="lede">A graha can be splendid in the birth chart and homeless in
+    every division beneath it. Viṃśopaka asks the same question of a whole
+    group of charts at once and answers out of twenty.</p>
+  <div class="scrollwrap"><table class="gtable">
+    <thead><tr><th>Graha</th><th>Score</th><th>Reading</th><th>Working</th></tr></thead>
+    <tbody>
+      {% for row in data.strength.rows %}
+      <tr>
+        <td>{{ row.planet }}</td>
+        <td class="num {% if row.band == 'strong' %}accent{% elif row.band == 'thin' %}mut{% endif %}">{{ row.score }} / 20</td>
+        <td class="{% if row.band == 'strong' %}accent{% elif row.band == 'thin' %}mut{% endif %}">{{ row.band }}</td>
+        <td>
+          <details class="xp"><summary>{{ row.working | length }} charts ↓</summary>
+            <div class="scrollwrap"><table class="gtable">
+              <thead><tr><th>Varga</th><th>Rāśi</th><th>Standing</th><th>Weight</th><th>Adds</th></tr></thead>
+              <tbody>
+                {% for w in row.working %}
+                <tr><td>{{ w.varga }}</td><td>{{ w.sign }}</td>
+                  <td class="cellprose">{{ w.why }}</td>
+                  <td class="num">{{ w.weight }}</td>
+                  <td class="num">{{ "%.2f" | format(w.contributes) }}</td></tr>
+                {% endfor %}
+              </tbody>
+            </table></div>
+          </details>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  <p class="para">Strongest here: {{ data.strength.strongest }}. Thinnest:
+    {{ data.strength.thinnest }}. {{ data.strength.nodes_excluded }}</p>
+  <p class="schoolstamp">Weighed across the {{ data.strength.group_label }} —
+    {{ data.strength.charts | join(", ") }}</p>
+  <p class="yogarule"><span class="xplabel">Rests on</span>rule.vimsopaka.bala · rule.vimsopaka.group_school</p>
+</section>
 </div><!-- /view-charts -->
 
 {% set plateno = namespace(n=0) %}
@@ -892,6 +932,13 @@
     </div>
     {% endfor %}
   </div>
+  {% if data.pratyantar %}
+  <p class="para" id="pratyantar">Inside {{ data.pratyantar.maha }}/{{ data.pratyantar.antara }},
+    the running pratyantardaśā is <strong>{{ data.pratyantar.lord }}</strong>,
+    from {{ data.pratyantar.start }} to {{ data.pratyantar.end }} — the third
+    level, and the one a window this narrow is actually read from.</p>
+  <p class="yogarule"><span class="xplabel">Rests on</span>rule.dasha.antara</p>
+  {% endif %}
   <details class="fold" style="margin-top:22px">
   <summary class="kicker">Antaradaśās · {{ data.current_md }} mahādaśā — expand</summary>
   <div class="rows">
@@ -1236,6 +1283,115 @@
 </section>
 
 <!-- Paṭha — the chart, explained in three layers -->
+<section class="ledger" id="points" data-cat="charts">
+  <div class="kicker">Points · the Upapada and the arudhas</div>
+  <p class="lede">An arudha is the image a house casts — how its matter
+    <em>appears</em>, as against what it is. The twelfth's arudha is the
+    Upapada, and it is read for marriage.</p>
+
+  <div class="upapada">
+    <p class="verdict">The Upapada falls in {{ data.points.upapada.sign }},
+      the {{ data.points.upapada.house_from_lagna | ordinal }} house from
+      your lagna, ruled by {{ data.points.upapada.lord }}.</p>
+    <p class="para">{% if data.points.upapada.occupants %}{{
+      data.points.upapada.occupants | join(" and ") }}
+      {{ "sits" if data.points.upapada.occupants | length == 1 else "sit" }}
+      on it.{% else %}No graha sits on it.{% endif %}</p>
+  </div>
+
+  {% if not data.points.schools_agree %}
+  {# TWO TRADITIONS, NOT A HEDGE. Both readings are set as equals, each
+     under its own school name, with the reason they differ stated once
+     above them. No warning styling, no "unsure", no default-and-caveat:
+     the app has not failed to decide, the tradition has not. #}
+  <div class="twoways">
+    <p class="twoways-head">Two traditions count this differently</p>
+    <p class="para">{{ data.points.why_two }}</p>
+    {% for row in data.points.rows if row.split %}
+    <div class="twoways-row">
+      <span class="twoways-label">A{{ row.house }}</span>
+      {% for reading in row.readings %}
+      <div class="twoways-side">
+        <span class="twoways-sign">{{ reading.sign }}</span>
+        <span class="twoways-text">{{ reading.text }}</span>
+        <span class="twoways-school">{{ reading.school }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+    <p class="schoolstamp">In force here: {{ data.points.school }}</p>
+  </div>
+  {% endif %}
+
+  <details class="xp"><summary>All twelve arudhas ↓</summary>
+    <div class="scrollwrap"><table class="gtable avgrid">
+      <thead><tr><th>Pada</th><th>Rāśi</th><th>Bhāva</th><th>Lord</th><th>On it</th></tr></thead>
+      <tbody>
+        {% for row in data.points.rows %}
+        <tr>
+          <td>{{ row.label }}{% if row.split %} <span class="twomark" title="two traditions differ here">⁂</span>{% endif %}</td>
+          <td>{{ row.sign }}</td>
+          <td class="num">{{ row.house_from_lagna }}</td>
+          <td>{{ row.lord }}</td>
+          <td class="mut">{{ row.occupants | join(", ") if row.occupants else "—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+  </details>
+  <p class="yogarule"><span class="xplabel">Rests on</span>rule.arudha.pada · rule.arudha.upapada</p>
+</section>
+
+<section class="ledger" id="significators" data-cat="charts">
+  <div class="kicker">Significators · what the chart appoints</div>
+  <p class="lede">Venus signifies the wife in every chart ever cast. These
+    do not: they are handed out by <em>this</em> chart, ranked by how far
+    each graha has travelled into its sign.</p>
+  <div class="scrollwrap"><table class="gtable">
+    <thead><tr><th>Office</th><th>Graha</th><th>Signifies</th><th>Rāśi</th><th>Bhāva</th><th>Ranked at</th></tr></thead>
+    <tbody>
+      {% for k in data.significators.karakas %}
+      <tr>
+        <td>{{ k.abbr }}</td>
+        <td>{{ k.planet }}{% if k.reversed %} <span class="schoolmark" title="ranked by its degree counted backwards">↩</span>{% endif %}</td>
+        <td class="cellprose">{{ k.signifies }}</td>
+        <td>{{ k.sign }}</td>
+        <td class="num">{{ k.house }}</td>
+        <td class="num">{{ k.ranked_by }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  <p class="para">The Kārakāṃśa — the navāṃśa sign the Ātmakāraka occupies —
+    is {{ data.significators.karakamsa.sign }}, the
+    {{ data.significators.karakamsa.house_from_d9_lagna | ordinal }} house
+    from the D9 lagna.</p>
+
+  {# TWO READINGS OF MARRIAGE, SHOWN AS TWO. Composing them is a reading,
+     and a reading is the resolver's job rather than a table's. #}
+  <div class="twoways">
+    <p class="twoways-head">Two readings of the same question</p>
+    <p class="para">Marriage is read from the Upapada and from the
+      Dārakāraka, and they do not always agree. Both are given; neither is
+      averaged into the other.</p>
+    <div class="twoways-row">
+      <span class="twoways-label">Marriage</span>
+      <div class="twoways-side">
+        <span class="twoways-sign">{{ data.points.upapada.sign }}</span>
+        <span class="twoways-text">the Upapada, the arudha of the 12th</span>
+        <span class="twoways-school">Jaimini · read for the spouse</span>
+      </div>
+      <div class="twoways-side">
+        <span class="twoways-sign">{{ data.significators.darakaraka }}</span>
+        <span class="twoways-text">the Dārakāraka, the graha this chart appoints</span>
+        <span class="twoways-school">Chara karaka · read for the spouse</span>
+      </div>
+    </div>
+  </div>
+  <p class="schoolstamp">Computed under: {{ data.significators.school }}</p>
+  <p class="yogarule"><span class="xplabel">Rests on</span>rule.karaka.chara · rule.karaka.darakaraka · rule.karaka.karakamsa</p>
+</section>
+
 <section class="ledger" id="patha" data-cat="charts">
   <div class="kicker">Paṭha · your chart, explained</div>
   {% for item in data.patha %}
@@ -1310,11 +1466,11 @@
 <section class="ledger" id="grahas" data-cat="tables">
   <div class="kicker">Grahas · nakṣatras · dignity <button class="learn" data-lesson="nakshatra">ⓘ 60s</button> <button class="learn" data-lesson="dignity">ⓘ dignity</button></div>
   <div class="scrollwrap"><table class="gtable">
-    <thead><tr><th>Graha</th><th>Rāśi</th><th>Bhāva</th><th>Nakṣatra</th><th>Lord</th><th>Dignity</th></tr></thead>
+    <thead><tr><th>Graha</th><th>Rāśi</th><th>Bhāva</th><th>Nakṣatra</th><th>Lord</th><th>Dignity</th><th>Age</th><th>Waking</th></tr></thead>
     <tbody>
       <tr>
         <td>Lagna</td><td class="num">{{ data.lagna_sign }} {{ data.lagna_dms }}</td><td class="num">1</td>
-        <td>{{ data.lagna_nak.name }} p.{{ data.lagna_nak.pada }}</td><td>{{ data.lagna_nak.lord }}</td><td class="mut">—</td>
+        <td>{{ data.lagna_nak.name }} p.{{ data.lagna_nak.pada }}</td><td>{{ data.lagna_nak.lord }}</td><td class="mut">—</td><td class="mut">—</td><td class="mut">—</td>
       </tr>
       {% for p in data.planets %}
       <tr>
@@ -1324,10 +1480,19 @@
         <td>{{ p.nakshatra }} p.{{ p.pada }}</td>
         <td>{{ p.lord }}</td>
         <td class="{% if p.dignity in ('exalted', 'own sign', 'moolatrikona') %}accent{% elif p.dignity == 'debilitated' %}mut{% endif %}">{{ p.dignity }}{% if p.vargottama %} · vargottama{% endif %}</td>
+        {% set av = data.avasthas.by_planet.get(p.name) %}
+        <td{% if av and av.at_odds %} class="accent"{% endif %} title="{{ av.baladi_sense if av }}">{{ av.baladi_name if av else "—" }}</td>
+        <td{% if av and av.at_odds %} class="accent"{% endif %} title="{{ av.jagradadi_sense if av }}">{{ av.jagradadi_name if av else "—" }}</td>
       </tr>
       {% endfor %}
     </tbody>
   </table></div>
+  <p class="footnote" style="text-align:left"><strong>Age</strong> is how far
+    a graha has travelled through its sign — infant to spent, reversing in
+    even signs. <strong>Waking</strong> is how well the sign supports it.
+    They answer different questions, so they can disagree{% if data.avasthas.at_odds %},
+    and here they do for {{ data.avasthas.at_odds | join(" and ") }}{% endif %}.
+    {{ data.avasthas.nodes_excluded }}</p>
   <p class="schoolstamp">Rāhu and Ketu placed with: {{ data.school_node_position }}
     · their drishti: {{ data.school_node_reach }}</p>
   <p class="footnote" style="text-align:left">Ayanāṃśa (Lahiri) {{ "%.2f" | format(data.ayanamsa) }}° ·

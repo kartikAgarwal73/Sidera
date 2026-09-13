@@ -48,6 +48,10 @@ from transits import (
     transit_snapshot,
     upcoming_ingresses,
 )
+import arudhas
+import avasthas
+import karakas
+import vimsopaka
 from vargas import dasamsa, navamsa
 import vargas
 import agent
@@ -1188,7 +1192,134 @@ def build_dashboard(profile: Profile) -> dict:
         "ashtakavarga": ashtakavarga_view(chart),
         "school_node_reach": schools.chosen("node_reach").school,
         "school_node_position": schools.chosen("node_position").school,
+        # The five computations the correctness audit found unreachable.
+        "points": points_view(chart),
+        "significators": significators_view(chart),
+        "strength": strength_view(chart),
+        "avasthas": avasthas_view(chart),
+        "pratyantar": pratyantar_view(timeline, now),
     }
+
+
+def points_view(chart) -> dict:
+    """The Upapada and the twelve arudhas.
+
+    WHERE THE SCHOOLS SPLIT, THIS IS NOT A HEDGE AND MUST NOT READ AS ONE.
+    Two traditions count the arudha of a Scorpio or Aquarius house from
+    different lords and arrive at different signs. Both are answers; the
+    app has not failed to decide, the tradition has not decided. So the
+    view hands the template two NAMED readings — each with its school and
+    its reasoning — rather than a value plus a warning. The template sets
+    them as a pair of equals; `TestPointsSection` asserts there is no
+    error styling and no word of apology anywhere near them.
+    """
+    view = arudhas.describe(chart)
+    both = arudhas.both_schools(chart)
+    sole = schools.OPTIONS["dual_lord"].answer("single")
+    stronger = schools.OPTIONS["dual_lord"].answer("stronger")
+    rows = []
+    for house in range(1, 13):
+        sign_index = view["arudhas"][house - 1]
+        split = both["single"][house - 1] != both["stronger"][house - 1]
+        rows.append({
+            "house": house,
+            "label": f"A{house}",
+            "sign": SIGNS[sign_index],
+            "house_from_lagna": (sign_index - chart.lagna.sign_index) % 12 + 1,
+            "occupants": [p for p in PLANETS
+                          if chart.planets[p].sign_index == sign_index],
+            "lord": arudhas.SIGN_LORDS[sign_index],
+            "split": split,
+            "readings": ([
+                {"sign": SIGNS[both["single"][house - 1]],
+                 "school": sole.school, "text": sole.text},
+                {"sign": SIGNS[both["stronger"][house - 1]],
+                 "school": stronger.school, "text": stronger.text},
+            ] if split else []),
+        })
+    upapada = rows[11]
+    return {
+        "rows": rows,
+        "upapada": {**upapada, **{
+            "sign": view["upapada_sign"],
+            "occupants": view["upapada_occupants"],
+            "lord": view["upapada_lord"],
+            "house_from_lagna": view["upapada_house"],
+        }},
+        "school": view["school"],
+        "contested_houses": list(view["contested_houses"]),
+        "schools_agree": view["schools_agree"],
+        "why_two": ("Scorpio and Aquarius are each claimed by two lords, "
+                    "and an arudha is counted FROM the lord — so the two "
+                    "traditions land on different signs. Both readings are "
+                    "shown; the one you chose is in force."),
+    }
+
+
+def significators_view(chart) -> dict:
+    """The chara karakas, the Kārakāṃśa, and the Dārakāraka.
+
+    The Dārakāraka and the Upapada both speak to marriage and can point
+    different ways. They are presented side by side WITHOUT a combined
+    verdict: composing them is a reading, and a reading is the resolver's
+    job rather than a table's.
+    """
+    ranked = karakas.karakas(chart)
+    return {
+        "karakas": [{
+            "office": k.office, "abbr": k.abbr, "planet": k.planet,
+            "signifies": k.signifies,
+            "sign": chart.planets[k.planet].sign,
+            "house": chart.planets[k.planet].house,
+            "degree": f"{k.degree_in_sign:.2f}°",
+            "ranked_by": f"{k.ranked_by:.2f}°",
+            "reversed": k.reversed_for_rahu,
+        } for k in ranked],
+        "karakamsa": karakas.karakamsa(chart),
+        "darakaraka": ranked[-1].planet,
+        "school": schools.chosen("karaka_count").school,
+        "scheme": karakas.scheme(),
+        "ties": karakas.tie_groups(chart),
+    }
+
+
+def strength_view(chart) -> dict:
+    """Viṃśopaka bala — every graha's score out of twenty, with its working."""
+    view = vimsopaka.describe(chart)
+    # Formatted from the RAW score, not from `describe`'s 4dp rounding.
+    # Rounding twice can move the last displayed digit — 15.074999… rounds
+    # to 15.075 and then to 15.08, where the raw value shows 15.07 — and a
+    # number the reader can check against the working underneath it must
+    # be the number that working produces.
+    raw = vimsopaka.scores(chart)
+    return {
+        **view,
+        "rows": [{
+            "planet": planet,
+            "score": f"{raw[planet]:.2f}",
+            "band": view["bands"][planet],
+            "working": vimsopaka.working(chart, planet),
+        } for planet in vimsopaka.BODIES],
+    }
+
+
+def avasthas_view(chart) -> dict:
+    """Bālādi and jāgradādi, keyed by graha so the table can join them."""
+    view = avasthas.describe(chart)
+    return {"by_planet": {row["planet"]: row for row in view["avasthas"]},
+            "at_odds": view["at_odds"],
+            "nodes_excluded": view["nodes_excluded"]}
+
+
+def pratyantar_view(timeline, now) -> dict | None:
+    """The running third level, or None outside the cycle."""
+    running = timeline.at_depth(now)
+    if running is None:
+        return None
+    maha, antara, pratyantara = running
+    return {"maha": maha.lord, "antara": antara.lord,
+            "lord": pratyantara.lord,
+            "start": _fmt(pratyantara.start), "end": _fmt(pratyantara.end)}
 
 
 # The five domain cards and their views. Card titles are the reader's

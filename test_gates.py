@@ -9991,6 +9991,205 @@ class TestEveryDivisionMatchesTheOracle:
         assert vargas.varga_sign(30.5, "D60") == 2
 
 
+class TestTwoTraditionsReadAsTwoAnswers:
+    """The framing gate, and the one the product actually turns on.
+
+    Where `dual_lord` splits the arudhas, a reader must come away knowing
+    THERE ARE TWO ANSWERS AND WHY — not thinking the app is unsure of
+    itself. That is a different thing from correctness and it can be lost
+    without any number changing, so it is asserted rather than trusted to
+    whoever edits the template next.
+
+    What that means concretely: no error styling, no apology, no default
+    plus a caveat, and the two readings set as a symmetric pair with their
+    schools named.
+    """
+
+    @classmethod
+    @pytest.fixture(scope="class")
+    def points(cls, page):
+        start = page.index('id="points"')
+        return page[start:page.index("</section>", start)]
+
+    def test_the_reference_chart_actually_splits(self):
+        """Precondition. Without a split the rest of this class is
+        decoration."""
+        import arudhas
+        chart = compute_chart(fixtures.birth("reference"))
+        both = arudhas.both_schools(chart)
+        assert both["single"] != both["stronger"]
+
+    def test_both_readings_are_named_with_their_schools(self, points):
+        import arudhas
+        import schools
+        chart = compute_chart(fixtures.birth("reference"))
+        both = arudhas.both_schools(chart)
+        split = [h for h in range(1, 13)
+                 if both["single"][h - 1] != both["stronger"][h - 1]]
+        assert "Two traditions count this differently" in points
+        for house in split:
+            assert SIGNS[both["single"][house - 1]] in points, house
+            assert SIGNS[both["stronger"][house - 1]] in points, house
+        # Each school is named in the reader's own words AND technically.
+        for answer_id in ("single", "stronger"):
+            answer = schools.OPTIONS["dual_lord"].answer(answer_id)
+            assert answer.school in points, answer_id
+            assert answer.text in points, answer_id
+
+    def test_the_reason_for_two_answers_is_given_not_just_the_fact(self,
+                                                                   points):
+        """A reader told only THAT two schools differ learns nothing. The
+        block says WHY: two lords claim the sign, and the count runs from
+        the lord."""
+        assert "two lords" in points
+        assert "counted FROM the lord" in points or "counted from the lord" \
+            in points.lower()
+
+    def test_neither_reading_is_styled_as_a_problem(self, points):
+        """No error class, no warning colour, no icon of alarm. The block
+        uses the same surface tone every other fold uses."""
+        css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
+        block = css[css.index(".twoways {"):css.index(".twomark")]
+        for alarm in ("red", "#f00", "crimson", "warning", "error",
+                      "danger", "alert", "⚠"):
+            assert alarm not in block.lower(), alarm
+        assert "var(--surface)" in block, (
+            "the two-traditions block must sit on the ordinary second tone")
+        for alarm in ("class=\"error", "class=\"warn", "⚠", "❗"):
+            assert alarm not in points, alarm
+
+    def test_no_word_of_apology_or_uncertainty_appears(self, points):
+        """The app has not failed to decide. The tradition has not decided.
+        Those are different sentences and only one of them is true."""
+        lowered = points.lower()
+        for hedge in ("we are not sure", "unsure", "unclear", "cannot say",
+                      "may be wrong", "sorry", "unfortunately",
+                      "we could not", "ambiguous", "unreliable",
+                      "best guess", "approximate"):
+            assert hedge not in lowered, hedge
+
+    def test_the_two_readings_are_symmetric_not_default_plus_caveat(self):
+        """Same element, same class, same type size — so neither reads as
+        the answer and the other as a footnote to it."""
+        import re as _re
+        template = (HERE / "templates" / "index.html").read_text(
+            encoding="utf-8")
+        block = template[template.index("twoways-row"):]
+        block = block[:block.index("</div>\n    {% endfor %}")
+                      if "</div>\n    {% endfor %}" in block else 2000]
+        # Both sides come from ONE loop over the readings, so they cannot
+        # drift apart by being written twice.
+        assert "{% for reading in row.readings %}" in template
+        css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
+        side = css[css.index(".twoways-side {"):css.index(".twoways-sign")]
+        assert "opacity" not in side, "one side is dimmed"
+        assert "display: none" not in side
+
+    def test_the_live_school_is_named_without_ranking_the_other(self,
+                                                                points):
+        """The reader is told which is in force — they chose it — but the
+        other is not called wrong, second, or fallback."""
+        assert "In force here" in points
+        for ranking in ("instead of", "rather than the", "incorrect",
+                        "wrong", "inferior", "fallback", "less accurate"):
+            assert ranking not in points.lower(), ranking
+
+    def test_the_marriage_disagreement_is_shown_not_composed(self, page):
+        """The Dārakāraka and the Upapada both speak to marriage and can
+        disagree. Both are given; neither is averaged into the other."""
+        start = page.index('id="significators"')
+        block = page[start:page.index("</section>", start)]
+        assert "Two readings of the same question" in block
+        assert "neither is\n      averaged into the other" in block \
+            or "averaged into the other" in block
+        assert "Upapada" in block and "Dārakāraka" in block
+        # No combined verdict sentence.
+        for composed in ("on balance", "overall the", "taken together the",
+                         "the stronger signal", "we conclude"):
+            assert composed not in block.lower(), composed
+
+
+class TestTheFiveSurfaces:
+    """Every module the audit found unreachable now renders somewhere."""
+
+    def test_points_and_significators_render_under_the_charts(self, page):
+        for anchor in ('id="points"', 'id="significators"'):
+            assert anchor in page, anchor
+        start = page.index('id="points"')
+        assert 'data-cat="charts"' in page[start:start + 120]
+        start = page.index('id="significators"')
+        assert 'data-cat="charts"' in page[start:start + 160]
+
+    def test_the_strength_card_carries_scores_and_its_working(self, page):
+        import vimsopaka
+        start = page.index('id="strength"')
+        block = page[start:page.index("</section>", start)]
+        chart = compute_chart(fixtures.birth("reference"))
+        import schools
+        with schools.use({}):
+            scores = vimsopaka.scores(chart)
+        for planet in vimsopaka.BODIES:
+            assert planet in block, planet
+            assert f"{scores[planet]:.2f}" in block, planet
+        assert "/ 20" in block
+        assert "rule no sign" in block, "the nodes' absence must be explained"
+        for node in ("Rahu", "Ketu"):
+            # Named only in the exclusion sentence, never as a row.
+            assert f"<td>{node}</td>" not in block
+
+    def test_the_avastha_columns_join_the_graha_table(self, page):
+        import avasthas
+        chart = compute_chart(fixtures.birth("reference"))
+        start = page.index('id="grahas"')
+        block = page[start:page.index("</section>", start)]
+        assert "<th>Age</th>" in block and "<th>Waking</th>" in block
+        for row in avasthas.describe(chart)["avasthas"]:
+            assert row["baladi_name"] in block, row["planet"]
+            assert row["jagradadi_name"] in block, row["planet"]
+        # The two answer different questions, and the page says so.
+        assert "answer different questions" in block
+        assert "can disagree" in block
+
+    def test_the_running_pratyantardasha_renders_under_periods(self, page):
+        from dashas import vimshottari
+        chart = compute_chart(fixtures.birth("reference"))
+        start = page.index('id="pratyantar"')
+        block = page[start:page.index("</p>", start)]
+        assert "pratyantardaśā" in block
+        # It names the two levels above it, so the window is placed.
+        running = vimshottari(chart).at_depth(datetime.now(timezone.utc))
+        if running:
+            maha, antara, pratyantara = running
+            assert maha.lord in block and antara.lord in block
+            assert pratyantara.lord in block
+
+    def test_every_new_section_cites_the_rules_it_rests_on(self, page):
+        import rulelib
+        for anchor, rule_id in (('id="points"', "rule.arudha.upapada"),
+                                ('id="significators"', "rule.karaka.chara"),
+                                ('id="strength"', "rule.vimsopaka.bala")):
+            start = page.index(anchor)
+            block = page[start:page.index("</section>", start)]
+            assert rule_id in block, anchor
+            assert rulelib.is_known(rule_id)
+
+    def test_nothing_computed_is_unreachable_any_more(self, page):
+        """The audit finding, closed. Each of the five modules must reach
+        the rendered page — not merely exist."""
+        import avasthas
+        import karakas
+        import vimsopaka
+        chart = compute_chart(fixtures.birth("reference"))
+        import schools
+        with schools.use({}):
+            assert vimsopaka.describe(chart)["strongest"] in page
+            assert karakas.darakaraka(chart).planet in page
+            assert karakas.karakamsa(chart)["sign"] in page
+        assert avasthas.describe(chart)["avasthas"][0]["baladi_name"] in page
+        import arudhas
+        assert SIGNS[arudhas.upapada(chart)] in page
+
+
 class TestTheNewLedgerFacts:
     """Arudhas, karakas, viṃśopaka, avasthās and the running PD, in the
     ledger — so a reading can cite them and the validator can check them.

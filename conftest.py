@@ -228,6 +228,15 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
     # wartime +6:30 — not this build's own output.
     # The ledger must describe the chart it came from — same standing as
     # TestChartFactLedger, for the five modules the audit found unreachable.
+    # The framing the product turns on: two schools disagreeing must not
+    # read as the app being unsure. A product rule, asserted because it can
+    # be lost without any number changing.
+    "TestTwoTraditionsReadAsTwoAnswers": (
+        "invariant", "product rule: a school split is presented as two "
+                     "named answers, never as an error or a hedge"),
+    "TestTheFiveSurfaces": (
+        "invariant", "product rule: every computed module reaches the "
+                     "rendered page"),
     "TestTheNewLedgerFacts": (
         "invariant", "the ledger must describe the chart it came from, and "
                      "the payload slice must be declared rather than silent"),

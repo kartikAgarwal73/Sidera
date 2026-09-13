@@ -1861,3 +1861,85 @@ button.cast.recast { margin-top: 4px; }
   .askstep-do { grid-column: 1 / -1; }
   .askfact { grid-template-columns: 1fr; gap: 2px; }
 }
+
+/* --- TWO TRADITIONS, SET AS EQUALS ------------------------------------
+   The hardest thing on the page to get right, and the whole product is in
+   it: where two schools count a point differently, the reader must come
+   away knowing THERE ARE TWO ANSWERS AND WHY — not thinking the app is
+   unsure of itself.
+
+   So this block borrows nothing from error styling. No amber, no rule
+   down the left, no icon, no italic apology. It uses the same surface
+   tone every other fold uses and sets the two readings in a symmetric
+   pair, each carrying its own sign at reading size and its own school
+   underneath in the same small caps a citation gets. Neither side is
+   first, neither is dimmed, and the heading is a statement of fact —
+   "Two traditions count this differently" — rather than a caveat.
+
+   The one asymmetry allowed is the ⁂ mark in the arudha table, which is
+   a pointer to this block and not a warning about the row. */
+.twoways {
+  background: var(--surface);
+  padding: 18px 20px 14px;
+  margin: 22px 0 0;
+}
+.twoways-head {
+  font-family: var(--serif);
+  font-size: var(--t-section);
+  margin: 0 0 6px;
+  color: var(--ink);
+}
+.twoways-row {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr;
+  gap: 0 18px;
+  align-items: start;
+  padding: 14px 0 0;
+  border-top: 1px solid var(--hairline);
+  margin-top: 12px;
+}
+.twoways-label {
+  font-size: var(--t-label);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-50);
+  padding-top: 4px;
+}
+.twoways-side { display: flex; flex-direction: column; gap: 2px; }
+.twoways-sign {
+  font-family: var(--serif);
+  font-size: var(--t-lede);
+  color: var(--ink);
+}
+.twoways-text { font-size: var(--t-body); color: var(--ink-70); }
+.twoways-school {
+  /* Body size, not label size. A school name is a full clause — "Parāśarī
+     — Mars for Scorpio, Saturn for Aquarius" — and the type floors say
+     anything anyone reads a SENTENCE of is 16px. The browser gate caught
+     this at 13 and it was right to: the reader who most needs this line
+     is the one comparing Sidera against another astrologer's chart. */
+  font-size: var(--t-body);
+  letter-spacing: .02em;
+  color: var(--ink-50);
+}
+
+/* A table cell carrying a SENTENCE rather than a value. The 15px cell
+   size is for figures and short labels; prose in a cell reads at 16 like
+   prose anywhere else. */
+.cellprose { font-size: var(--t-body); color: var(--ink-70); }
+.twomark { color: var(--accent-ink); }
+
+/* The Upapada's own verdict line, above the two readings. */
+.upapada { margin: 0 0 4px; }
+
+@media (max-width: 560px) {
+  /* Stacked, and still a pair: the label spans, the two readings follow
+     one another with a hairline between so neither reads as a footnote
+     to the other. */
+  .twoways-row { grid-template-columns: 1fr; gap: 10px; }
+  .twoways-label { padding-top: 0; }
+  .twoways-side + .twoways-side {
+    border-top: 1px solid var(--hairline);
+    padding-top: 10px;
+  }
+}
