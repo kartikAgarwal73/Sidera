@@ -186,8 +186,10 @@ def positions(pp) -> dict:
 def divisional_charts(jd, place) -> dict:
     """Every standard Dn, WITH the degree inside the divisional sign.
 
-    Sidera computes D9 and D10 to the sign only. This is the half it does
-    not have, and the reason milestone 3 is gated on this file.
+    The degree is the half a sign-only table cannot check. Sidera casts all
+    fifteen divisions at degree level, and `TestEveryDivisionMatchesTheOracle`
+    compares both halves — sign and divisional longitude — against what this
+    function writes.
     """
     from jhora.horoscope.chart import charts
     out = {}

@@ -4603,9 +4603,10 @@ class TestOracleGatesTheNextMilestones:
 
     # --- milestone 3: degree-level vargas, arudhas, Upapada -----------
     def test_every_standard_varga_is_present_with_degrees(self, oracle):
-        """Sidera computes D9 and D10 to the SIGN only. The degree inside
-        the divisional sign is exactly what milestone 3 adds, so the oracle
-        has to carry it."""
+        """The oracle has to carry the DEGREE inside the divisional sign,
+        not only the sign. Sidera casts all fifteen divisions at degree
+        level, and a fixture that stopped at the sign would let a wrong
+        degree through every gate built on it."""
         for name in ("reference", "partner"):
             charts_ = oracle["charts"][name]["divisional_charts"]
             assert len(charts_) >= 20
@@ -9700,8 +9701,8 @@ class TestEveryDivisionMatchesTheOracle:
     """No division lights up in the gallery until it has passed this.
 
     PyJHora, per BODY and per DIVISION, for both fictional charts — the sign
-    AND the divisional longitude. Nine divisions × ten bodies × two charts is
-    180 comparisons, and it is the only thing standing between a plausible
+    AND the divisional longitude. Fifteen divisions × ten bodies × two charts
+    is 300 comparisons, and it is the only thing standing between a plausible
     counting rule and a wrong chart: every one of these rules produces a
     perfectly reasonable-looking plate when it is wrong.
     """
@@ -9754,7 +9755,10 @@ class TestEveryDivisionMatchesTheOracle:
                 assert abs(got_deg - w["degree_in_sign"]) < self.TOLERANCE, (
                     f"{key} {code} {body}: degree {got_deg:.6f} vs oracle "
                     f"{w['degree_in_sign']:.6f}")
-        assert checked >= 90, checked
+        # Exact, not a floor. `>= 90` was written when nine divisions were
+        # cast and stayed green through six more — a floor stops counting
+        # the moment the thing it guards grows past it.
+        assert checked == len(vargas.SUPPORTED) * (1 + len(PLANETS)), checked
 
     def test_the_two_charts_do_not_produce_the_same_divisions(self, charts):
         """A comparison of two identical tables proves nothing."""

@@ -47,7 +47,7 @@ checked instead:
   person on the same day gets the same sentence forever.
 - **The one LLM feature is fenced in code, not by prompt.** "Ask about this
   chart" reads free-text questions against two things it may not depart from:
-  a **fact ledger** (the computed chart, ~330 statements with stable IDs) and a
+  a **fact ledger** (the computed chart, ~500 statements with stable IDs) and a
   **rule library** (`rulelib.py` — classical daśā-phala and gocara rules, each
   with its named source). It never computes. It is *required* to interpret —
   a fact-list is not a reading — and every interpretive statement must cite a
@@ -63,13 +63,18 @@ checked instead:
   Jun 2027"* — and a claimed transit aspect that the ledger does not support
   **for the selected school** is a violation like any other.
 
-  The ledger and the payload are not the same list. Nine divisions put 199
-  varga facts in the ledger, and sending all of them would have tripled the
-  prompt to make the model read eight charts it was not asked about, so the
+  The ledger and the payload are not the same list. Fifteen divisions put 330
+  varga facts in the ledger, and sending all of them would have quadrupled the
+  prompt to make the model read fourteen charts it was not asked about, so the
   payload carries the lagna of every division plus the bodies and houses of
-  D9, D10 and whichever division the question's own domain is tested by —
-  183 facts of 330. The validator still checks against the full ledger: a
-  smaller prompt must not become a smaller truth.
+  D9, D10 and whichever division the question's own domain is tested by. The
+  arudhas are sliced the same way and for the same reason: A1–A11 are a
+  systematic table of undifferentiated rows that almost no question touches,
+  so only the Upapada travels — it is read for marriage and carries an actual
+  reading. That comes to roughly 215 facts of ~500. The validator still checks
+  against the **full** ledger, not the payload: a smaller prompt must not
+  become a smaller truth, and a fact left out of the prompt costs the model
+  reach, never the reader accuracy.
 
   The line it works to is narrow and specific: **it may say what a period
   favours, asks for or classically tends toward; it may not say what will
@@ -80,7 +85,7 @@ checked instead:
   feature is optional: with no `ANTHROPIC_API_KEY` the panel says so and
   everything else is unaffected.
 - **Where sources genuinely differ, the app asks** instead of picking a side
-  quietly. `schools.py` puts the handful of real forks to the reader as plain
+  quietly. `schools.py` puts eight real forks to the reader as plain
   English questions — *"How far does the influence of Rahu and Ketu reach?"* —
   with two or three plain-English answers, the school name in small text
   underneath, a one-line note on what changes, an "explain this" expander, and
@@ -89,28 +94,56 @@ checked instead:
   intended: **no live option may be a control that changes nothing** (a chart
   is computed under each answer to prove it moves), and **the chosen school is
   printed on every verdict that depended on it** — and on none that did not.
-  A question whose feature is not built yet (the Upapada's two rulers) is
-  shown, explained and disabled rather than offered. See also the yoni and
-  vaśya notes in `gunamilan.py`.
+  The machinery for showing a question whose feature is not built yet —
+  explained, and disabled rather than offered — is still there and still
+  tested, but nothing is using it: all eight questions are live, the last of
+  them (the Upapada's two rulers) having gone live with the arudha work. That
+  same answer now decides the dispositor in viṃśopaka too, which is why it is
+  one question and not two. See also the yoni and vaśya notes in
+  `gunamilan.py`.
 
-- **Nine divisions, cast at degree level, each gated against the oracle.**
-  D2 Horā, D3 Drekkāṇa, D7 Saptāṃśa, D9 Navāṃśa, D10 Daśāṃśa, D12 Dvādaśāṃśa,
-  D16 Ṣoḍaśāṃśa, D30 Triṃśāṃśa and D60 Ṣaṣṭyāṃśa. A `VargaPosition` now
-  carries a longitude, not just a sign, so a varga nakṣatra and dignity by
-  degree are computable: the part index is `floor(deg / (30/N))` and the
-  degree inside the divisional sign is the remainder *stretched* back over
-  30° — a scaling convention, labelled as one in the rule library
-  (`rule.varga.degree_convention`), not a classical statement dressed up as
-  one. **Every division is checked body by body against PyJHora on both
-  fixtures before it appears in the gallery** — 180 comparisons, and the rules
-  were derived from the oracle and verified exhaustively before the module was
-  written rather than recalled and hoped for.
+- **The full ṣoḍaśavarga — fifteen divisions, cast at degree level, each gated
+  against the oracle.** D2 Horā, D3 Drekkāṇa, D4 Caturthāṃśa, D7 Saptāṃśa,
+  D9 Navāṃśa, D10 Daśāṃśa, D12 Dvādaśāṃśa, D16 Ṣoḍaśāṃśa, D20 Vimśāṃśa,
+  D24 Siddhāṃśa, D27 Bhāṃśa, D30 Triṃśāṃśa, D40 Khavedāṃśa, D45 Akṣavedāṃśa
+  and D60 Ṣaṣṭyāṃśa — the sixteen of the classical set, less the birth chart
+  itself. A `VargaPosition` carries a longitude, not just a sign, so a varga
+  nakṣatra and dignity by degree are computable: the part index is
+  `floor(deg / (30/N))` and the degree inside the divisional sign is the
+  remainder *stretched* back over 30° — a scaling convention, labelled as one
+  in the rule library (`rule.varga.degree_convention`), not a classical
+  statement dressed up as one. **Every division is checked body by body
+  against PyJHora on both fixtures before it appears in the gallery** — 300
+  comparisons of sign and longitude alike, plus a 400-chart differential run
+  per division, and the rules were derived from the oracle and verified
+  exhaustively before the module was written rather than recalled and hoped
+  for.
 
-  Three divisions have no single answer and are **flagged on the plate** with
-  the rule they were cast under: D2 uses the twelve-sign horā rather than the
-  Sun/Moon binary, D30 the unequal 5·5·8·7·5 bands that reverse between odd
-  and even signs, and D60 the ½°-per-division count from the sign itself.
-  Where schools diverge the app names the fork; it does not pick one quietly.
+  Five divisions are **flagged on the plate** with the rule they were cast
+  under, and the five are two different kinds of thing. **Three are the
+  reader's to choose** — the D2 horā (twelve-sign or the Sun/Moon binary),
+  the D3 drekkāṇa (Parāśarī trines or parivṛtti-traya), and the D27 bhāṃśa
+  (whether even signs count backward) — each a question in `schools.py` with
+  both answers gated. **Two are a stated convention with no alternative
+  offered**: D30's unequal 5·5·8·7·5 bands that reverse between odd and even
+  signs, and D60's ½°-per-division count from the sign itself. Where schools
+  diverge the app names the fork; it does not pick one quietly.
+
+- **Strength, significators and points, read across those divisions.**
+  Viṃśopaka bala scores each of the seven visible grahas out of twenty across
+  a group of charts — ṣaḍvarga, saptavarga, daśavarga or ṣoḍaśavarga, itself a
+  reader's choice, since the same graha scores differently under each and a
+  reader comparing Sidera against another astrologer needs to know which group
+  produced the number. Rahu and Ketu are not scored, and the app says why
+  rather than leaving a gap: the ladder rests on owning a sign and on
+  friendship with the sign's lord, and the nodes rule nothing. The **chara
+  karakas** rank the grahas by degree for the eight offices (or seven, if Rahu
+  is left out — another fork), giving the Ātmakāraka, the Dārakāraka and the
+  Kārakāṃśa; **arudha padas** A1–A12 are computed by reflection with the
+  1st/7th exception, the Upapada among them; and **avasthās** give each graha
+  its bālādi age and its jāgradādi waking state. Each of the five is gated
+  against the oracle where an oracle exists, and where none does — the
+  avasthās — the module says so in as many words instead of implying one.
 
 - **Aṣṭakavarga is raw, and the app says so.** BAV and SAV are computed from
   the classical benefic-point tables; the reductions — trikoṇa and
@@ -177,7 +210,7 @@ Five screens, always one tap apart from a tab row in the masthead:
 | Today | the dated sky, for this chart |
 |---|---|
 | **Readings** | the contents page, and a verdict-first fold per domain |
-| **Your charts** | nine divisional plates as a gallery, each with its own reading |
+| **Your charts** | fifteen divisional plates as a gallery, each with its own reading, plus the strength fold |
 | **Explore** | eight categories, one open at a time |
 | **Ask** | a question in your own words, answered from the computed chart |
 | *Numerology* | *in preparation — named where it will be, and not built* |
@@ -265,6 +298,27 @@ Combinations lists each yoga as **one closed row** — name, a one-line verdict,
 a classification chip — and opens the full reading only on click, one at a
 time. The word budgets are the same either way; what changed is that a chart's
 yogas are now a page you can scan rather than a page you must read.
+
+Explore's **Points** section carries the twelve arudha padas and the Upapada,
+**Significators** the chara karakas with the Ātmakāraka, Dārakāraka and
+Kārakāṃśa named, and a **Strength** fold on Your charts gives each graha its
+viṃśopaka score out of twenty with the per-division arithmetic folded under
+it. The Grahas table gained an **Age** and a **Waking** column for the bālādi
+and jāgradādi avasthās, and the daśā line now runs three deep: mahādaśā,
+antardaśā and **pratyantardaśā**.
+
+Where two schools give two answers, **the screen shows both, side by side and
+weighted the same.** The Upapada under the two co-lord readings is the case
+that forced the rule: Scorpio and Aquarius have two claimed lords, the two
+readings put the Upapada in different houses, and a reader meets the pair with
+the school named above each and the reason for the split stated once
+underneath. There is no error styling on it, neither side is dimmed, and no
+verdict is composed from the two — the marriage reading prints the Dārakāraka
+and the Upapada as they fall even when they disagree. `TestTwoTraditionsReadAsTwoAnswers`
+holds that line in a browser: a hedging word, a warning border, one side
+dimmed, the reason dropped, the second reading dropped, or a composed verdict
+smuggled in each turn it red. Two traditions disagreeing is the product, not a
+state the app is unsure of.
 
 Two faces: **Tiro Devanagari Sanskrit**, drawn by John Hudson to set
 Sanskrit — it carries both the transliteration range and the Devanagari
@@ -357,8 +411,14 @@ two fictional charts, computed by [PyJHora](https://github.com/naturalstupid/PyJ
 — an independently written Vedic astrology library that Sidera does not link,
 import or ship. It covers all 23 divisional charts **with degrees**, bhava
 arudhas A1–A12, chara karakas, Ashtakavarga BAV/SAV, sphutas and Shadbala —
-nine of those divisions are now Sidera's own gate, body by body on both
-charts; the rest are the map of what is still unbuilt.
+and it now carries **variant blocks** as well, so a school Sidera offers but
+PyJHora does not compute by default can still be gated against a second
+implementation rather than pinned by closed form. Fifteen of those divisions
+are Sidera's own gate, body by body on both charts, together with the arudhas,
+the chara karakas, viṃśopaka and the pratyantardaśā boundaries; the rest are
+the map of what is still unbuilt. The avasthās are the one built module with
+no oracle behind them, and `avasthas.py` says so in its first paragraph rather
+than letting a green suite imply otherwise.
 
 It is an *oracle*, not a dependency. The moment our answer and its answer come
 from the same code, the agreement proves nothing — so `test_hygiene.py` fails
@@ -400,10 +460,15 @@ is worth more: nakshatras, vargas, daśās, arudhas, Ashtakavarga.
 the lord of the house, and Scorpio and Aquarius have two lords each. *Parashari*
 counts from the sole classical lord (Mars, Saturn); *Jaimini* counts from the
 **stronger** of the two co-lords, so Ketu or Rahu can carry it. The Upapada
-Lagna is the arudha of the 12th, and it is read for marriage — so Sidera will
-name the school rather than pick a winner silently, the way `gunamilan.py`
-already handles the yoni and vaśya splits. On the reference chart the schools
-diverge at A7 (Gemini vs Scorpio); the file records exactly where.
+Lagna is the arudha of the 12th, and it is read for marriage. Sidera names the
+school rather than picking a winner silently, the way `gunamilan.py` handles
+the yoni and vaśya splits — and where the two readings put the Upapada in
+different houses, **both are printed side by side**, weighted the same, with
+the reason for the split stated underneath. On the reference chart the schools
+diverge at A7 (Gemini vs Scorpio); the file records exactly where. The same
+answer decides the dispositor in viṃśopaka: on the reference chart the Sun in
+Scorpio rates 18 out of 20 for that division with Mars as its lord and 15 with
+Ketu, and the difference propagates into every group the division belongs to.
 
 ### The differential run
 
@@ -473,9 +538,13 @@ app.py            Flask routes and view assembly
 engine.py         ephemeris, Lagna, sidereal positions, Whole Sign houses
 dashas.py         nakṣatras and the Vimśottarī tree
 pancanga.py       tithi, nakṣatra, yoga, karaṇa, sunrise/sunset
-vargas.py         nine divisional charts at degree level, D2 … D60
+vargas.py         fifteen divisional charts at degree level, D2 … D60
 transits.py       gocara, drishti, ingress finder
 ashtakavarga.py   raw BAV and SAV — the benefic-point tables, per sign
+arudhas.py        arudha padas A1–A12 and the Upapada, by reflection
+karakas.py        chara karakas, Ātmakāraka · Dārakāraka · Kārakāṃśa
+vimsopaka.py      strength across a group of divisions, out of twenty
+avasthas.py       bālādi age and jāgradādi waking state, per graha
 yogas.py          lordships, dignities, combustion, yoga detection
 yogaread.py       a yoga read: varga confirmation, what it gives, when it
                   activates, where in life
@@ -491,8 +560,10 @@ ui-design/DOSSIER.md   the visual direction: type, pagination, rules
 rulelib.py        classical rules the agent interprets through, each sourced
 agent.py          grounded 'Ask about this chart' + its answer validator
 reading/          the daily reading: detect · select · compose · fragments
+today.py          the day's dated lines, both edges found by bisection
 explain.py        three-layer explanations with confidence tags
 lessons.py        the 20-card literacy path
+fixtures.py       the two fictional charts every gate runs on
 test_gates.py     the gate suite       test_hygiene.py   guards on the gates
 fixtures_pyjhora.json   a second implementation's answers (external gate)
 tools/oracle/     builds that file in a scratch venv; never imported by the app

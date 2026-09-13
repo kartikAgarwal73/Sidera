@@ -19,15 +19,29 @@ a position inside it — and `rule.varga.degree_convention` says so in as many
 words, so nothing downstream can quote it as scripture.
 
 WHERE THE SCHOOLS SPLIT
-Three of these divisions are genuinely contested and this file says which
-reading it uses rather than picking one in silence. `SCHOOL_NOTE` carries a
-one-line statement per division and the plate prints it.
+Five of the fifteen divisions this module casts — the ṣoḍaśavarga less the
+birth chart itself — carry a `SCHOOL_NOTE`, and the plate prints it,
+so a reader is never shown a division without being told which reading
+produced it. The five are not all the same kind of thing, and the difference
+matters:
 
-  D2   The classical horā gives only two signs — the Sun's (Leo) and the
-       Moon's (Cancer). This build uses the TWELVE-SIGN horā instead
-       (Jagannātha Hora / PVR convention), which counts continuously and
-       reverses direction in even signs. The two schemes are not variants
-       of one rule; they answer differently.
+THREE ARE THE READER'S CHOICE, put as a question in `schools.py` and answered
+per request. This file casts whichever answer is live; it does not prefer one.
+
+  D2   `hora_scheme`. The twelve-sign horā (Jagannātha Hora / PVR) counts
+       continuously and reverses direction in even signs; the older Parāśarī
+       horā gives only two signs, the Sun's (Leo) and the Moon's (Cancer).
+       The two are not variants of one rule; they answer differently. The
+       twelve-sign reading is the recommended default, not the only one.
+  D3   `drekkana_scheme`. Parāśarī sends each third to the sign, the 5th and
+       the 9th — the trines. Parivṛtti-traya counts straight on through the
+       zodiac instead.
+  D27  `bhamsa_scheme`. The count starts from the element's sign either way;
+       whether even signs then run backward is the fork.
+
+TWO ARE A STATED CONVENTION, with no competing reading offered. The note
+exists so the convention is visible, not so it can be changed.
+
   D30  The classical triṃśāṃśa is UNEQUAL — five bands of 5, 5, 8, 7 and 5
        degrees, reversed in even signs. That is what decides the sign here.
        The equal 1° part is used ONLY for the degree stretch above, and it

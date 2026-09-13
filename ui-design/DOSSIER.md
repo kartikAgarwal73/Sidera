@@ -376,10 +376,19 @@ this fold entirely, Ask and Explore, are unnumbered.
 
 ### Screen 3 — Your charts
 
-A gallery-index of divisional plates: D1, D9 and D10 cast, and D2, D7, D12,
-D30, D60 drawn as **dashed empty frames** marked *in preparation*. Listing
-only the three that exist would imply the list is complete — the same honesty
-the disabled school options get.
+A gallery-index of divisional plates. It began as three cast charts — D1, D9,
+D10 — with D2, D7, D12, D30 and D60 drawn as **dashed empty frames** marked
+*in preparation*, because listing only the three that existed would have
+implied the list was complete. All sixteen of the ṣoḍaśavarga are cast now, so
+no frame on this screen is empty, but the device stays in the stylesheet: it
+is how this build shows the shape of a thing before the thing is built, and
+the next gallery will need it.
+
+A **Strength** fold sits under the gallery. It is on this screen and not in
+Explore because viṃśopaka is a reading *of* these plates — a score is only
+meaningful next to the charts it was taken across — and it names the group it
+used, since four groups weight the divisions differently and the number is not
+comparable without it.
 
 Each plate opens to its own page, and each page carries a reading **composed
 from that division's own placements**:

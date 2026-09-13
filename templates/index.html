@@ -613,9 +613,10 @@
 <div class="view" id="view-charts" hidden>
 <p class="folio"><span class="folio-p">P. 03</span> · Your charts<br>
   <span class="folio-of">Fold 3 of 5</span></p>
-{# SCREEN 3 — YOUR CHARTS. A gallery of small plates. Three are cast; five
-   are named and marked "in preparation" rather than quietly omitted, which
-   would imply the list is complete. #}
+{# SCREEN 3 — YOUR CHARTS. A gallery of small plates. All sixteen slots are
+   cast now, but the `v.live` branch stays: a slot named and marked "in
+   preparation" is how this build adds a division without implying, on the
+   day before it lands, that the list was already complete. #}
 <section class="exindex">
   <h1 class="chartof-name">Your charts</h1>
   <div class="mark"><div class="kicker">Divisional charts</div></div>
@@ -701,8 +702,10 @@
 {% for v in data.vargas %}{% if v.live %}
 {% set plateno.n = plateno.n + 1 %}
 {# Numbered among the plates that EXIST. `loop.index` counts the slots, so
-   with D2 and D3 in preparation the built plates were folioed 1, 5, 6 — a
-   page sequence with holes in it, which is not a sequence. #}
+   back when D2 and D3 were in preparation the built plates were folioed
+   1, 5, 6 — a page sequence with holes in it, which is not a sequence.
+   Every slot is live today and the two numberings agree; the counter stays
+   because the next division added will pull them apart again. #}
 <div class="view" id="view-varga-{{ v.key }}" hidden>
 <p class="folio"><span class="folio-p">P. 03·{{ plateno.n }}</span> · {{ v.code }} {{ v.name }}<br>
   <span class="folio-of">Fold 3 of 5</span></p>
