@@ -11357,11 +11357,16 @@ class TestLearnHasAHome:
         css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
         block = css[css.index(".tabs a.tab-quiet {"):]
         block = block[:block.index("}")]
-        # Quiet: the body face at the label colour, against the display face
-        # the five screens use. Still a real link at full reading size.
-        assert "var(--font-body)" in block
+        # Quiet: italic at the label colour. Re-pinned 2026-09-14 — this
+        # used to require the BODY face, and the body face is what put Learn
+        # on its own baseline (a taller ascent in a stretch-aligned row).
+        # The quietness may not come from anything that changes a metric:
+        # no face, no size, no line-height. `TestTheTabRowSitsOnOneBaseline`
+        # measures the result.
+        assert "font-style: italic" in block
         assert "var(--ink-50)" in block
-        assert "var(--t-body)" in block
+        for metric in ("font-family", "font-size", "line-height", "padding"):
+            assert metric not in block, (metric, block)
 
     def test_the_tab_actually_opens_the_lessons(self, page):
         row = re.search(r'<nav class="tabs"[^>]*>(.*?)</nav>', page, re.S)
@@ -11535,3 +11540,125 @@ class TestTheTabRow:
         js = js[:js.index("function show(")]
         assert 'viewId.startsWith("view-domain-") ? "view-readings"' in js
         assert 'viewId.startsWith("view-varga-") ? "view-charts"' in js
+
+
+class TestTheTabRowSitsOnOneBaseline:
+    """Learn sat two to three pixels below its peers on the live site.
+
+    THE CAUSE WAS THE FACE, NOT A MISSING CLASS. The row is stretch-aligned,
+    so every entry's text hangs from the top of its box by its own font's
+    ascent — and Learn was set in IBM Plex Sans, which ascends further than
+    Tiro Devanagari Sanskrit. Same size, same padding, same box: a different
+    baseline. Measured with the real fonts routed into the browser: 90 vs 88
+    at 390px, 91 vs 88 at 1280.
+
+    `align-items: baseline` was the obvious fix and the wrong one. It lands
+    the text and breaks the rule — Learn's box then ends 2px short of the
+    row, and Learn IS underlined on Explore, so its underline would float.
+    The quietness moved from the face to the style instead, which changes
+    no metric, and this class measures the BASELINE rather than the CSS: a
+    zero-height inline-block sits exactly on its line's baseline, so its top
+    is the baseline's y, in any font, real or fallback.
+
+    Which matters, because the test browser cannot reach Google Fonts and
+    renders a fallback for both faces. A stylesheet assertion alone would
+    have passed the defect (the token was the same either way); this gate
+    goes red under the mutation with fallback fonts too, because the
+    fallback serif and sans disagree about ascent just as the real pair do.
+    """
+
+    ENTRIES = ("Today", "Readings", "Your charts", "Explore", "Ask", "Learn",
+               "Numerology")
+
+    _PROBE = r"""
+    () => {
+      const tabs = document.querySelector('.tabs');
+      const tr = tabs.getBoundingClientRect();
+      const cs = getComputedStyle(tabs);
+      const out = {container: {top: tr.top, bottom: tr.bottom,
+                               align: cs.alignItems,
+                               contentBottom: tr.bottom - parseFloat(cs.borderBottomWidth)},
+                   items: []};
+      for (const el of tabs.querySelectorAll('a, .tab-soon')) {
+        const probe = document.createElement('span');
+        probe.style.cssText =
+          'display:inline-block;width:0;height:0;vertical-align:baseline;';
+        el.appendChild(probe);
+        const y = probe.getBoundingClientRect().top;
+        probe.remove();
+        const r = el.getBoundingClientRect(); const s = getComputedStyle(el);
+        out.items.push({text: el.textContent.trim().split('\n')[0],
+          family: s.fontFamily, size: s.fontSize, lineHeight: s.lineHeight,
+          baseline: y, top: r.top, bottom: r.bottom});
+      }
+      return out;
+    }
+    """
+
+    @classmethod
+    @pytest.fixture(scope="class")
+    def rows(cls):
+        pw = pytest.importorskip("playwright.sync_api",
+                                 reason="playwright not installed")
+        import threading
+        from werkzeug.serving import make_server
+        from app import app
+        srv = make_server("127.0.0.1", 0, app, threaded=True)
+        port = srv.socket.getsockname()[1]
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        out = {}
+        try:
+            with pw.sync_playwright() as p:
+                browser = TestMaskedBirthFieldsInARealBrowser._launch(p, pytest)
+                for width in (390, 1280):
+                    pg = browser.new_context(
+                        viewport={"width": width, "height": 900}).new_page()
+                    pg.goto(f"http://127.0.0.1:{port}/")
+                    for k, v in GATE_FORM.items():
+                        pg.evaluate(
+                            "([k,v]) => { const e = document.querySelector("
+                            "`[name=\"${k}\"]`); if (e) e.value = v; }", [k, v])
+                    with pg.expect_navigation():
+                        pg.evaluate("document.querySelector('#cast').submit()")
+                    pg.wait_for_load_state("load")
+                    pg.wait_for_timeout(900)
+                    out[width] = pg.evaluate(cls._PROBE)
+                browser.close()
+        finally:
+            srv.shutdown()
+        return out
+
+    def test_the_probe_read_the_whole_row(self, rows):
+        for width, r in rows.items():
+            assert [i["text"] for i in r["items"]] == list(self.ENTRIES), (
+                width, [i["text"] for i in r["items"]])
+
+    def test_every_entry_shares_one_face_and_one_size(self, rows):
+        """Metric-independent half of the claim: the quiet entry may differ
+        in style and colour, never in anything that moves a baseline."""
+        for width, r in rows.items():
+            for key in ("family", "size", "lineHeight"):
+                values = {i[key] for i in r["items"]}
+                assert len(values) == 1, (width, key, values)
+
+    def test_every_entry_sits_on_one_baseline(self, rows):
+        """The claim itself, measured. Half a pixel is the tolerance —
+        sub-pixel layout can put two identical lines 0.0x apart; a font
+        swap puts them 2px apart."""
+        for width, r in rows.items():
+            ys = {i["text"]: i["baseline"] for i in r["items"]}
+            spread = max(ys.values()) - min(ys.values())
+            assert spread <= 0.5, (width, ys)
+
+    def test_every_entry_fills_the_row_so_the_underline_lands_on_the_rule(
+            self, rows):
+        """The reason `align-items: baseline` was not the fix. The active
+        underline is the entry's own bottom border overlapping the row's
+        rule, so every entry — Learn included, which is underlined on
+        Explore — has to end exactly where the row does."""
+        for width, r in rows.items():
+            c = r["container"]
+            assert c["align"] in ("normal", "stretch"), (width, c["align"])
+            for i in r["items"]:
+                assert abs(i["top"] - c["top"]) <= 0.5, (width, i)
+                assert abs(i["bottom"] - c["bottom"]) <= 0.5, (width, i)

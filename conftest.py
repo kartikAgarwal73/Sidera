@@ -196,6 +196,9 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
                      "or not, with what it reads"),
     "TestTheTabRow": (
         "invariant", "product rule: five peer screens, always one tap away"),
+    "TestTheTabRowSitsOnOneBaseline": (
+        "invariant", "product rule: every entry in the tab row sits on one "
+                     "baseline and fills the row — measured in a browser"),
     "TestTheAskScreen": (
         "invariant", "product rule: the question field renders whether or "
                      "not an answer can be produced; answers are "

@@ -1551,12 +1551,22 @@ button.cast.recast { margin-top: 4px; }
 /* The tab row. Peers, not a hierarchy: Today, Readings and Your charts are
    three ways into the same chart, so they sit on one rule rather than behind
    one another. Same treatment as the plate's own tabs. */
-/* LEARN: always present, never loud. Set in the body face rather than the
-   display one and at the label colour, so it reads as a door rather than a
-   peer of the five screens — and it is still a real link, at full size. */
+/* LEARN: always present, never loud. Italic, at the label colour, so it
+   reads as a door rather than a peer of the five screens — and it is still
+   a real link, at full size.
+
+   It was set in the BODY face for that quietness, and that is what put it
+   on its own baseline: the row is stretch-aligned, so each entry's text
+   hangs from the top of its box by its font's ascent, and IBM Plex Sans
+   ascends further than Tiro Devanagari Sanskrit. Measured with the real
+   fonts, Learn sat 2px low at 390 and 3px at 1280. Aligning the row on the
+   baseline instead would have fixed the text and broken the rule: Learn's
+   box then ends 2px short of the row, and Learn IS underlined on Explore.
+   So the quietness moved from the face to the style, which changes no
+   metric. `TestTheTabRowSitsOnOneBaseline` measures the baseline itself,
+   and it must not set a face here again. */
 .tabs a.tab-quiet {
-  font-family: var(--font-body); font-size: var(--t-body);
-  letter-spacing: .04em; color: var(--ink-50);
+  font-style: italic; color: var(--ink-50);
 }
 .tabs a.tab-quiet:hover { color: var(--accent-ink); }
 
