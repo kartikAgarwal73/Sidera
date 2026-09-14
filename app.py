@@ -25,7 +25,7 @@ import secrets
 import re
 import unicodedata
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
@@ -44,6 +44,8 @@ from rulelib import HOUSE_MATTERS
 import schools
 from transits import (
     DRISHTI_OFFSETS,
+    aspected_signs,
+    next_sign_ingress,
     transit_contacts,
     transit_snapshot,
     upcoming_ingresses,
@@ -57,6 +59,7 @@ import vargas
 import agent
 import chartfacts
 import today
+import voice
 import yogaread
 import ashtakavarga as av_mod
 from yogas import (combust, detect_all, dignity, dignity_at,
@@ -488,6 +491,184 @@ def transit_ticks(chart, when) -> list[dict]:
     return [{"house": h, "label": " ".join(marks),
              "x": TICK_POS[h][0], "y": TICK_POS[h][1]}
             for h, marks in sorted(by_house.items())]
+
+
+def _and_words(items) -> str:
+    items = list(items)
+    if not items:
+        return ""
+    if len(items) == 1:
+        return items[0]
+    return ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def _owned(planet: str, names) -> str:
+    """'your Moon, Sun and Venus' — one 'your' for the list, the reader's
+    rising degree after it, and the transit's own natal place last, since
+    'its gaze falls on its own natal place, your Sun…' reads the return
+    before the contact and the contact is the news."""
+    grahas = [n for n in names if n not in (planet, "Lagna")]
+    parts = []
+    if grahas:
+        parts.append("your " + _and_words(
+            voice.plain(n).removeprefix("the ") for n in grahas))
+    if "Lagna" in names:
+        parts.append(voice.yours("Lagna"))
+    if planet in names:
+        parts.append("its own natal place")
+    if len(parts) > 1 and " and " in parts[0]:
+        # "your Sun, Mercury and Venus, and its own natal place" — the
+        # comma keeps the second "and" from running into the list's own.
+        return ", ".join(parts[:-1]) + ", and " + parts[-1]
+    return _and_words(parts)
+
+
+def _house_words(house: int) -> str:
+    """What a house is for, in rule.house.<h>'s own first clause — the same
+    words the Today entries use, never a number."""
+    return HOUSE_MATTERS[house].split(",")[0].strip()
+
+
+SLOW_MOVERS = ("Saturn", "Jupiter", "Rahu", "Ketu")
+
+
+def _title(planet: str) -> str:
+    """'The north node', 'Saturn' — a row's title is top-layer text and
+    says the plain name, as the Today entries above it do."""
+    name = voice.plain(planet)
+    return name[:1].upper() + name[1:]
+
+
+def _daylabel(iso: str | None) -> str:
+    """'03 Jun 27' from an ISO date; the column is 74px wide."""
+    if not iso:
+        return "—"
+    return datetime.fromisoformat(iso).strftime("%d %b %y")
+
+
+def _natal_longitude(chart, point: str) -> float:
+    return (chart.lagna.longitude if point == "Lagna"
+            else chart.planets[point].longitude)
+
+
+def transits_panel(chart, when, facts) -> dict:
+    """SCREEN 1 — the glance's Transits pane: NOW and UPCOMING.
+
+    The pane used to print four of the lifeline's ingress markers with a
+    house number under each — "Saturn → Aries · your 9th house". That is a
+    label, not an effect: the 9th is the 9th for everyone with this lagna,
+    the number is banned on the top layer, and the pane said nothing about
+    today's sky at all. Re-pinned 2026-09-14 from a review of the live site.
+
+    EVERY NOUN ON A ROW IS COPIED FROM A LEDGER FACT, so a gate can rebuild
+    the row from the ledger and compare word for word:
+
+      NOW       transit.<p>           the sign it is in, the natal house, and
+                                      the contact facts that govern it
+                transit.<p>.aspects   the natal houses under its drishti, and
+                                      when it leaves the sign
+                contact.<t>-<n>       the natal point it is sitting on
+                house.<h>             the natal points its gaze falls on
+      UPCOMING  transit.<p>.aspects   when it leaves — which is when it enters
+                                      the next sign
+                house.<h>             what the new sign is in this chart, the
+                                      points it lands on, and the points under
+                                      its gaze from there
+
+    The house is named by what it holds (HOUSE_MATTERS, rule.house.<h>).
+    "Sitting on" is a conjunction within orb; "its gaze falls on" is
+    drishti — the classical word is sight, and it is the plain one. No
+    sentence here interprets: it says what is touching what, and until when.
+
+    NOW is the four slow movers, always, plus any fast mover standing on a
+    natal point today. UPCOMING is each planet's next sign change — the slow
+    movers whenever it falls, the fast ones only inside today.HORIZON_DAYS,
+    the same window the Today entries call news. The Moon is left out for
+    the reason today.py gives: it changes sign every two and a half days.
+    """
+    now_rows = []
+    order = list(SLOW_MOVERS) + [p for p in PLANETS if p not in SLOW_MOVERS]
+    for p in order:
+        t = facts[f"transit.{p.lower()}"].value
+        a = facts[f"transit.{p.lower()}.aspects"].value
+        if not (t["slow_mover"] or t["governing_contacts"]):
+            continue
+        sits = [facts[c].value["point"] for c in t["governing_contacts"]]
+        gaze_houses = [h for h in a["aspects"]
+                       if facts[f"house.{h}"].value["occupants"]]
+        gaze = [n for h in gaze_houses
+                for n in facts[f"house.{h}"].value["occupants"]]
+        house_words = _house_words(t["natal_house"])
+        effect = f"Works the part of your chart that holds {house_words}"
+        if sits:
+            effect += f", sitting on {_owned(p, sits)}"
+        if gaze:
+            effect += f"; its gaze falls on {_owned(p, gaze)}"
+        effect += "."
+        # UNTIL WHEN. A slow mover's row is about its passage through the
+        # sign, so the sign exit is its end. A fast mover is here only
+        # because it is standing on a natal point, and that contact ends
+        # days before the sign does — so its end is the contact's end,
+        # found the way the Today entries find it.
+        if t["slow_mover"]:
+            until = a["until_iso"]
+        else:
+            leaves = [today.contact_window(
+                          p, _natal_longitude(chart, facts[c].value["point"]),
+                          when)[1]
+                      for c in t["governing_contacts"]]
+            leaves = [x for x in leaves if x is not None]
+            until = (max(leaves).date().isoformat() if leaves
+                     else a["until_iso"])
+        now_rows.append({
+            "planet": p, "title": _title(p) + f" in {t['sign']}",
+            "sign": t["sign"], "retro": t["retrograde"],
+            "until": until,
+            "until_label": _daylabel(until),
+            "natal_house": t["natal_house"],
+            "house_words": house_words, "sits_on": sits, "gaze": gaze,
+            "effect": effect,
+            "ids": ([f"transit.{p.lower()}", f"transit.{p.lower()}.aspects"]
+                    + list(t["governing_contacts"])
+                    + [f"house.{h}" for h in gaze_houses]),
+        })
+
+    upcoming = []
+    horizon = when + timedelta(days=today.HORIZON_DAYS)
+    for p in PLANETS:
+        if p == "Moon":
+            continue
+        slow = p in SLOW_MOVERS
+        ing = next_sign_ingress(
+            p, when, max_days=4000 if slow else today.HORIZON_DAYS + 1)
+        if ing is None or (not slow and ing.when > horizon):
+            continue
+        house = (ing.to_sign_index - chart.lagna.sign_index) % 12 + 1
+        gaze_houses = [
+            h for h in sorted((s - chart.lagna.sign_index) % 12 + 1
+                              for s in aspected_signs(p, ing.to_sign_index))
+            if facts[f"house.{h}"].value["occupants"]]
+        lands = facts[f"house.{house}"].value["occupants"]
+        gaze = [n for h in gaze_houses
+                for n in facts[f"house.{h}"].value["occupants"]]
+        house_words = _house_words(house)
+        effect = f"Moves into the part of your chart that holds {house_words}"
+        if lands:
+            effect += f", landing on {_owned(p, lands)}"
+        if gaze:
+            effect += f"; its gaze will fall on {_owned(p, gaze)}"
+        effect += "."
+        upcoming.append({
+            "planet": p, "title": _title(p) + f" → {ing.to_sign}",
+            "to_sign": ing.to_sign, "when": ing.when,
+            "daylabel": _daylabel(ing.when.date().isoformat()),
+            "natal_house": house, "house_words": house_words,
+            "lands_on": lands, "gaze": gaze, "effect": effect,
+            "ids": ([f"transit.{p.lower()}.aspects", f"house.{house}"]
+                    + [f"house.{h}" for h in gaze_houses if h != house]),
+        })
+    upcoming.sort(key=lambda r: r["when"])
+    return {"now": now_rows, "upcoming": upcoming}
 
 
 # Where a tick sits for each house: in the margin OUTSIDE the 0..300 frame,
@@ -1056,6 +1237,11 @@ def build_dashboard(profile: Profile) -> dict:
             "natal_house": tp.natal_house, "retro": tp.retrograde,
         })
 
+    # ONE ledger for the page. The domain readings and the Transits pane
+    # are both composed from it, and a second build would only be a second
+    # place for the two to disagree.
+    facts = chartfacts.fact_index(chart, now)
+
     lagna_nak = nakshatra_table(chart)["Lagna"]
     today_moon_nak = nakshatra_of(snapshot.planets["Moon"].position.longitude)
     panca = pancanga_for(birth, now)
@@ -1175,7 +1361,10 @@ def build_dashboard(profile: Profile) -> dict:
             (f"{current[0].lord} mahādaśā · {current[1].lord} antara "
              f"to {_fmt(current[1].end)}" if current else "—"),
         ],
-        "domains": domain_cards(chart, now),
+        "domains": domain_cards(chart, now, facts),
+        # SCREEN 1 — the glance's Transits pane, NOW and UPCOMING, every noun
+        # copied from the same ledger the domain readings were composed from.
+        "transits_panel": transits_panel(chart, now, facts),
         # SCREEN 1 — TODAY. Three or four dated lines, each naming a graha,
         # composed by today.py from the ephemeris. See ui-design/DOSSIER.md.
         "day_header": today.day_header(now, panca),
@@ -1354,16 +1543,19 @@ def _step_for(fact_ids) -> str:
     return "NATAL"
 
 
-def domain_cards(chart, now: datetime) -> list[dict]:
+def domain_cards(chart, now: datetime, facts: dict | None = None) -> list[dict]:
     """Everything the arrival grid and the five domain views need.
 
     Composed once from one build of the ledger — five domains sharing a
-    single pass rather than five.
+    single pass rather than five. `facts` is that build, passed in by the
+    dashboard so the Transits pane reads the same ledger rather than
+    building a second one.
     """
     import domainread
     from chartfacts import build_facts
     from domains import CHECKLIST, DOMAINS
-    facts = {f.id: f for f in build_facts(chart, now)}
+    if facts is None:
+        facts = {f.id: f for f in build_facts(chart, now)}
     steps = dict(CHECKLIST)
     out = []
     for did in DOMAIN_ORDER:

@@ -366,6 +366,25 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 .grow:last-child { border-bottom: none; }
 .grow.accent, .grow.accent .gdate { color: var(--accent-ink); }
 .gdate { flex: none; width: 74px; color: var(--ink-50); }
+/* The Transits pane's rows carry a sentence now, so the text column has to
+   wrap rather than push the date column: flex: 1 with min-width: 0 is what
+   lets a flex child shrink below its content. The effect line is read as a
+   sentence and so sits at the 16px floor, not the table's 15. */
+.gkicker {
+  font-size: var(--t-label); letter-spacing: .1em; font-variant-caps: all-small-caps;
+  color: var(--ink-50); padding: 12px 0 2px;
+}
+.grow .gbody { flex: 1; min-width: 0; }
+.grow .gtitle { display: block; }
+.grow .geffect {
+  display: block; margin-top: 3px;
+  font-size: var(--t-body); line-height: 1.5; color: var(--ink-70);
+}
+.grow .gids {
+  display: block; margin-top: 5px;
+  font-size: var(--t-mark); letter-spacing: .1em;
+  font-variant-caps: all-small-caps; color: var(--ink-50);
+}
 .gdasha { display: flex; align-items: center; gap: 16px; text-align: left; padding: 2px 4px; }
 .gring {
   flex: none; width: 76px; height: 76px; border-radius: 50%;

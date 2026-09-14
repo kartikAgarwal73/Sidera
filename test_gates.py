@@ -11662,3 +11662,243 @@ class TestTheTabRowSitsOnOneBaseline:
             for i in r["items"]:
                 assert abs(i["top"] - c["top"]) <= 0.5, (width, i)
                 assert abs(i["bottom"] - c["bottom"]) <= 0.5, (width, i)
+
+
+class TestTransitsPanelNowAndUpcoming:
+    """The glance's Transits pane: NOW and UPCOMING, every noun from the
+    ledger.
+
+    Re-pinned 2026-09-14 from a review of the live site. The pane listed
+    four lifeline markers with a house NUMBER under each — "Saturn → Aries ·
+    your 9th house" — a label true of everyone with this lagna, banned on
+    the top layer, and silent about today's sky. Each row now carries one
+    line on effect: the natal points the transit sits on, the points its
+    gaze falls on, and what the house it works holds. None of it is
+    interpretation; every noun is copied from a fact, and these tests
+    rebuild each row from the ledger and compare.
+    """
+
+    WHENS = (TRANSIT_WHEN, AGENT_WHEN)
+
+    @classmethod
+    @pytest.fixture(scope="class")
+    def panels(cls):
+        from app import transits_panel
+        from chartfacts import build_facts
+        import fixtures
+        out = []
+        for key in ("reference", "partner"):
+            chart = compute_chart(fixtures.birth(key))
+            for when in cls.WHENS:
+                facts = {f.id: f for f in build_facts(chart, when)}
+                out.append((key, when, chart, facts,
+                            transits_panel(chart, when, facts)))
+        return out
+
+    def test_now_is_the_slow_movers_plus_any_fast_mover_on_a_natal_point(
+            self, panels):
+        for key, when, chart, facts, panel in panels:
+            want = {p for p in PLANETS
+                    if facts[f"transit.{p.lower()}"].value["slow_mover"]
+                    or facts[f"transit.{p.lower()}"].value["governing_contacts"]}
+            assert {r["planet"] for r in panel["now"]} == want, (key, when)
+            assert [r["planet"] for r in panel["now"]][:4] == \
+                ["Saturn", "Jupiter", "Rahu", "Ketu"], (key, when)
+
+    def test_a_now_row_names_exactly_the_points_the_ledger_gives(
+            self, panels):
+        """Sitting-on = the contact facts that govern the transit; gaze =
+        the occupants of the natal houses under its drishti. Not one more,
+        not one fewer — and the rendered words say the same names."""
+        import voice
+        for key, when, chart, facts, panel in panels:
+            for r in panel["now"]:
+                p = r["planet"]
+                t = facts[f"transit.{p.lower()}"].value
+                a = facts[f"transit.{p.lower()}.aspects"].value
+                sits = {facts[c].value["point"] for c in t["governing_contacts"]}
+                gaze = {n for h in a["aspects"]
+                        for n in facts[f"house.{h}"].value["occupants"]}
+                assert set(r["sits_on"]) == sits, (key, when, p)
+                assert set(r["gaze"]) == gaze, (key, when, p)
+                for n in (sits | gaze) - {p, "Lagna"}:
+                    assert voice.plain(n).removeprefix("the ") in r["effect"], (
+                        key, when, p, n, r["effect"])
+                if p in (sits | gaze):
+                    assert "its own natal place" in r["effect"], r["effect"]
+                if "Lagna" in sits:
+                    assert "your rising degree" in r["effect"], r["effect"]
+                # …and no graha the ledger did NOT give is smuggled in.
+                named = {m.lower() for m in voice.names_a_planet(r["effect"])}
+                allowed = {voice.plain(n).removeprefix("the ").lower()
+                           for n in (sits | gaze) - {p, "Lagna"}}
+                assert named <= allowed, (key, when, p, named - allowed)
+
+    def test_a_now_row_names_the_house_the_fact_gives(self, panels):
+        import rulelib
+        for key, when, chart, facts, panel in panels:
+            for r in panel["now"]:
+                house = facts[f"transit.{r['planet'].lower()}"].value["natal_house"]
+                words = rulelib.HOUSE_MATTERS[house].split(",")[0].strip()
+                assert r["house_words"] == words, (key, when, r["planet"])
+                assert words in r["effect"], r["effect"]
+
+    def test_a_now_row_ends_when_the_thing_it_is_about_ends(self, panels):
+        """A slow mover's row is its passage through the sign, so it ends
+        at the sign exit the ledger gives. A fast mover is listed only for
+        the natal point it is standing on, and that contact ends days
+        before the sign does — the skeptic's catch on the first draft,
+        which printed the sign exit for both."""
+        import today
+        for key, when, chart, facts, panel in panels:
+            for r in panel["now"]:
+                p = r["planet"]
+                t = facts[f"transit.{p.lower()}"].value
+                a = facts[f"transit.{p.lower()}.aspects"].value
+                if t["slow_mover"]:
+                    assert r["until"] == a["until_iso"], (key, when, p)
+                    continue
+                ends = []
+                for cid in t["governing_contacts"]:
+                    point = facts[cid].value["point"]
+                    lon = (chart.lagna.longitude if point == "Lagna"
+                           else chart.planets[point].longitude)
+                    _, leaves = today.contact_window(p, lon, when)
+                    if leaves is not None:
+                        ends.append(leaves.date().isoformat())
+                assert r["until"] == (max(ends) if ends else a["until_iso"]), (
+                    key, when, p, r["until"], ends)
+                if ends:
+                    assert r["until"] <= a["until_iso"], (key, when, p)
+
+    def test_a_row_title_is_in_the_plain_register(self, panels):
+        """'The north node in Aquarius', never 'Rahu in Aquarius': the
+        pane is top-layer text, and the Today entries above it say the
+        plain name. Fact ids underneath are citations and may say Rahu."""
+        import voice
+        for key, when, chart, facts, panel in panels:
+            for r in panel["now"] + panel["upcoming"]:
+                assert not voice.find_jargon(r["title"]), r["title"]
+                assert voice.names_a_planet(r["title"]), r["title"]
+                assert r["title"][0].isupper(), r["title"]
+
+    def test_upcoming_is_dated_ahead_and_inside_the_horizon(self, panels):
+        import today
+        for key, when, chart, facts, panel in panels:
+            planets = [r["planet"] for r in panel["upcoming"]]
+            assert "Moon" not in planets, (key, when)
+            for p in ("Saturn", "Jupiter", "Rahu", "Ketu"):
+                assert p in planets, (key, when, p)
+            whens = [r["when"] for r in panel["upcoming"]]
+            assert whens == sorted(whens), (key, when)
+            for r in panel["upcoming"]:
+                assert r["when"] > when, (key, when, r)
+                if r["planet"] not in ("Saturn", "Jupiter", "Rahu", "Ketu"):
+                    assert (r["when"] - when).days <= today.HORIZON_DAYS, r
+
+    def test_an_upcoming_row_is_the_next_ingress_told_against_this_chart(
+            self, panels):
+        """The sign it enters, the house that sign is here, the natal points
+        in that house, and the points under its gaze from there — all from
+        the ledger and the same drishti table the ledger uses."""
+        import rulelib
+        import voice
+        from transits import aspected_signs, next_sign_ingress
+        for key, when, chart, facts, panel in panels:
+            for r in panel["upcoming"]:
+                p = r["planet"]
+                ing = next_sign_ingress(p, when, max_days=4000)
+                assert r["to_sign"] == ing.to_sign and r["when"] == ing.when
+                house = (ing.to_sign_index - chart.lagna.sign_index) % 12 + 1
+                assert r["natal_house"] == house
+                assert rulelib.HOUSE_MATTERS[house].split(",")[0].strip() \
+                    in r["effect"], r["effect"]
+                assert set(r["lands_on"]) == \
+                    set(facts[f"house.{house}"].value["occupants"])
+                gaze = {n for s in aspected_signs(p, ing.to_sign_index)
+                        for n in facts[
+                            f"house.{(s - chart.lagna.sign_index) % 12 + 1}"
+                        ].value["occupants"]}
+                assert set(r["gaze"]) == gaze, (key, when, p)
+                named = {m.lower() for m in voice.names_a_planet(r["effect"])}
+                allowed = {voice.plain(n).removeprefix("the ").lower()
+                           for n in (set(r["lands_on"]) | gaze) - {p}}
+                assert named <= allowed, (key, when, p, named - allowed)
+
+    def test_every_effect_line_is_plain_and_short(self, panels):
+        """The top layer: no house numbers, no Sanskrit, no throat-clearing,
+        no article after 'your'. Thirty words is the ceiling — a row can
+        carry five natal points, and a sentence that names them all is
+        still one sentence."""
+        import voice
+        for key, when, chart, facts, panel in panels:
+            for r in panel["now"] + panel["upcoming"]:
+                e = r["effect"]
+                assert not voice.find_jargon(e), (e, voice.find_jargon(e))
+                assert not voice.find_throat_clearing(e), e
+                assert "your the" not in e and "the the" not in e, e
+                assert voice.words(e) <= 30, (voice.words(e), e)
+                assert e[0].isupper() and e.endswith("."), e
+                assert "house" not in e.lower().replace(
+                    "the part of your chart", ""), e
+
+    def test_every_row_footnotes_the_facts_it_was_built_from(self, panels):
+        for key, when, chart, facts, panel in panels:
+            for r in panel["now"]:
+                assert f"transit.{r['planet'].lower()}" in r["ids"]
+                assert f"transit.{r['planet'].lower()}.aspects" in r["ids"]
+                for fid in r["ids"]:
+                    assert fid in facts, (key, when, fid)
+            for r in panel["upcoming"]:
+                assert f"transit.{r['planet'].lower()}.aspects" in r["ids"]
+                assert f"house.{r['natal_house']}" in r["ids"]
+                for fid in r["ids"]:
+                    assert fid in facts, (key, when, fid)
+
+    def test_the_pane_renders_both_lists_from_the_builder(self, page):
+        """The rendered pane is the builder's output and nothing else: two
+        kickers, every effect line present, and no generic house label."""
+        pane = page[page.index('id="gpane-transits"'):]
+        pane = pane[:pane.index('id="gpane-dasha"')]
+        assert pane.count('class="gkicker"') == 2
+        assert "Now" in pane and "Upcoming" in pane
+        assert 'class="growlist"' in pane
+        assert not re.search(r"your \d+(?:st|nd|rd|th) house", pane), (
+            "the generic house label is back")
+        effects = re.findall(r'<span class="geffect">(.*?)</span>', pane, re.S)
+        assert len(effects) >= 5, len(effects)
+        for e in effects:
+            assert e.startswith(("Works the part", "Moves into the part")), e
+        titles = re.findall(r'<span class="gtitle">(.*?)</span>', pane, re.S)
+        assert len(titles) == len(effects)
+        for title in titles:
+            assert not re.search(r"\b(?:Rahu|Ketu)\b", title), title
+        # Each row footnotes its facts, as a Today entry does.
+        assert pane.count('class="gids"') == len(effects)
+
+    def test_the_gocara_ledger_lists_drishti_contacts_without_a_conjunction(
+            self, client):
+        """Found while rebuilding the pane: the Sky ledger's "Contacts
+        today" block was guarded on conjunctions alone, so on any day with
+        none — most days — the nine drishti rows vanished with it."""
+        page = client.post("/", data=GATE_FORM).get_data(as_text=True)
+        block = page[page.index("<!-- Gocara / transits -->"):]
+        block = block[:block.index("Rāhu and Ketu reach")]
+        aspects = block.count("aspects natal")
+        conjunct = block.count("conjunct natal")
+        # The fixture at the live date: what transit_contacts says today.
+        from transits import transit_contacts, transit_snapshot
+        chart = compute_chart(GATE_BIRTH)
+        now = datetime.now(timezone.utc)
+        contacts = transit_contacts(chart, transit_snapshot(chart, now))
+        assert aspects == sum(1 for c in contacts if c.kind == "aspect")
+        assert conjunct == sum(1 for c in contacts if c.kind == "conjunction")
+        assert aspects, "a day with no drishti contact at all would be a first"
+        # The rendered check above is decisive only on a day with no
+        # conjunction — on any other day the old guard would have passed
+        # it. So the guard itself is pinned too.
+        src = (HERE / "templates" / "index.html").read_text(encoding="utf-8")
+        gocara = src[src.index("<!-- Gocara / transits -->"):]
+        gocara = gocara[:gocara.index("Contacts today")]
+        assert "{% if data.conjunctions or data.aspect_contacts %}" in gocara
+        assert "{% if data.conjunctions %}" not in gocara

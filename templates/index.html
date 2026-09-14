@@ -479,11 +479,28 @@
         <button class="learn" data-lesson="lagna">ⓘ 60s</button></div>
     </div>
     <div class="gpane hidden" id="gpane-transits">
+      {# NOW and UPCOMING, every noun copied from a ledger fact — see
+         app.transits_panel. This used to list four lifeline markers with a
+         house NUMBER under each, which is a label and not an effect. The
+         fact ids sit under each row the way they do under a Today entry:
+         one tap from the computation. #}
       <div class="growlist">
-        {% for m in data.life.markers[:4] %}
-        <div class="grow {% if loop.first %}accent{% endif %}">
-          <span class="gdate">{{ m.daylabel }}</span>
-          <span>{{ m.planet }} → {{ m.to_sign }} · your {{ m.natal_house | ordinal }} house</span>
+        <div class="gkicker">Now · running until</div>
+        {% for r in data.transits_panel.now %}
+        <div class="grow{% if loop.first %} accent{% endif %}" data-transit="{{ r.planet }}">
+          <span class="gdate">{{ r.until_label }}</span>
+          <span class="gbody"><span class="gtitle">{{ r.title }}{% if r.retro %} ℞{% endif %}</span>
+            <span class="geffect">{{ r.effect }}</span>
+            <span class="gids">{{ r.ids | join(" · ") }}</span></span>
+        </div>
+        {% endfor %}
+        <div class="gkicker">Upcoming · from</div>
+        {% for r in data.transits_panel.upcoming %}
+        <div class="grow" data-ingress="{{ r.planet }}">
+          <span class="gdate">{{ r.daylabel }}</span>
+          <span class="gbody"><span class="gtitle">{{ r.title }}</span>
+            <span class="geffect">{{ r.effect }}</span>
+            <span class="gids">{{ r.ids | join(" · ") }}</span></span>
         </div>
         {% endfor %}
       </div>
@@ -1112,7 +1129,10 @@
     {% endfor %}
   </div>
   </details>
-  {% if data.conjunctions %}
+  {# Both kinds, or the block. This guard read `data.conjunctions` alone,
+     so on any day without a conjunction — most days — the drishti rows
+     vanished with it. Found 2026-09-14 while rebuilding the glance pane. #}
+  {% if data.conjunctions or data.aspect_contacts %}
   <div class="kicker" style="margin-top:22px">Contacts today</div>
   <div class="rows">
     {% for c in data.conjunctions %}

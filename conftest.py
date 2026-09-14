@@ -199,6 +199,10 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
     "TestTheTabRowSitsOnOneBaseline": (
         "invariant", "product rule: every entry in the tab row sits on one "
                      "baseline and fills the row — measured in a browser"),
+    "TestTransitsPanelNowAndUpcoming": (
+        "invariant", "product rule: the Transits pane is Now and Upcoming, "
+                     "and every noun on a row is copied from a ledger fact "
+                     "— rebuilt from the ledger and compared"),
     "TestTheAskScreen": (
         "invariant", "product rule: the question field renders whether or "
                      "not an answer can be produced; answers are "

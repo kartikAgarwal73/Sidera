@@ -115,6 +115,32 @@ def find_vagueness(text: str) -> list[str]:
     return [m.group(0) for rx in _VAGUE_RE for m in rx.finditer(text or "")]
 
 
+# The nine as the top layer says them. The nodes have no English name in
+# ordinary use, so they are described; everything else is the reader's own
+# sky and keeps its name. The article is PART of the plain name — "the Moon",
+# never "Moon" — which is what made the possessive go wrong: three modules
+# each carried a copy of this table and two of them wrote "your " in front
+# of it, and the live site read "your the Moon". So the table lives here,
+# with the doctrine, and the possessive is a function rather than a prefix.
+PLAIN_PLANET = {"Rahu": "the north node", "Ketu": "the south node",
+                "Sun": "the Sun", "Moon": "the Moon"}
+
+
+def plain(name: str) -> str:
+    """'the Moon', 'the north node', 'Venus' — as a sentence's subject."""
+    return PLAIN_PLANET.get(name, name)
+
+
+def yours(name: str) -> str:
+    """'your Moon', 'your north node', 'your Venus' — in possessive position,
+    where the article gives way to 'your'. The lagna is not a graha and
+    has no plain name of its own; in this position it is the reader's
+    rising degree."""
+    if name == "Lagna":
+        return "your rising degree"
+    return "your " + plain(name).removeprefix("the ")
+
+
 def names_a_planet(text: str) -> list[str]:
     return [m.group(0) for m in _PLANET_RE.finditer(text or "")]
 
