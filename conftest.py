@@ -209,6 +209,13 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
                      "ledger carries them, names an empty D9 7th's lord and "
                      "its placement, and reads a split Upapada as two "
                      "answers"),
+    "TestGrahaCardLeadsWithTheVedicAccount": (
+        "invariant", "product rule: Learn card 05 tells the Vedic account "
+                     "of Rahu and Ketu first, and the astronomy as what "
+                     "the account names; both paragraphs render"),
+    "TestGrahaCardLeadsWithTheVedicAccount::test_the_geometry_paragraph_is_true_of_the_sky": (
+        "external", "the mean node's 18.6-year retrograde circuit — "
+                    "checkable in any ephemeris"),
     "TestTransitsPanelNowAndUpcoming": (
         "invariant", "product rule: the Transits pane is Now and Upcoming, "
                      "and every noun on a row is copied from a ledger fact "

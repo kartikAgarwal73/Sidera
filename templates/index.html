@@ -1537,7 +1537,10 @@
       <span class="xptitle"><span class="lessonnum">{{ "%02d" | format(l.number) }}</span> {{ l.title }}</span>
       <span class="xpsub lesson-read-mark"></span>
     </summary>
-    <p class="xpbody">{{ l.body }}</p>
+    {# A body may carry one paragraph break; one <p> per paragraph, or the
+       break collapses to a space and the card is the old card with more
+       words. The modal splits the same way, in openLesson(). #}
+    {% for para in l.body.split("\n\n") %}<p class="xpbody">{{ para }}</p>{% endfor %}
   </details>
   {% endfor %}
 </section>
@@ -1551,7 +1554,7 @@
       <span class="xcard-title" id="lmodal-title"></span>
       <button class="xcard-close" id="lmodal-close" aria-label="close">×</button>
     </div>
-    <p class="xpbody" id="lmodal-body"></p>
+    <div id="lmodal-body"></div>
     <p class="footnote" style="text-align:left">Card <span id="lmodal-num"></span> of 20 ·
     <a href="#learnpath" id="lmodal-path" style="color:inherit">see the full path</a></p>
   </div>
@@ -2049,7 +2052,12 @@ function openLesson(key) {
   const l = LESSONS[key];
   if (!l) return;
   document.getElementById("lmodal-title").textContent = l.title;
-  document.getElementById("lmodal-body").textContent = l.body;
+  const body = document.getElementById("lmodal-body");
+  body.textContent = "";
+  l.body.split("\n\n").forEach(para => {
+    const p = document.createElement("p");
+    p.className = "xpbody"; p.textContent = para; body.appendChild(p);
+  });
   document.getElementById("lmodal-num").textContent = String(l.n);
   document.getElementById("lmodal").hidden = false;
   markRead(key);

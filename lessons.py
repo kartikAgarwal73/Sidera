@@ -2,7 +2,8 @@
 
 A 20-card literacy path from "what is a lagna" to "read your own D9",
 plus a contextual index mapping dashboard sections to the card that
-explains them. Each body is sized for a ~60-second read.
+explains them. Each body is sized for a ~60-second read. A body may carry
+one paragraph break ("\n\n"); both renderers split on it.
 """
 from __future__ import annotations
 
@@ -49,14 +50,29 @@ LESSONS = [
            "unequal slices: each house IS a sign. When you read 'Mars in "
            "the 8th house', it means Mars occupies the eighth sign counted "
            "inclusively from your lagna sign."),
+    # Two paragraphs, joined by a blank line: the Vedic account first, and
+    # the astronomy as what the account names. Re-pinned 2026-09-14 — the
+    # card had opened on "the Moon's north and south nodes" and given the
+    # geometry as the whole story, with no Svarbhanu, no amrita, no
+    # eclipse, and so no reason two shadows are counted among nine seizers.
     Lesson(5, "grahas", "The nine grahas",
-           "Vedic astrology tracks nine 'seizers': Sun, Moon, Mars, "
-           "Mercury, Jupiter, Venus, Saturn — the seven visible movers — "
-           "plus Rahu and Ketu, the Moon's north and south nodes. The "
-           "nodes are not bodies but the two points where the Moon's path "
-           "crosses the Sun's; they always sit exactly opposite each "
-           "other. Each graha carries its own significations: the Moon "
-           "the mind, Mercury speech, Saturn time and labour."),
+           "Vedic astrology tracks nine grahas, 'seizers'. Seven are the "
+           "visible movers: Sun, Moon, Mars, Mercury, Jupiter, Venus and "
+           "Saturn. When the gods and the asuras churned the ocean for the "
+           "amrita, the asura Svarbhanu joined the gods' line in disguise and "
+           "drank. The Sun and the Moon saw him and told Vishnu, whose discus "
+           "cut him in two — but the nectar had passed his throat, and neither "
+           "half could die. The head is Rahu, the body is Ketu, and their "
+           "grudge against the two lights that exposed them is the account of "
+           "an eclipse: Rahu swallows the Sun or the Moon and must let it go. "
+           "Seizing the lights is what makes two shadows grahas."
+           "\n\n"
+           "In the sky the story names the two points where the Moon's path "
+           "crosses the Sun's: always exactly opposite, drifting backward "
+           "round the zodiac in about eighteen and a half years, the only "
+           "places an eclipse can fall. Each graha carries its own "
+           "significations: the Moon the mind, Mercury speech, Saturn time and "
+           "labour."),
     Lesson(6, "plate", "Reading the North-Indian plate",
            "The diamond-in-square chart keeps HOUSES in fixed positions: "
            "house 1 is always the top-centre diamond, then houses run "

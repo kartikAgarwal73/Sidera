@@ -12289,3 +12289,135 @@ class TestMarriageReadingCitesTheSpouseFacts:
                 assert s.plain.rstrip(".") != (
                     f"the second chart leaves it empty, resting on "
                     f"{lord} from {facts[f'varga.d9.{lord.lower()}'].value['sign']}"), s.plain
+
+
+class TestGrahaCardLeadsWithTheVedicAccount:
+    """Learn card 05, "The nine grahas", tells the Vedic account first.
+
+    Re-pinned 2026-09-14 from a review of the live site. The card had
+    introduced Rahu and Ketu as "the Moon's north and south nodes" and
+    given the nodal geometry as the whole account — no Svarbhanu, no
+    amrita, no severing, no eclipse, and so no reason two points with no
+    body of their own are counted among nine "seizers". That is the
+    drift the review named: the Vedic doctrine displaced by the
+    astronomical description offered as the real explanation. The story
+    leads now; the geometry is its second paragraph, stated as what the
+    story names.
+    """
+
+    def test_the_vedic_account_is_the_first_paragraph(self):
+        from lessons import lesson
+        body = lesson("grahas").body
+        paras = body.split("\n\n")
+        assert len(paras) == 2, len(paras)
+        p1, p2 = paras
+        for word in ("Svarbhanu", "amrita", "Vishnu", "discus", "Rahu",
+                     "Ketu", "eclipse", "seizers"):
+            assert word in p1, word
+        for graha in ("Sun", "Moon", "Mars", "Mercury", "Jupiter", "Venus",
+                      "Saturn"):
+            assert graha in p1, graha
+        assert "Moon's path crosses the Sun's" in p2
+        assert "opposite" in p2 and "eighteen and a half years" in p2
+        assert "significations" in p2
+        assert body.index("Svarbhanu") < body.index("crosses")
+
+    def test_the_geometry_is_stated_as_the_identity_not_a_correction(self):
+        from lessons import lesson
+        p2 = lesson("grahas").body.split("\n\n")[1]
+        assert p2.startswith("In the sky the story names"), p2[:60]
+        for word in ("really", "actually", "merely", "just", "in fact",
+                     "not bodies"):
+            assert word not in p2, word
+
+    def test_the_western_names_are_not_the_primary_term(self):
+        from lessons import lesson
+        body = lesson("grahas").body
+        assert not re.search(r"north (?:and south )?node|south node", body,
+                             re.I)
+
+    def test_both_paragraphs_render_as_paragraphs(self, page):
+        """Both renderers: the card on the path and the ⓘ modal. A body
+        with a paragraph break rendered as one <p> collapses the break to
+        a space, which is the same card as before with more words."""
+        card = page[page.index('data-lesson="grahas"'):]
+        card = card[:card.index("</details>")]
+        assert card.count('<p class="xpbody">') == 2, card.count(
+            '<p class="xpbody">')
+        assert "Svarbhanu" in card
+        js = page[page.index("function openLesson("):]
+        js = js[:js.index("markRead(key)")]
+        assert 'split("\\n\\n")' in js, js
+        assert "textContent = l.body" not in js
+
+    def test_no_other_card_grew_a_second_paragraph_by_accident(self):
+        """Sixty-second cards. One card needed two paragraphs; the rest
+        stay one, and none may run to three."""
+        from lessons import LESSONS
+        for l in LESSONS:
+            n = len(l.body.split("\n\n"))
+            assert n == (2 if l.key == "grahas" else 1), (l.key, n)
+
+    def test_the_geometry_paragraph_is_true_of_the_sky(self, chart):
+        """One circuit in about eighteen and a half years, backward — the
+        mean node's period, checkable in any ephemeris, so this is
+        external. (That Ketu is opposite Rahu is how the engine builds
+        Ketu, and so is not a thing this test could catch.)"""
+        import schools
+        assert schools.chosen("node_position").id == "mean"
+        r = chart.planets["Rahu"]
+        assert r.speed < 0
+        assert round(360 / abs(r.speed) / 365.25, 1) == 18.6
+
+    def test_both_paragraphs_render_in_a_browser(self):
+        """The two renderers, driven: the card on the path opened, and the
+        modal opened on the same card. Neither is walked by any other
+        browser gate — the type-floor walk skips a closed <details> and a
+        hidden modal — so without this the split would be unobserved."""
+        pw = pytest.importorskip("playwright.sync_api",
+                                 reason="playwright not installed")
+        import threading
+        from werkzeug.serving import make_server
+        from app import app
+        srv = make_server("127.0.0.1", 0, app, threaded=True)
+        port = srv.socket.getsockname()[1]
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            with pw.sync_playwright() as p:
+                browser = TestMaskedBirthFieldsInARealBrowser._launch(p, pytest)
+                pg = browser.new_context(
+                    viewport={"width": 390, "height": 900}).new_page()
+                pg.goto(f"http://127.0.0.1:{port}/")
+                for k, v in GATE_FORM.items():
+                    pg.evaluate(
+                        "([k,v]) => { const e = document.querySelector("
+                        "`[name=\"${k}\"]`); if (e) e.value = v; }", [k, v])
+                with pg.expect_navigation():
+                    pg.evaluate("document.querySelector('#cast').submit()")
+                pg.wait_for_load_state("load")
+                pg.evaluate("location.hash = '#cat-learn'")
+                pg.wait_for_timeout(400)
+                card = pg.evaluate("""() => {
+                  const d = document.querySelector('details[data-lesson="grahas"]');
+                  d.open = true;
+                  const ps = Array.from(d.querySelectorAll('p.xpbody'));
+                  return {n: ps.length,
+                          sizes: ps.map(p => parseFloat(getComputedStyle(p).fontSize)),
+                          first: ps[0] ? ps[0].textContent.slice(0, 40) : ''};
+                }""")
+                modal = pg.evaluate("""() => {
+                  openLesson('grahas');
+                  const m = document.getElementById('lmodal');
+                  const ps = Array.from(m.querySelectorAll('#lmodal-body p.xpbody'));
+                  return {hidden: m.hidden, n: ps.length,
+                          sizes: ps.map(p => parseFloat(getComputedStyle(p).fontSize)),
+                          second: ps[1] ? ps[1].textContent.slice(0, 26) : ''};
+                }""")
+                browser.close()
+        finally:
+            srv.shutdown()
+        assert card["n"] == 2, card
+        assert all(s >= 16 for s in card["sizes"]), card
+        assert modal["hidden"] is False and modal["n"] == 2, modal
+        assert all(s >= 16 for s in modal["sizes"]), modal
+        assert modal["second"].startswith("In the sky the story"), modal
