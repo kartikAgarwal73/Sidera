@@ -57,8 +57,8 @@ from ashtakavarga import ashtakavarga
 from ashtakavarga import strongest as av_strongest
 from ashtakavarga import thinnest as av_thinnest
 from ashtakavarga import verdict as ashtakavarga_verdict
-from yogas import (detect_all, dignity, dignity_grade, house_lords,
-                   houses_owned_by, sign_lord)
+from yogas import (detect_all, dignity, dignity_at, dignity_grade,
+                   house_lords, houses_owned_by, sign_lord)
 
 
 @dataclass(frozen=True)
@@ -467,7 +467,13 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
                     + _DEGREE_CAVEAT),
                 value={"varga": code, "planet": name, "sign": vp.sign,
                        "house": vp.house, "vargottama": vp.vargottama,
-                       "degree": round(vp.degree_in_sign, 4)},
+                       "degree": round(vp.degree_in_sign, 4),
+                       # Dignity by degree in the division — the thing the
+                       # degree-level vargas were built to make computable.
+                       # Added 2026-09-14 so a reading that names a varga
+                       # lord's sign can say its condition there too.
+                       "dignity": dignity_at(name, vp.sign_index,
+                                             vp.degree_in_sign)},
             ))
         vargottama = [n for n, v in varga.planets.items() if v.vargottama]
         if code == "D9" and vargottama:

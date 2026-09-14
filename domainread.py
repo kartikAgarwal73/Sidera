@@ -25,6 +25,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 
+import schools
 import voice
 from domains import DOMAINS, Domain
 from engine import Chart
@@ -325,10 +326,36 @@ def read(chart: Chart, when: datetime, domain_id: str,
                                          if first else ""),
                                   weight=1))
 
+    # --- step 2b, the spouse's own facts — marriage only ------------------
+    # The Dārakāraka and the Upapada are marriage facts by doctrine
+    # (rule.karaka.darakaraka: "read alongside the 7th house and the
+    # Upapada"), and the ledger has carried them since the five modules
+    # were surfaced. This step is the interim reading of them, composed the
+    # way every other signal here is; the resolver, when it comes, will
+    # evaluate the same facts by rule. Re-pinned 2026-09-14 from a review of
+    # the live site, where two charts with different spouse significators
+    # read alike because nothing here looked at them.
+    if domain.id == "marriage":
+        cited = {fid for s in signals for fid in s.fact_ids}
+        signals.append(_darakaraka_signal(facts, cited))
+        signals.append(_upapada_signal(facts))
+
     # --- step 3, varga: does the promise carry? ---------------------------
     varga = domain.varga.lower()
     vf = facts[f"{varga}.{ordinal(domain.main_house)}"]
     here = vf.value["occupants"]
+    lord = vf.value["lord"]
+    lf = facts[f"varga.{varga}.{lord.lower()}"].value
+    # "…leaves it to Saturn alone" named a lord with no placement. The
+    # marriage reading now says where that lord stands in the second chart
+    # — its sign, and its dignity there when the ledger calls it notable —
+    # and cites the varga fact it read. The other four readings keep the
+    # line they had: the brief was the marriage reading, and the same
+    # change there would move four more teasers under its own name.
+    named = domain.id == "marriage" and not here
+    lord_dignity = lf.get("dignity", "").split(" (")[0]
+    lord_note = (f", {_plain_dignity(lord_dignity)} there"
+                 if any(x in lord_dignity for x in STRONG + WEAK) else "")
     signals.append(Signal(
         "support" if here else "strain",
         (f"in the {domain.varga}, the chart read for {domain.varga_for}, "
@@ -336,15 +363,28 @@ def read(chart: Chart, when: datetime, domain_id: str,
          + (f" and holds {_and(here)} — the birth chart's promise is "
             f"repeated there" if here else
             " and stands empty, so the promise rests on the birth chart "
-            "alone rather than being confirmed twice")),
-        (f"{varga}.{ordinal(domain.main_house)}", f"varga.{varga}.lagna"),
-        ("rule.varga.confirms", "rule.varga.purpose"),
+            "alone rather than being confirmed twice")
+         + (f"; its lord {lord} sits in {lf['sign']}, the "
+            f"{ordinal(vf.value['lord_house'])} house of the {domain.varga}"
+            + (f", {_dignity_phrase(lord_dignity)}" if lord_note else "")
+            if named else "")),
+        ((f"{varga}.{ordinal(domain.main_house)}",)
+         + ((f"varga.{varga}.{lord.lower()}",) if named else ())
+         + (f"varga.{varga}.lagna",)),
+        ("rule.varga.confirms", "rule.varga.purpose")
+        + (("rule.varga.from_varga_lagna",) if named else ()),
         brief=(f"the {domain.varga} repeats it" if here
                else f"the {domain.varga} does not confirm it"),
         plain=(f"the second chart puts {_planets(here)} over it" if here
-               else f"the second chart leaves it to "
-                    f"{_planet(vf.value['lord'])} alone"),
+               else (f"the second chart leaves it empty, resting on "
+                     f"{_planet(lord)} from {lf['sign']}{lord_note}"
+                     if named else
+                     f"the second chart leaves it to {_planet(lord)} alone")),
         weight=3))
+    if domain.id == "marriage":
+        strength = _main_lord_strength_signal(facts, domain.main_house)
+        if strength is not None:
+            signals.append(strength)
 
     # --- step 4, dasha: is this domain what the period is about? ----------
     current = facts.get("dasha.current")
@@ -422,6 +462,144 @@ def read(chart: Chart, when: datetime, domain_id: str,
                          caveat=_caveat(signals),
                          signals=tuple(signals))
 
+
+
+# --- the spouse's own facts, marriage only --------------------------------
+# Three signals the ledger could support and the reading never composed.
+# Each is one fact read by its own rule, in the three registers every
+# signal here carries; none composes a verdict out of the others. Where the
+# Upapada's two co-lord readings put it in different signs, the plain line
+# names BOTH — two answers, neither ranked, and which one is in force here —
+# the rule the Explore page keeps for the same fact.
+
+def _darakaraka_signal(facts, already_cited: set[str]) -> Signal:
+    v = facts["karaka.chara.darakaraka"].value
+    dk = v["planet"]
+    dignity = _dignity_of(facts[f"karaka.{dk.lower()}"]).split(" (")[0]
+    ids = ("karaka.chara.darakaraka", f"karaka.{dk.lower()}")
+    rules = ("rule.karaka.darakaraka", "rule.karaka.chara")
+    # ONE PLACEMENT, ONE VOTE. When the Dārakāraka is also a natural karaka
+    # of the domain, its condition has already been weighed in step 2; the
+    # office adds a citation and a sentence, not a second vote of the same
+    # size. Without this the reference fixture scored Jupiter in Pisces
+    # three times and flipped its verdict on a re-count.
+    full = 1 if f"karaka.{dk.lower()}" in already_cited else 2
+    where = (f"{dk} is the Darakaraka, the chart's own significator of the "
+             f"spouse: it sits in {v['sign']} in the {ordinal(v['house'])} "
+             f"house")
+    who = f"{_planet(dk)}, which stands for the spouse here,"
+    if any(x in dignity for x in STRONG):
+        return Signal("support", f"{where} and is {_dignity_phrase(dignity)}",
+                      ids, rules, brief=f"Darakaraka {dk} strong",
+                      plain=f"{who} sits {_plain_dignity(dignity)} in "
+                            f"{v['sign']}",
+                      weight=full)
+    if any(x in dignity for x in WEAK):
+        return Signal("strain", f"{where} but is {_dignity_phrase(dignity)}",
+                      ids, rules, brief=f"Darakaraka {dk} debilitated",
+                      plain=f"{who} sits {_plain_dignity(dignity)} in "
+                            f"{v['sign']}",
+                      weight=full)
+    if v["house"] in (6, 8, 12):
+        return Signal("strain",
+                      f"{where} — one of the three houses the tradition "
+                      f"reads as hidden or costly, so what it signifies "
+                      f"arrives indirectly",
+                      ids, rules + (f"rule.house.{v['house']}",),
+                      brief=f"Darakaraka {dk} tucked in the "
+                            f"{ordinal(v['house'])}",
+                      plain=f"{who} sits somewhere hidden, in {v['sign']}",
+                      weight=full)
+    return Signal("support", where, ids, rules,
+                  brief=f"Darakaraka {dk} soundly placed",
+                  plain=f"{who} is soundly placed in {v['sign']}", weight=1)
+
+
+def _upapada_signal(facts) -> Signal:
+    uf, af = facts["arudha.upapada"], facts["arudha.a12"]
+    v, a = uf.value, af.value
+    occupants, lord = v["occupants"], v["lord"]
+    # The split is read from A12's own two-school values. The Upapada
+    # fact's `schools_agree` is a statement about the whole chart — on the
+    # reference fixture it is False while A12 itself agrees — and reading
+    # it here would print two signs that are the same sign. For the same
+    # reason the expander text is A12's sentence, which is silent unless
+    # A12 itself splits, plus what the Upapada is read for.
+    split = a["schools_differ"]
+    ids = ("arudha.upapada", "arudha.a12")
+    rules = ("rule.arudha.pada", "rule.arudha.upapada",
+             "rule.arudha.upapada_occupants")
+    text = (f"the Upapada is A12, the arudha of the 12th, read for marriage "
+            f"and for the spouse. {af.statement}")
+    if split:
+        rules += ("rule.arudha.colord_school",)
+    dignity = _dignity_of(facts[f"karaka.{lord.lower()}"]).split(" (")[0]
+    # rule.arudha.upapada_occupants: benefics there support, malefics ask
+    # more; failing any occupant, the lord's own condition speaks.
+    if any(p in NATURAL_MALEFICS for p in occupants):
+        kind, weight = "strain", 2
+    elif any(p in NATURAL_BENEFICS for p in occupants):
+        kind, weight = "support", 2
+    elif any(x in dignity for x in STRONG):
+        kind, weight = "support", 2
+    elif any(x in dignity for x in WEAK):
+        kind, weight = "strain", 2
+    else:
+        kind, weight = "support", 1
+    # rule.arudha.pada's own gloss — "how the matter appears to others" —
+    # is the plain name; "Upapada" and "arudha" stay in the expander.
+    face = "the marriage's public face"
+    held = (f"with {_planets(occupants)} on it" if occupants
+            else f"ruled by {_planet(lord)}")
+    if split:
+        live = ("sole-lord" if schools.chosen("dual_lord").id == "single"
+                else "stronger-lord")
+        plain = (f"{face} falls in {a['parashari']} under the sole-lord "
+                 f"count and in {a['jaimini']} under the stronger-lord "
+                 f"count — the {live} count is in force here, {held}")
+    elif occupants:
+        plain = f"{face} falls in {v['sign']}, {held}"
+    elif weight == 2:
+        plain = (f"{face} falls in {v['sign']}, and {_planet(lord)}, which "
+                 f"rules it, sits {_plain_dignity(dignity)}")
+    else:
+        plain = ""
+    return Signal(kind, text, ids, rules,
+                  brief=(f"Upapada in {v['sign']}"
+                         + (f" with {_and(occupants)}" if occupants else "")),
+                  plain=plain, weight=weight)
+
+
+def _main_lord_strength_signal(facts, main_house: int) -> Signal | None:
+    """The main house's lord weighed across the divisions. None for a
+    node, which viṃśopaka does not score (rule.vimsopaka.nodes_excluded).
+    A middling score is cited and carries no weight: it is a fact about
+    the lord, not an argument either way."""
+    lord = facts[f"natal.{main_house}L"].value["lord"]
+    vf = facts.get(f"vimsopaka.{lord.lower()}")
+    if vf is None:
+        return None
+    v = vf.value
+    band = v["band"]
+    ids = (f"vimsopaka.{lord.lower()}", "vimsopaka.group")
+    rules = ("rule.vimsopaka.bala", "rule.vimsopaka.group_school")
+    text = (f"{lord}, lord of the {ordinal(main_house)}, scores "
+            f"{v['score']:.2f} of 20 on vimsopaka bala across the "
+            f"{v['group']} — {band}")
+    who = f"{_planet(lord)}, which rules it,"
+    if band == "strong":
+        return Signal("support", text, ids, rules,
+                      brief=f"{lord} strong across the vargas",
+                      plain=f"{who} holds up across the finer charts",
+                      weight=2)
+    if band == "thin":
+        return Signal("strain", text, ids, rules,
+                      brief=f"{lord} thin across the vargas",
+                      plain=f"{who} runs thin across the finer charts",
+                      weight=2)
+    return Signal("support", text, ids, rules,
+                  brief=f"{lord} middling across the vargas", plain="",
+                  weight=0)
 
 # How the balance is named. Weighted, so a debilitated lord of the MAIN
 # house counts for more than a benefic aspect on a supporting one — which is

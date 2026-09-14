@@ -203,6 +203,12 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
         "invariant", "product rule: the plate overlay lights houses and "
                      "never draws a line between two of them; the star-lord "
                      "fact is said in the card"),
+    "TestMarriageReadingCitesTheSpouseFacts": (
+        "invariant", "product rule: the marriage reading cites the Upapada, "
+                     "the Darakaraka and the 7th lord's vimsopaka where the "
+                     "ledger carries them, names an empty D9 7th's lord and "
+                     "its placement, and reads a split Upapada as two "
+                     "answers"),
     "TestTransitsPanelNowAndUpcoming": (
         "invariant", "product rule: the Transits pane is Now and Upcoming, "
                      "and every noun on a row is copied from a ledger fact "

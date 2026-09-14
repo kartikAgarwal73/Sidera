@@ -12091,3 +12091,201 @@ class TestStarLordOffThePlate:
         assert targets == 3, targets
         assert "ruled by Ketu, which sits in house 7" in card, card
         assert "partnership" in card, card
+
+
+class TestMarriageReadingCitesTheSpouseFacts:
+    """The marriage reading reads the facts the ledger carries for it.
+
+    Re-pinned 2026-09-14 from a review of the live site. `domainread.read`
+    walked one fixed fact set for every domain — the houses, the natural
+    karakas, the varga, the daśā, the transits — so the three facts the
+    ledger had carried for marriage since P2 were never read by any
+    signal: the Upapada, the Dārakāraka, and the 7th lord's viṃśopaka.
+    Two charts with different spouse significators read alike where it
+    mattered. And the varga step's empty-house line named a lord with no
+    placement — "the second chart leaves it to Saturn alone".
+
+    This is the interim fix, not the resolver: three signals and a
+    rewritten line, composed the way every other signal here is.
+    """
+
+    @classmethod
+    @pytest.fixture(scope="class")
+    def readings(cls):
+        import domainread
+        import fixtures
+        from chartfacts import build_facts
+        out = {}
+        for key in ("reference", "partner"):
+            c = compute_chart(fixtures.birth(key))
+            facts = {f.id: f for f in build_facts(c, AGENT_WHEN)}
+            out[key] = (c, facts, domainread.read(c, AGENT_WHEN, "marriage",
+                                                   facts))
+        return out
+
+    @staticmethod
+    def _citing(reading, fact_id):
+        hits = [s for s in reading.signals if fact_id in s.fact_ids]
+        assert hits, fact_id
+        return hits[0]
+
+    def test_the_three_spouse_facts_are_cited(self, readings):
+        import rulelib
+        for key, (chart, facts, r) in readings.items():
+            lord = facts["natal.7L"].value["lord"]
+            for fid, prefix in (("arudha.upapada", "rule.arudha."),
+                                ("karaka.chara.darakaraka", "rule.karaka."),
+                                (f"vimsopaka.{lord.lower()}", "rule.vimsopaka.")):
+                s = self._citing(r, fid)
+                assert any(rid.startswith(prefix) and rulelib.is_known(rid)
+                           for rid in s.rule_ids), (key, fid, s.rule_ids)
+
+    def test_the_two_fixtures_do_not_read_alike(self, readings):
+        """Each signal names its own fact's graha and sign, so two charts
+        with different spouse significators say different things."""
+        ref, par = readings["reference"], readings["partner"]
+        for fid in ("arudha.upapada", "karaka.chara.darakaraka"):
+            a, b = self._citing(ref[2], fid), self._citing(par[2], fid)
+            assert a.text != b.text, fid
+        for key, (chart, facts, r) in readings.items():
+            dk = facts["karaka.chara.darakaraka"].value
+            s = self._citing(r, "karaka.chara.darakaraka")
+            assert dk["planet"] in s.text and dk["sign"] in s.text, s.text
+            ul = facts["arudha.upapada"].value
+            s = self._citing(r, "arudha.upapada")
+            assert ul["sign"] in s.text, s.text
+            lord = facts["natal.7L"].value["lord"]
+            v = facts[f"vimsopaka.{lord.lower()}"].value
+            s = self._citing(r, f"vimsopaka.{lord.lower()}")
+            assert f"{v['score']:.2f}" in s.text and v["band"] in s.text, s.text
+
+    def test_an_empty_d9_seventh_names_its_lord_and_placement(self, readings):
+        """The line the review called vague. When the D9 7th is empty the
+        signal now says which lord it rests on and where that lord sits in
+        the D9 — from varga.d9.<lord>, cited."""
+        found = False
+        for key, (chart, facts, r) in readings.items():
+            vf = facts["d9.7th"].value
+            s = self._citing(r, "d9.7th")
+            assert "alone" not in s.plain, s.plain
+            if vf["occupants"]:
+                continue
+            found = True
+            lord = vf["lord"]
+            lf = facts[f"varga.d9.{lord.lower()}"].value
+            assert f"varga.d9.{lord.lower()}" in s.fact_ids, s.fact_ids
+            assert lord in s.plain and lf["sign"] in s.plain, s.plain
+            assert lf["sign"] in s.text, s.text
+            assert f"{ordinal(vf['lord_house'])} house of the D9" in s.text, s.text
+        assert found, "neither fixture has an empty D9 7th — pick one that does"
+
+    def test_a_split_upapada_reads_as_two_answers(self, readings):
+        """Neither fixture splits at A12, so the branch is driven with a
+        synthetic fact: two signs, both named, neither ranked, no hedge."""
+        import dataclasses
+        import domainread
+        import voice
+        chart, facts, _ = readings["reference"]
+        a12 = facts["arudha.a12"]
+        facts2 = dict(facts)
+        facts2["arudha.a12"] = dataclasses.replace(
+            a12,
+            value={**a12.value, "schools_differ": True,
+                   "parashari": "Pisces", "jaimini": "Aries"},
+            statement=a12.statement + " The two co-lord readings disagree "
+            "here: Pisces under the sole classical lord, Aries under the "
+            "stronger co-lord.")
+        r = domainread.read(chart, AGENT_WHEN, "marriage", facts2)
+        s = self._citing(r, "arudha.upapada")
+        assert "Pisces" in s.plain and "Aries" in s.plain, s.plain
+        assert "rule.arudha.colord_school" in s.rule_ids
+        assert not voice.find_jargon(s.plain), voice.find_jargon(s.plain)
+        assert not voice.find_throat_clearing(s.plain)
+        for hedge in ("may ", "might", "unclear", "uncertain", "cannot",
+                      "either", "?", "or so", "perhaps"):
+            assert hedge not in s.plain.lower(), (hedge, s.plain)
+
+    def test_still_inside_the_doctrine(self, readings):
+        import voice
+        for key, (chart, facts, r) in readings.items():
+            assert voice.words(r.teaser) <= voice.TEASER_WORDS, (key, r.teaser)
+            assert voice.words(r.visible) <= voice.SYNTHESIS_WORDS, (
+                key, voice.words(r.visible))
+            assert not voice.find_jargon(r.visible), voice.find_jargon(r.visible)
+            assert not voice.find_vagueness(r.visible)
+            for s in r.signals:
+                if s.plain:
+                    assert voice.names_a_planet(s.plain), s.plain
+
+    def test_the_other_domains_are_untouched(self, readings):
+        """Marriage-only, by the brief. The Dārakāraka and Upapada are
+        marriage facts by doctrine; the other four readings cite none of
+        the three."""
+        import domainread
+        for key, (chart, facts, r) in readings.items():
+            for did in ("career", "vitality", "home", "learning"):
+                other = domainread.read(chart, AGENT_WHEN, did, facts)
+                cited = {fid for s in other.signals for fid in s.fact_ids}
+                assert not any(f.startswith(("arudha.", "karaka.chara.",
+                                             "vimsopaka.")) for f in cited), (
+                    key, did)
+
+    def test_the_dashboard_files_the_new_rows_under_the_right_steps(self):
+        """The Upapada is a natal point, the Dārakāraka a karaka, and
+        viṃśopaka a reading across the vargas — so the domain view shows
+        each under that step of the method."""
+        from app import _step_for
+        assert _step_for(("arudha.upapada", "arudha.a12")) == "NATAL"
+        assert _step_for(("karaka.chara.darakaraka", "karaka.jupiter")) == "KARAKA"
+        assert _step_for(("vimsopaka.saturn", "vimsopaka.group")) == "VARGA"
+        assert _step_for(("d9.7th", "varga.d9.saturn", "varga.d9.lagna")) == "VARGA"
+        assert _step_for(("transit.saturn.aspects", "transit.saturn")) == "TRANSIT"
+
+    def test_one_placement_is_weighed_once(self, readings):
+        """The reference chart's Dārakāraka, Jupiter, is also a natural
+        karaka of marriage and already weighed in step 2. Its office adds
+        a citation, not a second vote of the same size — the skeptic's
+        catch on the first draft, where Jupiter in Pisces was scored three
+        times and flipped the verdict on a re-count."""
+        chart, facts, r = readings["reference"]
+        dk = facts["karaka.chara.darakaraka"].value["planet"]
+        assert dk == "Jupiter", dk
+        s = self._citing(r, "karaka.chara.darakaraka")
+        assert s.weight == 1, s.weight
+        assert any(f"karaka.{dk.lower()}" in x.fact_ids
+                   and "karaka.chara.darakaraka" not in x.fact_ids
+                   for x in r.signals)
+        assert r.verdict.startswith("Marriage runs uphill"), r.verdict
+
+    def test_an_unsplit_upapada_names_one_sign_only(self, readings):
+        """The Upapada fact's `schools_agree` is chart-wide; on the
+        reference chart it is False while A12 itself agrees. Reading the
+        wrong flag would print the same sign twice as two answers."""
+        chart, facts, r = readings["reference"]
+        assert facts["arudha.upapada"].value["schools_agree"] is False
+        assert facts["arudha.a12"].value["schools_differ"] is False
+        s = self._citing(r, "arudha.upapada")
+        assert "under the" not in s.plain, s.plain
+        assert "do not agree across this chart" not in s.text, s.text
+
+    def test_a_debilitated_varga_lord_is_not_read_as_neutral(self, readings):
+        """Naming the lord's sign while withholding its condition there
+        reads neutral where the varga says the opposite. The varga facts
+        carry dignity now, and the line says it when it is notable."""
+        for key, (chart, facts, r) in readings.items():
+            for fid, f in facts.items():
+                if fid.startswith("varga.d9.") and fid.count(".") == 2 \
+                        and f.value.get("planet"):
+                    assert "dignity" in f.value, fid
+            vf = facts["d9.7th"].value
+            if vf["occupants"]:
+                continue
+            lord = vf["lord"]
+            dig = facts[f"varga.d9.{lord.lower()}"].value["dignity"]
+            s = self._citing(r, "d9.7th")
+            if "debilitated" in dig:
+                assert "weakest" in s.plain, s.plain
+            elif any(x in dig for x in ("exalted", "own sign", "moolatrikona")):
+                assert s.plain.rstrip(".") != (
+                    f"the second chart leaves it empty, resting on "
+                    f"{lord} from {facts[f'varga.d9.{lord.lower()}'].value['sign']}"), s.plain
