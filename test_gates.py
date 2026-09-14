@@ -9547,6 +9547,105 @@ class TestTodayScreen:
         size = float(re.search(r"font-size:\s*([\d.]+)px", block).group(1))
         assert 12 <= size <= 16, size
 
+    # --- re-pinned 2026-09-14, from a review of the live site --------------
+
+    def test_a_possessive_never_carries_an_article(self):
+        """"your the north node", "your the Moon". The plain names carry
+        their own article — "the Moon" — and the template wrote "your " in
+        front of them. Every transit × every natal point × every form, both
+        contact branches, through the same render the screen uses."""
+        import itertools
+        import today
+        import voice
+        now = datetime(2026, 9, 14, 12, tzinfo=timezone.utc)
+        checked = 0
+        for t, n in itertools.product(PLANETS, PLANETS):
+            own = t == n
+            slots = {"T": today._plain(t), "yn": today._yours(n),
+                     "date": "the 20th", "m": today._matters(n),
+                     "k": "four-month", "k_words": "four months",
+                     "sign": "Virgo", "on": "on the 20th",
+                     "h": "held resources"}
+            for kind in ("contact_own" if own else "contact",
+                         "contact_ends_own" if own else "contact_ends",
+                         "ingress", "station"):
+                for i in range(len(today.FORMS[kind])):
+                    e = today.render(
+                        today.Draft(kind, now, ("contact.x-y",), 1, slots), i)
+                    checked += 1
+                    low = e.text.lower()
+                    assert "your the" not in low and "the the" not in low, e.text
+                    assert not voice.find_jargon(e.text), e.text
+                    assert voice.names_a_planet(e.text), e.text
+                    if not own and kind.startswith("contact"):
+                        assert re.search(
+                            r"your (?:Sun|Moon|Mars|Mercury|Jupiter|Venus|"
+                            r"Saturn|north node|south node)\b", e.text), e.text
+        assert checked == 81 * 3 * 4, checked
+
+    def test_no_two_adjacent_entries_share_a_closing(self):
+        """Three consecutive lines ended "a dated stretch on X." on the live
+        site. The sort clusters entries of one kind, and each kind had one
+        sentence. Forms are chosen by position now, after the sort, so no
+        two neighbours can share one — checked over both fictional charts,
+        weekly, for a year."""
+        import fixtures
+        import today
+        start = datetime(2026, 1, 1, 12, tzinfo=timezone.utc)
+        pairs = 0
+        for key in ("reference", "partner"):
+            c = compute_chart(fixtures.birth(key))
+            for d in range(0, 365, 7):
+                lines = today.entries(c, start + timedelta(days=d))
+                for a, b in zip(lines, lines[1:]):
+                    pairs += 1
+                    assert a.form != b.form, (key, d, a.text, b.text)
+                    assert today.closing(a.text) != today.closing(b.text), (
+                        key, d, a.text, b.text)
+                for e in lines:
+                    assert "your the" not in e.text.lower(), e.text
+        assert pairs > 200, pairs
+
+    def test_forms_rotate_by_position_after_the_sort(self):
+        """A constructed day: four sign changes of equal weight. Rendered
+        at construction they would all be form 0; rendered by position
+        they walk the forms and come back round."""
+        import today
+        now = datetime(2026, 9, 14, 12, tzinfo=timezone.utc)
+        drafts = [today.Draft(
+            "ingress", now + timedelta(days=i), (f"transit.x{i}.aspects",), 2,
+            {"T": "Venus", "sign": "Libra", "on": "on the 20th",
+             "h": "effort"}) for i in range(4)]
+        chosen = sorted(drafts, key=lambda d: (-d.weight, d.when))
+        rendered = [today.render(d, i) for i, d in enumerate(chosen)]
+        assert [e.form for e in rendered] == [
+            "ingress/0", "ingress/1", "ingress/2", "ingress/0"]
+        closings = [today.closing(e.text) for e in rendered]
+        for a, b in zip(closings, closings[1:]):
+            assert a != b, closings
+
+    def test_every_form_keeps_the_facts_and_states_a_condition(self):
+        """Varying the sentence may not vary what it says: every form of a
+        kind carries the transit, the point or sign, the date and what it
+        carries, and none of them says what will come of it."""
+        import today
+        for kind, forms in today.FORMS.items():
+            assert len(forms) == 3, kind
+            for f in forms:
+                assert "{T}" in f, f
+                assert " — " in f, f
+                if kind.startswith("contact_ends"):
+                    assert "today" in f and "{m}" in f, f
+                elif kind.startswith("contact"):
+                    assert "{date}" in f and "{m}" in f, f
+                    if not kind.endswith("_own"):
+                        assert "{yn}" in f, f
+                elif kind == "ingress":
+                    assert "{sign}" in f and "{on}" in f and "{h}" in f, f
+                else:
+                    assert "retrograde" in f and "{m}" in f, f
+                assert " will " not in f, f
+
 
 class TestYourChartsScreen:
     """Screen 3. A gallery of divisional plates — and the honest admission
@@ -11902,3 +12001,93 @@ class TestTransitsPanelNowAndUpcoming:
         gocara = gocara[:gocara.index("Contacts today")]
         assert "{% if data.conjunctions or data.aspect_contacts %}" in gocara
         assert "{% if data.conjunctions %}" not in gocara
+
+
+class TestStarLordOffThePlate:
+    """The plate lights houses; it never draws a line between two of them.
+
+    Re-pinned 2026-09-14 from a review of the live site. Tapping a graha
+    drew a curved, dashed, accent-coloured path from its house to the house
+    of its nakṣatra lord, labelled "star-lord Ketu". A line joining two
+    houses is the pictorial grammar of an aspect — and it was in the same
+    hue and dash family as the aspect targets beside it — so the reader
+    parsed it as one. It was also the only connector on an engraved plate,
+    and its label rendered under the type floor at 390px, unseen by the
+    floor gate because it existed only after a click.
+
+    The fact moved off the plate and into the explorer card, in words:
+    "ruled by Ketu, which sits in house 7 — partnership". Nothing was lost;
+    what was lost was a way of misreading it.
+    """
+
+    def test_nothing_in_the_template_draws_a_wire(self):
+        page = (HERE / "templates" / "index.html").read_text(encoding="utf-8")
+        assert "function wire(" not in page
+        assert "wiring drawn on the plate" not in page
+        assert "star-lord" not in page
+        css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
+        assert ".wireline" not in css and ".wirelabel" not in css
+
+    def test_the_card_says_where_the_star_lord_sits(self):
+        page = (HERE / "templates" / "index.html").read_text(encoding="utf-8")
+        assert "which sits in house ${px.nak_lord_house}" in page
+        assert "${px.nak_lord_house_matters}" in page
+
+    def test_the_explorer_carries_the_house_in_words(self, chart):
+        """The card is expander register — "house 7" is allowed — and it
+        still says what the house is for, from the same table every other
+        house name on the page comes from."""
+        import rulelib
+        from app import planet_explorer
+        px = planet_explorer(chart)
+        for name, p in px.items():
+            house = p["nak_lord_house"]
+            assert p["nak_lord_house_matters"] == \
+                rulelib.HOUSE_MATTERS[house].split(",")[0].strip(), name
+
+    def test_the_highlight_layer_never_joins_two_houses(self):
+        """In a browser, after the tap that used to draw the wire — and
+        after the whole counting animation has run, since the wire fired at
+        its end. Saturn on the reference chart: star-lord Ketu, house 7,
+        the case the old payload gate pins."""
+        pw = pytest.importorskip("playwright.sync_api",
+                                 reason="playwright not installed")
+        import threading
+        from werkzeug.serving import make_server
+        from app import app
+        srv = make_server("127.0.0.1", 0, app, threaded=True)
+        port = srv.socket.getsockname()[1]
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            with pw.sync_playwright() as p:
+                browser = TestMaskedBirthFieldsInARealBrowser._launch(p, pytest)
+                pg = browser.new_context(
+                    viewport={"width": 1280, "height": 1000}).new_page()
+                pg.goto(f"http://127.0.0.1:{port}/")
+                for k, v in GATE_FORM.items():
+                    pg.evaluate(
+                        "([k,v]) => { const e = document.querySelector("
+                        "`[name=\"${k}\"]`); if (e) e.value = v; }", [k, v])
+                with pg.expect_navigation():
+                    pg.evaluate("document.querySelector('#cast').submit()")
+                pg.wait_for_load_state("load")
+                pg.wait_for_timeout(600)
+                pg.click('.chip-planet[data-planet="Saturn"]')
+                # Saturn's furthest drishti is the 10th: 240ms × 10 steps,
+                # and the wire used to fire at the end of that.
+                pg.wait_for_timeout(3200)
+                drawn = pg.evaluate(
+                    "document.querySelectorAll('#hlgroup path, #hlgroup line')"
+                    ".length")
+                targets = pg.evaluate(
+                    "document.querySelectorAll('#hlgroup polygon.hl-target')"
+                    ".length")
+                card = pg.evaluate(
+                    "document.getElementById('xcard-body').innerText")
+                browser.close()
+        finally:
+            srv.shutdown()
+        assert drawn == 0, drawn
+        assert targets == 3, targets
+        assert "ruled by Ketu, which sits in house 7" in card, card
+        assert "partnership" in card, card

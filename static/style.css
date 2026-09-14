@@ -570,21 +570,6 @@ details.yoga > summary::-webkit-details-marker { display: none; }
   fill: var(--ink); paint-order: stroke; stroke: rgba(var(--paper-rgb), .85); stroke-width: 3px;
 }
 #hlgroup .countlabel.hit { fill: var(--accent-ink); }
-#hlgroup .wireline {
-  fill: none; stroke: var(--accent-ink); stroke-width: 1.4;
-  /* The dash pattern stays — it says "aspect wire", not "drawn line". The
-     marching went: an engraved plate does not have crawling ants on it, and
-     an animation that never ends is the one thing on this page that could
-     not be scrolled away from. */
-  stroke-dasharray: 5 4;
-}
-/* 9.5 USER UNITS, inside the 300-unit plate that renders around 560px: it
-   draws at roughly 18 effective px, comfortably over the floor. SVG text is
-   judged on what it renders as, never on the attribute. */
-#hlgroup .wirelabel {
-  font-family: var(--font-body); font-size: 9.5px;
-  font-style: italic; fill: var(--accent-ink);
-}
 #hlgroup .pulse-ring {
   fill: none; stroke: var(--accent-ink); stroke-width: 1.6;
   /* Twice, then it holds. It answers a tap — which is the motion worth

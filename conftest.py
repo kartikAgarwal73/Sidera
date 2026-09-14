@@ -199,6 +199,10 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
     "TestTheTabRowSitsOnOneBaseline": (
         "invariant", "product rule: every entry in the tab row sits on one "
                      "baseline and fills the row — measured in a browser"),
+    "TestStarLordOffThePlate": (
+        "invariant", "product rule: the plate overlay lights houses and "
+                     "never draws a line between two of them; the star-lord "
+                     "fact is said in the card"),
     "TestTransitsPanelNowAndUpcoming": (
         "invariant", "product rule: the Transits pane is Now and Upcoming, "
                      "and every noun on a row is copied from a ledger fact "

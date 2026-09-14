@@ -292,7 +292,7 @@ def plate_reading(key: str, chart) -> str:
         return HOUSE_MATTERS[house].split(",")[0].strip()
 
     def plain(name: str) -> str:
-        return today.PLAIN_PLANET.get(name, name)
+        return voice.plain(name)
 
     if key == "d1":
         lord = sign_lord(chart.lagna.sign_index)
@@ -1176,6 +1176,10 @@ def planet_explorer(chart) -> dict:
             "nakshatra": f"{nak.name} pada {nak.pada}",
             "nak_lord": nak.lord,
             "nak_lord_house": chart.planets[nak.lord].house,
+            # Said in the card, in words, since 2026-09-14: the plate used
+            # to draw a dashed line from the graha's house to its star-lord's,
+            # and a line joining two houses reads as an aspect.
+            "nak_lord_house_matters": _house_words(chart.planets[nak.lord].house),
             "aspects": aspects,
         }
     return out

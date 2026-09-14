@@ -247,8 +247,9 @@ tone has a hard stop: `--accent-ink` on the surface is the binding pair at
 
 Today opens on the day, named twice — once by the civil calendar and once by
 the Moon — then three or four dated lines, each naming a graha and saying
-when: *"Ketu leaves the degree of your Venus today — the four-month stretch on
-comfort closes."* `today.py` computes both edges of a contact by bisection,
+when: *"The south node leaves the degree of your Venus today — the
+four-month stretch on love closes."* `today.py` computes both edges of a
+contact by bisection,
 because the ledger knows the current gap and not the boundary, and without the
 date the line would read *"Ketu is on your Venus"*. The birth plate pins
 beside it with today's transits ticked around its **outer** edge: the plate is

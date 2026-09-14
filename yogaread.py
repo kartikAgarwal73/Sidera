@@ -47,10 +47,11 @@ from transits import CONJUNCTION_ORB, angular_distance, transit_snapshot
 from vargas import VargaChart, varga_chart
 from yogas import Yoga, detect_all, dignity_at, sign_lord
 
-# The nodes have no English name in ordinary use; everything else is the
-# reader's own sky. Same table `today.py` and `domainread.py` use.
-PLAIN_PLANET = {"Rahu": "the north node", "Ketu": "the south node",
-                "Sun": "the Sun", "Moon": "the Moon"}
+# The plain names of the nine — ONE table, kept in voice.py with the
+# doctrine. This module carried its own copy until 2026-09-14, and wrote
+# "your " in front of it at the contact prompt below: "standing on your the
+# Moon". The possessive is `voice.yours` now, a function, not a prefix.
+PLAIN_PLANET = voice.PLAIN_PLANET
 
 # Which yogas are tested in the tenth division as well as the ninth. Read off
 # the chart, not from a list of names: a combination that touches the houses
@@ -287,7 +288,7 @@ def _contacts(yoga: Yoga, chart: Chart, when: datetime,
         for p in yoga.planets:
             gap = angular_distance(t_lon, chart.planets[p].longitude)
             if gap <= CONJUNCTION_ORB:
-                out.append(f"{_plain(t)} is standing on your {_plain(p)} "
+                out.append(f"{_plain(t)} is standing on {voice.yours(p)} "
                            f"({gap:.1f}° away) — the combination is being "
                            f"prompted now.")
     return tuple(out)

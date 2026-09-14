@@ -1944,19 +1944,12 @@ function badge(house, text, cls) {
   hlGroup.appendChild(t);
   return t;
 }
-function wire(fromHouse, toHouse, label) {
-  const [x1, y1] = HOUSE_CENTER[fromHouse], [x2, y2] = HOUSE_CENTER[toHouse];
-  const mx = (x1 + x2) / 2 + (y2 - y1) * 0.22, my = (y1 + y2) / 2 - (x2 - x1) * 0.22;
-  const path = document.createElementNS(SVGNS, "path");
-  path.setAttribute("d", `M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}`);
-  path.setAttribute("class", "wireline");
-  hlGroup.appendChild(path);
-  const t = document.createElementNS(SVGNS, "text");
-  t.setAttribute("x", mx); t.setAttribute("y", my);
-  t.setAttribute("text-anchor", "middle"); t.setAttribute("class", "wirelabel");
-  t.textContent = label;
-  hlGroup.appendChild(t);
-}
+// THE OVERLAY LIGHTS HOUSES; IT NEVER JOINS TWO OF THEM. A dashed path
+// used to be drawn here from the graha's house to the house of its
+// nakṣatra lord, with the lord's name on it. A line between two houses is
+// the pictorial grammar of an aspect, it was in the same hue and dash
+// family as the aspect targets beside it, and a reader took it for one.
+// The fact lives in the card now, in words. Removed 2026-09-14.
 function ring(house) {
   const c = document.createElementNS(SVGNS, "circle");
   const [x, y] = HOUSE_CENTER[house];
@@ -1989,10 +1982,6 @@ function selectPlanet(name) {
       }
     }, 240 * (k - 1)));
   }
-  animTimers.push(setTimeout(() => {
-    if (px.nak_lord_house !== px.house)
-      wire(px.house, px.nak_lord_house, "star-lord " + px.nak_lord);
-  }, 240 * maxOff));
   // info card
   const hits = px.aspects.flatMap(a => a.hits.map(h => `${h} (${ord(a.offset)})`));
   document.getElementById("xcard-title").textContent =
@@ -2001,7 +1990,8 @@ function selectPlanet(name) {
     `<p><span class="xplabel">Dignity</span>${px.dignity}</p>` +
     `<p><span class="xplabel">Nakṣatra</span>${px.nakshatra} — ruled by ${px.nak_lord}` +
     (px.nak_lord_house !== px.house
-      ? ` (house ${px.nak_lord_house}; wiring drawn on the plate)` : " (its own star)") + `</p>` +
+      ? `, which sits in house ${px.nak_lord_house} — ${px.nak_lord_house_matters}`
+      : ", its own star") + `</p>` +
     `<p><span class="xplabel">Drishti</span>casts the ` +
     px.aspects.map(a => `${ord(a.offset)} → house ${a.house}`).join(", ") +
     (hits.length ? ` — touching ${hits.join(", ")}` : " — no natal planet there") + `</p>`;

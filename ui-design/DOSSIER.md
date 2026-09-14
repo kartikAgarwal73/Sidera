@@ -506,6 +506,19 @@ not estimated. `test_no_label_overflows_its_cell_in_a_browser` reads the real
 `getBBox()` and checks all four corners of every label against the polygon it
 belongs to.
 
+### The overlay lights houses and never joins them
+
+Tapping a graha lights its house, then counts out to the houses its drishti
+reaches and lights those. It used to end by drawing a dashed line from the
+graha's house to the house of its nakṣatra lord, labelled *star-lord*. That
+line was the only connector on the plate, it was in the same hue and dash
+family as the aspect targets beside it, and a line joining two houses is the
+pictorial grammar of an aspect — so a reader took it for one, which is a
+worse outcome than not showing the fact at all. The fact moved into the
+explorer card, in words: *ruled by Ketu, which sits in house 7 —
+partnership*. The overlay's vocabulary is one thing now: a lit house.
+`TestStarLordOffThePlate` holds it in a browser.
+
 ## One entry per phenomenon
 
 Every entry in the Combinations fold declares a canonical `subject` —

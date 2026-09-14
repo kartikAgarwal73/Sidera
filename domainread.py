@@ -55,10 +55,9 @@ SUBJECT = {
     "learning": "Study and creative work",
 }
 
-# The nodes have no English name people use; "the north node" is at least
-# describable. Everything else is already the reader's own sky.
-PLAIN_PLANET = {"Rahu": "the north node", "Ketu": "the south node",
-                "Sun": "the Sun", "Moon": "the Moon"}
+# The plain names of the nine — ONE table, kept in voice.py with the
+# doctrine rather than copied here. See voice.PLAIN_PLANET for why.
+PLAIN_PLANET = voice.PLAIN_PLANET
 
 
 def _year(iso: str | None) -> str:
