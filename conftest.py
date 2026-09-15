@@ -224,6 +224,11 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
         "invariant", "product rule: the Ask field has a rule a reader can "
                      "see, a placeholder that says what it is for, and a "
                      "focus state — measured in a browser"),
+    "TestMalformedCompletionsAreWithheld": (
+        "invariant", "product rule: a reply the chart cannot parse is "
+                     "withheld like one it cannot check — the withhold "
+                     "renders, the question is not charged, the raw "
+                     "completion is logged"),
     "TestTransitsPanelNowAndUpcoming": (
         "invariant", "product rule: the Transits pane is Now and Upcoming, "
                      "and every noun on a row is copied from a ledger fact "

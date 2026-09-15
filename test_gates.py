@@ -12663,3 +12663,190 @@ class TestTheAskFieldIsVisible:
         second box drawn around the first."""
         for width, r in probe.items():
             assert r["inputBorder"] == "0px", (width, r["inputBorder"])
+
+
+class RawFakeMessages:
+    """A transport that returns the model's text VERBATIM — malformed JSON
+    included — with a stop reason. `FakeMessages` serialises a dict, which
+    by construction can never send the shapes this fake exists to send."""
+
+    def __init__(self, texts, stop_reason="end_turn"):
+        self.texts = list(texts)
+        self.stop_reason = stop_reason
+        self.calls = []
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        text = self.texts.pop(0)
+        stop = self.stop_reason
+
+        class _Block:
+            type = "text"
+
+        block = _Block()
+        block.text = text
+
+        class _Response:
+            content = [block]
+            stop_reason = stop
+        return _Response()
+
+
+class RawFakeClient:
+    def __init__(self, texts, stop_reason="end_turn"):
+        self.messages = RawFakeMessages(texts, stop_reason)
+
+
+class TestMalformedCompletionsAreWithheld:
+    """A parser exception must never reach the reading pane.
+
+    Re-pinned 2026-09-15 from the live site: "when will I find a job, I am
+    currently unemployed?" came back to the reader as "Unterminated string
+    starting at char 301". The reply is withheld now like any reply the
+    chart cannot check — the withhold message renders, the question is not
+    charged — and the raw completion is logged, because the one thing a
+    parse failure must never do is vanish.
+
+    Four shapes the model actually sends are repaired before giving up: a
+    code fence, prose around the object, a literal newline inside a value.
+    What cannot be repaired — an unescaped quote inside a value, a reply
+    cut off mid-string, a reply that is not an object — is withheld.
+    """
+
+    QUESTION = "when will I find a job, I am currently unemployed?"
+
+    @staticmethod
+    def _body(**over):
+        body = {"sid": "test-session", "question": "Where is my Moon?",
+                **{k: v for k, v in GATE_FORM.items()}}
+        body.update(over)
+        return body
+
+    @staticmethod
+    def _good():
+        return _reply("Saturn holds the tenth house from Aries.",
+                      facts=["planet.saturn"])
+
+    def test_a_fence_and_a_preamble_are_repaired(self):
+        import agent
+        good = json.dumps(self._good())
+        for text in ("```json\n" + good + "\n```",
+                     "Here is the reading:\n" + good + "\nHope this helps."):
+            data = agent.parse_completion(text)
+            assert data["answer"].startswith("Saturn holds")
+
+    def test_a_literal_newline_inside_a_value_is_repaired(self):
+        import agent
+        good = json.dumps(self._good()).replace(
+            "Saturn holds the tenth house from Aries.",
+            "Saturn holds the tenth house from Aries.\nIt is steady there.")
+        assert "\\n" not in good.split('"answer"')[1][:60]   # a real newline
+        data = agent.parse_completion(good)
+        assert data["answer"] == ("Saturn holds the tenth house from Aries.\n"
+                                  "It is steady there.")
+
+    def test_what_cannot_be_repaired_is_unparseable_with_the_raw_text(self):
+        import agent
+        good = json.dumps(self._good())
+        cut = json.dumps({**self._good(), "answer": "x" * 600})[:301]
+        cases = {
+            "unescaped quote": good.replace("Saturn holds", 'Saturn "holds"'),
+            "cut mid-string": cut,
+            "not an object": "[1, 2, 3]",
+            "empty": "",
+        }
+        for name, text in cases.items():
+            with pytest.raises(agent.AgentUnparseable) as info:
+                agent.parse_completion(text)
+            assert info.value.raw == text, name
+        # The exact failure from the live site: a string open at char 301.
+        with pytest.raises(agent.AgentUnparseable) as info:
+            agent.parse_completion(cut)
+        assert "Unterminated string" in info.value.detail, info.value.detail
+        # A truncated reply is unparseable whatever it looks like.
+        with pytest.raises(agent.AgentUnparseable):
+            agent.parse_completion(good, stop_reason="max_tokens")
+
+    @pytest.mark.parametrize("shape", ["unescaped quote", "cut mid-string",
+                                       "not an object", "fenced-and-cut"])
+    def test_the_pane_gets_the_withhold_and_the_counter_does_not_move(
+            self, client, tmp_path, monkeypatch, shape):
+        """Through the route, with the exact question from the live site:
+        422, the withhold flag, a reader-facing message with no parser
+        vocabulary in it, and the session's remaining count unchanged —
+        before, in the payload, and after."""
+        import agent as agent_mod
+        good = json.dumps(self._good())
+        texts = {
+            "unescaped quote": good.replace("Saturn holds", 'Saturn "holds"'),
+            "cut mid-string": json.dumps(
+                {**self._good(), "answer": "x" * 600})[:301],
+            "not an object": "[1, 2, 3]",
+            "fenced-and-cut": "```json\n" + good[:120],
+        }
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-not-a-real-key")
+        log = tmp_path / "c.jsonl"
+        monkeypatch.setattr(agent_mod, "CORRECTIONS_LOG", log)
+        monkeypatch.setattr(agent_mod, "_client",
+                            lambda: RawFakeClient([texts[shape]]))
+        sid = f"malformed-{shape}"
+        before = agent_mod.LIMITER.remaining(sid)
+        body = dict(self._body(sid=sid))
+        body["question"] = self.QUESTION
+        r = client.post("/ask", json=body)
+        assert r.status_code == 422, (shape, r.status_code, r.get_data(as_text=True)[:200])
+        payload = r.get_json()
+        assert payload["withheld"] is True, shape
+        assert payload["remaining"] == before, shape
+        assert agent_mod.LIMITER.remaining(sid) == before, shape
+        msg = payload["error"]
+        for word in ("Unterminated", "char ", "JSON", "Expecting", "decode"):
+            assert word not in msg, (shape, msg)
+        assert "not shown" in msg, msg
+        # …and the raw completion was logged for diagnosis, verbatim.
+        entries = [json.loads(line) for line in log.read_text().splitlines()]
+        assert entries and entries[-1]["reason"].startswith("unparseable"), entries
+        assert entries[-1]["answer"] == texts[shape]
+        assert entries[-1]["question"] == self.QUESTION
+
+    def test_a_parser_exception_of_any_kind_is_a_withhold(
+            self, client, monkeypatch, tmp_path):
+        """Not only JSON errors: whatever the parser raises, the route
+        withholds and does not charge. The old path let a non-JSON error
+        become a 500 the page rendered as 'Could not reach the agent'."""
+        import agent as agent_mod
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-not-a-real-key")
+        monkeypatch.setattr(agent_mod, "CORRECTIONS_LOG", tmp_path / "c.jsonl")
+        monkeypatch.setattr(agent_mod, "_client",
+                            lambda: RawFakeClient([json.dumps(self._good())]))
+
+        def boom(text, stop_reason=None):
+            raise KeyError("a parser bug")
+        monkeypatch.setattr(agent_mod, "parse_completion", boom)
+        sid = "parser-bug"
+        before = agent_mod.LIMITER.remaining(sid)
+        body = dict(self._body(sid=sid))
+        body["question"] = self.QUESTION
+        r = client.post("/ask", json=body)
+        assert r.status_code == 422, r.get_data(as_text=True)[:200]
+        assert r.get_json()["withheld"] is True
+        assert agent_mod.LIMITER.remaining(sid) == before
+
+    def test_the_repaired_reply_is_still_validated(self, client, monkeypatch,
+                                                   tmp_path):
+        """A repair is not a pass. A fenced reply whose content invents a
+        placement is withheld by the validator exactly as an unfenced one."""
+        import agent as agent_mod
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-not-a-real-key")
+        monkeypatch.setattr(agent_mod, "CORRECTIONS_LOG", tmp_path / "c.jsonl")
+        bad = _reply("Saturn sits in Leo, so the year is settled.",
+                     facts=["planet.saturn"])
+        monkeypatch.setattr(agent_mod, "_client", lambda: RawFakeClient(
+            ["```json\n" + json.dumps(bad) + "\n```"]))
+        sid = "fenced-but-wrong"
+        before = agent_mod.LIMITER.remaining(sid)
+        body = dict(self._body(sid=sid))
+        r = client.post("/ask", json=body)
+        assert r.status_code == 422
+        assert r.get_json()["withheld"] is True
+        assert agent_mod.LIMITER.remaining(sid) == before

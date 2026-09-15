@@ -1872,6 +1872,20 @@ def _answer_one_question(body, birth, ip: str, session_id: str):
         answer = agent.ask_chart(chart, when, body.get("question", ""))
     except ValueError as exc:
         return jsonify(error=str(exc)), 400
+    except agent.AgentUnparseable:
+        # The model answered and the answer was not JSON the chart can
+        # check. That is the same situation as a reply that fails
+        # validation — withheld, said so, and NOT CHARGED — and it is told
+        # to the reader in the reader's words: the parser's own message
+        # ("Unterminated string starting at char 301") reached the pane on
+        # the live site and meant nothing to anyone. The raw completion is
+        # already in the corrections log by the time this runs.
+        return jsonify(
+            error=("Ask again, or ask it a little differently. That reply "
+                   "came back in a form the chart could not check, so it "
+                   "was not shown."),
+            withheld=True, violations=[],
+            remaining=agent.LIMITER.remaining(session_id)), 422
     except agent.AgentUnavailable as exc:
         return jsonify(error=str(exc)), 503
 

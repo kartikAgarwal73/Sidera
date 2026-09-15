@@ -1073,6 +1073,101 @@ class AgentUnavailable(RuntimeError):
     """No API key, or the upstream call failed."""
 
 
+class AgentUnparseable(RuntimeError):
+    """The model answered, and the answer was not JSON the chart can check.
+
+    Not an outage, and not the reader's fault: the reply is WITHHELD the
+    way a reply that fails validation is withheld, and the reader is not
+    charged a question. The raw completion travels on the exception so
+    the caller can log it — the one thing a parse failure must never do
+    is vanish.
+
+    Re-pinned 2026-09-15 from the live site, where "Unterminated string
+    starting at char 301" reached the reading pane as the answer to "when
+    will I find a job, I am currently unemployed?".
+    """
+
+    def __init__(self, detail: str, raw: str = "", stop_reason=None):
+        super().__init__(detail)
+        self.detail = detail
+        self.raw = raw
+        self.stop_reason = stop_reason
+
+
+_FENCE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.S)
+
+
+def _escape_control_chars_in_strings(text: str) -> str:
+    """A literal newline or tab INSIDE a JSON string, escaped.
+
+    The model writes a paragraph break as a real newline now and then;
+    JSON forbids a raw control character in a string, and the whole reply
+    fails on it. Walked by hand, tracking the string state and backslash
+    escapes, so a newline BETWEEN values is left alone.
+    """
+    out = []
+    in_string = False
+    escaped = False
+    for ch in text:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            elif ch == "\n":
+                out.append("\\n"); continue
+            elif ch == "\r":
+                out.append("\\r"); continue
+            elif ch == "\t":
+                out.append("\\t"); continue
+        elif ch == '"':
+            in_string = True
+        out.append(ch)
+    return "".join(out)
+
+
+def parse_completion(text: str, stop_reason=None) -> dict:
+    """The model's reply as a dict, or AgentUnparseable — never anything else.
+
+    Three repairs, in order, each one a shape the model has actually sent:
+    a code fence around the JSON; prose before or after the object; a
+    literal newline inside a string. What cannot be repaired — an
+    unescaped quote inside a value, a reply cut off mid-string, a reply
+    that is not an object — is unparseable, and says so with the raw text
+    attached. A truncated reply is unparseable whatever it looks like: a
+    half answer that happens to close is not an answer.
+    """
+    raw = text or ""
+    if stop_reason == "max_tokens":
+        raise AgentUnparseable("the reply was cut off at the token limit",
+                               raw=raw, stop_reason=stop_reason)
+    body = raw.strip()
+    fence = _FENCE.match(body)
+    if fence:
+        body = fence.group(1)
+    attempts = [body]
+    start = body.find("{")
+    if start > 0:
+        attempts.append(body[start:])
+    attempts += [_escape_control_chars_in_strings(a) for a in list(attempts)]
+    first_error = None
+    for candidate in attempts:
+        try:
+            data, _end = json.JSONDecoder().raw_decode(candidate)
+        except json.JSONDecodeError as exc:
+            first_error = first_error or exc
+            continue
+        if not isinstance(data, dict):
+            raise AgentUnparseable(
+                f"the reply was a {type(data).__name__}, not an object",
+                raw=raw, stop_reason=stop_reason)
+        return data
+    raise AgentUnparseable(str(first_error or "empty reply"), raw=raw,
+                           stop_reason=stop_reason)
+
+
 def _client():
     key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
     if not key:
@@ -1170,11 +1265,28 @@ def ask_chart(chart: Chart, when: datetime, question: str, *,
 
     text = "".join(b.text for b in response.content
                    if getattr(b, "type", None) == "text")
+    # THE PARSE IS FENCED. Whatever the model sent, the only things that
+    # leave this block are a dict or AgentUnparseable — a JSON error, a
+    # truncation, a shape that is not an object, or a fault in the parser
+    # itself all become the same withhold. The raw completion is logged
+    # first, verbatim, with the question: a parse failure that vanished is
+    # the one that reached the reading pane as "Unterminated string
+    # starting at char 301".
+    stop_reason = getattr(response, "stop_reason", None)
     try:
-        data = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise AgentUnavailable(
-            f"The agent returned unparseable output: {exc}") from exc
+        data = parse_completion(text, stop_reason)
+    except AgentUnparseable as exc:
+        log_correction(question, exc.raw, model=model,
+                       reason=f"unparseable: {exc.detail} "
+                              f"(stop_reason={stop_reason!r}, "
+                              f"chars={len(exc.raw)})")
+        raise
+    except Exception as exc:                        # a parser bug, even
+        log_correction(question, text, model=model,
+                       reason=f"unparseable: parser raised {exc!r} "
+                              f"(stop_reason={stop_reason!r})")
+        raise AgentUnparseable(f"parser raised {exc!r}", raw=text,
+                               stop_reason=stop_reason) from exc
 
     violations = validate_payload(data, chart, when)
     return AgentAnswer(
