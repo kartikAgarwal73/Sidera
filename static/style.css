@@ -295,7 +295,11 @@ body {
 .fold > summary::-webkit-details-marker { display: none; }
 .fold > summary::after { content: " ▸"; color: var(--ink-50); }
 .fold[open] > summary::after { content: " ▾"; }
-details.yoga > summary { cursor: pointer; list-style: none; display: flex; }
+/* The dosha and ask cards. The yoga ROW has its own grid below, and this
+   rule used to outrank it — `details.yoga > summary` beats
+   `.yogarow > summary` on specificity — so the row's grid never applied
+   and every row was three flex columns. Carved out 2026-09-15. */
+details.yoga:not(.yogarow) > summary { cursor: pointer; list-style: none; display: flex; }
 details.yoga > summary::-webkit-details-marker { display: none; }
 .scrollwrap { overflow-x: auto; }
 .scrollwrap .gtable { min-width: 540px; }
@@ -698,23 +702,54 @@ details.yoga > summary::-webkit-details-marker { display: none; }
   border-bottom: 1px solid var(--hairline);
   padding: 0; margin: 0;
 }
-.yogarow > summary {
-  display: grid; grid-template-columns: 1fr auto; gap: 2px 16px;
+details.yogarow > summary {
+  /* ONE CLEAN LINE OF INFORMATION PER ROW — two lines of type, the same two
+     on every row. Re-laid 2026-09-15 from a review of the live site, where
+     long names wrapped against the status and the family and rows lost
+     alignment. The ledger is 342px wide on a phone and 592 on a desktop; a
+     name runs to 309px, a verdict line to 282 and a family to 112, so three
+     columns on one line fit at neither width. So: the name with its family
+     on the first line, the verdict line with the marker on the second. The
+     family column is right-aligned at every width and FIXED from 1000px,
+     so it lines up down the whole list rather than per row.
+     `TestYogaRowsReadAsOneLine` counts line boxes in a browser. */
+  display: grid; grid-template-columns: minmax(0, 1fr) max-content;
+  column-gap: 12px; row-gap: 3px;
   align-items: baseline; padding: 14px 0; cursor: pointer;
   list-style: none;
+  text-transform: none; letter-spacing: normal; color: var(--ink);
 }
 .yogarow > summary::-webkit-details-marker { display: none; }
+.yogarow > summary .yoganame {
+  grid-column: 1; grid-row: 1; min-width: 0;
+  /* 16px on a phone: the widest name is 292px at 17 and the column beside
+     the family is 289. 18px from 1000px, where there is room. */
+  font-size: 16px; line-height: 1.3;
+}
+.yogarow > summary .yogakind {
+  grid-column: 2; grid-row: 1; justify-self: end; white-space: nowrap;
+  letter-spacing: .06em;
+}
+/* The verdict line spans both columns — the columns are shared across the
+   rows of a grid, and pinned to the first it wrapped under the family. The
+   marker sits in the same cell, at its end, over the line's own padding. */
+.yogarow > summary .yogaline {
+  grid-column: 1 / -1; grid-row: 2; min-width: 0; padding-right: 1.4rem;
+  font-size: var(--t-body); color: var(--ink-60); line-height: 1.5;
+}
 .yogarow > summary::after {
-  content: "▸"; grid-column: 2; grid-row: 1;
+  content: "▸"; grid-column: 1 / -1; grid-row: 2;
+  justify-self: end; align-self: baseline;
   color: var(--ink-50); font-size: var(--t-label);
 }
 .yogarow[open] > summary::after { content: "▾"; color: var(--accent-ink); }
-.yogarow > summary .yoganame { grid-column: 1; grid-row: 1; }
-.yogarow > summary .yogaline {
-  grid-column: 1; grid-row: 2;
-  font-size: var(--t-body); color: var(--ink-60); line-height: 1.5;
+@media (min-width: 1000px) {
+  /* 9rem holds the widest family in the fallback face the test browser
+     renders as well as in Tiro. */
+  details.yogarow > summary { grid-template-columns: minmax(0, 1fr) 9rem; column-gap: 20px; }
+  .yogarow > summary .yoganame { font-size: 18px; }
+  .yogarow > summary .yogakind { justify-self: start; letter-spacing: .12em; }
 }
-.yogarow > summary .yogakind { grid-column: 2; grid-row: 2; }
 .yogarow[open] { background: var(--surface); }
 .yogarow[open] > summary { padding-left: 12px; }
 .yogarow[open] > *:not(summary) { padding: 0 12px; }
@@ -762,7 +797,10 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 .yogadetail { font-size: var(--t-body); line-height: 1.6; color: var(--ink-70); margin: 6px 0 0; }
 .yoganote { font-size: var(--t-body); line-height: 1.55; font-style: italic; color: var(--accent-ink); margin: 6px 0 0; }
 .yoga details { margin-top: 7px; }
-.yoga summary {
+.yoga:not(.yogarow) summary, .yogarow > details > summary {
+  /* The small uppercase summary of an inner fold ("How · why"). Written as
+     `.yoga summary`, it also matched the yoga ROW's own summary by descent
+     and uppercased the whole entry — name, verdict line and family. */
   cursor: pointer; font-size: var(--t-body); letter-spacing: .12em;
   text-transform: uppercase; color: var(--ink-50);
 }
@@ -1545,8 +1583,9 @@ button.cast.recast { margin-top: 4px; }
 }
 /* An entry title inside a section sits between the section title and the
    body — never level with either. */
-#view-explore[data-showing] .yoganame,
 #view-explore[data-showing] .xptitle { font-size: 18px; }
+/* The yoga name is 17px on a phone and 18px from 1000px — set with the row
+   grid above, where the widths that decide it live. */
 
 /* ============================================================
    THE FIVE SCREENS — Today · Readings · Your charts · Explore · Ask

@@ -12421,3 +12421,130 @@ class TestGrahaCardLeadsWithTheVedicAccount:
         assert modal["hidden"] is False and modal["n"] == 2, modal
         assert all(s >= 16 for s in modal["sizes"]), modal
         assert modal["second"].startswith("In the sky the story"), modal
+
+
+class TestYogaRowsReadAsOneLine:
+    """Every yoga row is the same two lines of type: the name with its family
+    on the first, the verdict line with the marker on the second — and the
+    columns align down the list, not per row.
+
+    Re-pinned 2026-09-15 from a review of the live site, where long names
+    wrapped against the status and the family and rows lost alignment. Two
+    stylesheet defects sat under it: `details.yoga > summary { display:
+    flex }` outranked the row's grid on specificity, so the grid never
+    applied and every row was three flex columns; and `.yoga summary`,
+    written for the inner "How · why" fold, matched the row's own summary
+    by descent and uppercased the whole entry. Both carved out.
+
+    The ledger is 342px wide on a phone and 592 on a desktop; a name runs
+    to 309px, a verdict line to 282, a family to 112 — three columns on one
+    line fit at neither width, so the row is two lines everywhere and this
+    class counts the line boxes rather than trusting the stylesheet.
+    """
+
+    _ROWS = r"""
+    () => Array.from(document.querySelectorAll('.yogarow > summary')).map(s => {
+      const lines = el => { const r = document.createRange();
+        r.selectNodeContents(el); return r.getClientRects().length; };
+      const box = s.getBoundingClientRect();
+      const n = s.querySelector('.yoganame'), l = s.querySelector('.yogaline'),
+            k = s.querySelector('.yogakind');
+      const nb = n.getBoundingClientRect(), lb = l.getBoundingClientRect(),
+            kb = k.getBoundingClientRect();
+      const cs = getComputedStyle(n);
+      return {name: n.textContent.trim(), height: box.height,
+              nameLines: lines(n), lineLines: lines(l), kindLines: lines(k),
+              nameLeft: nb.left, lineLeft: lb.left, kindLeft: kb.left,
+              kindRight: kb.right, rowRight: box.right,
+              nameTop: nb.top, kindTop: kb.top, lineTop: lb.top,
+              transform: cs.textTransform, spacing: cs.letterSpacing,
+              display: getComputedStyle(s).display};
+    })
+    """
+
+    @classmethod
+    @pytest.fixture(scope="class")
+    def rows(cls):
+        pw = pytest.importorskip("playwright.sync_api",
+                                 reason="playwright not installed")
+        import threading
+        from werkzeug.serving import make_server
+        from app import app
+        srv = make_server("127.0.0.1", 0, app, threaded=True)
+        port = srv.socket.getsockname()[1]
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        out = {}
+        try:
+            with pw.sync_playwright() as p:
+                browser = TestMaskedBirthFieldsInARealBrowser._launch(p, pytest)
+                for width in (390, 1280):
+                    pg = browser.new_context(
+                        viewport={"width": width, "height": 900}).new_page()
+                    pg.goto(f"http://127.0.0.1:{port}/")
+                    for k, v in GATE_FORM.items():
+                        pg.evaluate(
+                            "([k,v]) => { const e = document.querySelector("
+                            "`[name=\"${k}\"]`); if (e) e.value = v; }", [k, v])
+                    with pg.expect_navigation():
+                        pg.evaluate("document.querySelector('#cast').submit()")
+                    pg.wait_for_load_state("load")
+                    pg.evaluate("location.hash = '#cat-combinations'")
+                    pg.wait_for_timeout(900)
+                    out[width] = pg.evaluate(cls._ROWS)
+                browser.close()
+        finally:
+            srv.shutdown()
+        return out
+
+    def test_the_walk_read_the_rows(self, rows):
+        for width, rs in rows.items():
+            assert len(rs) >= 5, (width, len(rs))
+            for r in rs:
+                assert r["display"] == "grid", (width, r["name"], r["display"])
+
+    def test_no_row_exceeds_two_lines(self, rows):
+        """The name is one line box, the verdict line is one line box, the
+        family is one line box: two lines of type, never three."""
+        for width, rs in rows.items():
+            for r in rs:
+                assert r["nameLines"] == 1, (width, r["name"], r["nameLines"])
+                assert r["lineLines"] == 1, (width, r["name"], r["lineLines"])
+                assert r["kindLines"] == 1, (width, r["name"], r["kindLines"])
+                # The family sits beside the name, the verdict line beneath.
+                assert abs(r["kindTop"] - r["nameTop"]) < 6, (width, r["name"])
+                assert r["lineTop"] > r["nameTop"] + 10, (width, r["name"])
+
+    def test_columns_align_down_the_list(self, rows):
+        """Every row the same height; names on one left edge; the family
+        column on one right edge at every width and, from 1000px, on one
+        left edge too — a fixed column, not a per-row fit."""
+        for width, rs in rows.items():
+            heights = {round(r["height"]) for r in rs}
+            assert len(heights) == 1, (width, heights)
+            assert len({round(r["nameLeft"]) for r in rs}) == 1, width
+            assert len({round(r["lineLeft"]) for r in rs}) == 1, width
+            if width >= 1000:
+                # A fixed column: one left edge, and nothing overflows it.
+                assert len({round(r["kindLeft"]) for r in rs}) == 1, (
+                    width, sorted(round(r["kindLeft"]) for r in rs))
+                for r in rs:
+                    assert r["kindRight"] <= r["rowRight"] + 0.5, (
+                        width, r["name"], r["kindRight"], r["rowRight"])
+            else:
+                # Right-aligned to the row's edge on a phone, where a fixed
+                # column would take the name's room.
+                rights = {round(r["rowRight"] - r["kindRight"]) for r in rs}
+                assert len(rights) == 1 and max(rights) <= 1, (width, rights)
+
+    def test_the_entry_is_not_uppercased_by_the_inner_fold_rule(self, rows):
+        for width, rs in rows.items():
+            for r in rs:
+                assert r["transform"] == "none", (width, r["name"])
+                assert r["spacing"] == "normal", (width, r["name"], r["spacing"])
+
+    def test_the_two_stylesheet_defects_stay_carved_out(self):
+        css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
+        assert "details.yoga > summary {" not in css
+        assert "details.yoga:not(.yogarow) > summary" in css
+        assert "\n.yoga summary {" not in css
+        assert ".yoga:not(.yogarow) summary, .yogarow > details > summary" in css

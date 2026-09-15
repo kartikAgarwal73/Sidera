@@ -216,6 +216,10 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
     "TestGrahaCardLeadsWithTheVedicAccount::test_the_geometry_paragraph_is_true_of_the_sky": (
         "external", "the mean node's 18.6-year retrograde circuit — "
                     "checkable in any ephemeris"),
+    "TestYogaRowsReadAsOneLine": (
+        "invariant", "product rule: every yoga row is the same two lines of "
+                     "type and its columns align down the list — line boxes "
+                     "counted in a browser"),
     "TestTransitsPanelNowAndUpcoming": (
         "invariant", "product rule: the Transits pane is Now and Upcoming, "
                      "and every noun on a row is copied from a ledger fact "
