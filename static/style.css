@@ -1787,17 +1787,33 @@ button.cast.recast { margin-top: 4px; }
 
 .askfield {
   display: flex; gap: 10px; align-items: stretch;
-  margin-top: 22px; border-bottom: 1.5px solid var(--divider);
-  padding-bottom: 6px;
+  margin-top: 22px; padding-bottom: 6px;
+  /* A VISIBLE RULE. This was a 1px divider at 24% ink — a hairline a
+     reader on the live site did not see, so the screen read as an Ask
+     button with nowhere to type. The rule is the field's edge now, in the
+     ink that links use: 5.9:1 on paper, well past the 3:1 a control's
+     boundary needs. `TestTheAskFieldIsVisible` measures it in a browser
+     rather than trusting this comment. */
+  /* 2px, not 1.5: a browser snaps a fractional border to a device pixel,
+     and 1.5px is 1px on a standard screen. */
+  border-bottom: 2px solid var(--accent-ink);
 }
 #askq {
   flex: 1; min-width: 0; background: transparent; border: none;
   font-family: var(--font-body); font-size: 19px; color: var(--ink);
   padding: 10px 2px; text-align: left;
 }
-#askq::placeholder { color: var(--ink-50); }
+/* The placeholder says what the field is for, at a contrast a placeholder
+   can be read at — --ink-60 rather than --ink-50, since it is the only
+   text in the box until the reader types. */
+#askq::placeholder { color: var(--ink-60); opacity: 1; }
 #askq:focus { outline: none; }
-.askfield:focus-within { border-bottom-color: var(--accent); }
+/* Focus: the rule thickens and takes the accent. A reader who tabs in can
+   see where they are without a browser outline the almanac has none of. */
+.askfield:focus-within {
+  border-bottom-color: var(--accent); border-bottom-width: 3px;
+  padding-bottom: 5px;
+}
 .askgo {
   flex: none; background: transparent; border: none; cursor: pointer;
   font-family: var(--font-heading); font-size: var(--t-body);

@@ -12548,3 +12548,118 @@ class TestYogaRowsReadAsOneLine:
         assert "details.yoga:not(.yogarow) > summary" in css
         assert "\n.yoga summary {" not in css
         assert ".yoga:not(.yogarow) summary, .yogarow > details > summary" in css
+
+
+class TestTheAskFieldIsVisible:
+    """A reader must be able to see where to type.
+
+    Re-pinned 2026-09-15 from a review of the live site: the field's only
+    edge was a 1px divider at 24% ink, and the screen read as an Ask button
+    with nowhere to type. The field has a rule a reader can see, a
+    placeholder that says what it is for, and a focus state — and this
+    class measures the rendered rule against the page rather than trusting
+    the stylesheet: a border that exists at 0px or in the paper's own colour
+    would pass a source check and fail a reader.
+    """
+
+    _PROBE = r"""
+    () => {
+      const field = document.querySelector('.askfield');
+      const input = document.getElementById('askq');
+      const page = getComputedStyle(document.body).backgroundColor;
+      const read = () => { const cs = getComputedStyle(field);
+        return {width: parseFloat(cs.borderBottomWidth), color: cs.borderBottomColor,
+                style: cs.borderBottomStyle}; };
+      const before = read();
+      input.focus();
+      const after = read();
+      const ph = getComputedStyle(input, '::placeholder').color;
+      return {page, placeholder: input.placeholder, before, after,
+              placeholderColor: ph, inputBg: getComputedStyle(input).backgroundColor,
+              inputBorder: getComputedStyle(input).borderBottomWidth};
+    }
+    """
+
+    @staticmethod
+    def _rgb(css: str, over: str | None = None) -> str:
+        """'rgb(a, b, c)' or 'rgba(a, b, c, x)' → '#rrggbb', composited over
+        `over` when translucent, since that is what the eye receives."""
+        nums = [float(x) for x in re.findall(r"[\d.]+", css)]
+        r, g, b = nums[:3]
+        alpha = nums[3] if len(nums) > 3 else 1.0
+        if over and alpha < 1:
+            o = over.lstrip("#")
+            ob = [int(o[i:i + 2], 16) for i in (0, 2, 4)]
+            r, g, b = (c * alpha + oc * (1 - alpha) for c, oc in zip((r, g, b), ob))
+        return "#%02x%02x%02x" % (round(r), round(g), round(b))
+
+    @classmethod
+    @pytest.fixture(scope="class")
+    def probe(cls):
+        pw = pytest.importorskip("playwright.sync_api",
+                                 reason="playwright not installed")
+        import threading
+        from werkzeug.serving import make_server
+        from app import app
+        srv = make_server("127.0.0.1", 0, app, threaded=True)
+        port = srv.socket.getsockname()[1]
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        out = {}
+        try:
+            with pw.sync_playwright() as p:
+                browser = TestMaskedBirthFieldsInARealBrowser._launch(p, pytest)
+                for width in (390, 1280):
+                    pg = browser.new_context(
+                        viewport={"width": width, "height": 900}).new_page()
+                    pg.goto(f"http://127.0.0.1:{port}/")
+                    for k, v in GATE_FORM.items():
+                        pg.evaluate(
+                            "([k,v]) => { const e = document.querySelector("
+                            "`[name=\"${k}\"]`); if (e) e.value = v; }", [k, v])
+                    with pg.expect_navigation():
+                        pg.evaluate("document.querySelector('#cast').submit()")
+                    pg.wait_for_load_state("load")
+                    pg.evaluate("location.hash = '#ask'")
+                    pg.wait_for_timeout(600)
+                    out[width] = pg.evaluate(cls._PROBE)
+                browser.close()
+        finally:
+            srv.shutdown()
+        return out
+
+    def test_the_field_has_a_rule_a_reader_can_see(self, probe):
+        """A boundary needs 3:1 against what surrounds it (WCAG 1.4.11);
+        the rule clears it comfortably, and it is a real width."""
+        for width, r in probe.items():
+            page = self._rgb(r["page"])
+            rule = self._rgb(r["before"]["color"], over=page)
+            assert r["before"]["style"] == "solid", (width, r["before"])
+            # Two device pixels: a fractional border snaps to one.
+            assert r["before"]["width"] >= 2, (width, r["before"])
+            assert contrast(rule, page) >= 3.0, (width, rule, page,
+                                                 contrast(rule, page))
+
+    def test_the_placeholder_says_what_the_field_is_for(self, probe):
+        for width, r in probe.items():
+            assert r["placeholder"] == "Ask about this chart…", r["placeholder"]
+            page = self._rgb(r["page"])
+            ph = self._rgb(r["placeholderColor"], over=page)
+            # Placeholder text is read, so it is held to text contrast.
+            assert contrast(ph, page) >= 4.5, (width, ph, page, contrast(ph, page))
+
+    def test_focus_changes_the_rule(self, probe):
+        """Tabbing in must show: the rule changes colour and thickens, and
+        stays a visible boundary while it does."""
+        for width, r in probe.items():
+            b, a = r["before"], r["after"]
+            assert a["color"] != b["color"], (width, b, a)
+            assert a["width"] > b["width"], (width, b, a)
+            page = self._rgb(r["page"])
+            assert contrast(self._rgb(a["color"], over=page), page) >= 3.0, (
+                width, a)
+
+    def test_the_rule_is_the_fields_own_edge(self, probe):
+        """The input is borderless inside a ruled field — one rule, not a
+        second box drawn around the first."""
+        for width, r in probe.items():
+            assert r["inputBorder"] == "0px", (width, r["inputBorder"])

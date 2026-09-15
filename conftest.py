@@ -220,6 +220,10 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
         "invariant", "product rule: every yoga row is the same two lines of "
                      "type and its columns align down the list — line boxes "
                      "counted in a browser"),
+    "TestTheAskFieldIsVisible": (
+        "invariant", "product rule: the Ask field has a rule a reader can "
+                     "see, a placeholder that says what it is for, and a "
+                     "focus state — measured in a browser"),
     "TestTransitsPanelNowAndUpcoming": (
         "invariant", "product rule: the Transits pane is Now and Upcoming, "
                      "and every noun on a row is copied from a ledger fact "
