@@ -372,6 +372,21 @@ _YOGA = dict([
 
 
 # --- what each house carries --------------------------------------------------
+#
+# THE ONE TABLE. Every surface that names a house by what it holds reads it
+# from here — the weather cards, the Explore explanations, the Today lines,
+# the Transits pane, the yoga rows, the Aṣṭakavarga grid, the planet
+# explorer — through `house_words()` for the short form or `house_matters()`
+# for the whole clause, which is also rule.house.<h>'s own text.
+#
+# There were three tables once: this one, HOUSE_MEANING_BRIEF in doshas.py
+# and HOUSE_THEME in explain.py, each written for its own screen. On the
+# reference chart the 8th read as "shared and other people's resources" on
+# the Transits pane beside "transformation and the hidden" on the weather
+# card, one scroll apart. Merged 2026-09-16 as the precondition to the
+# resolver, which cites rule.house.<h> and must find the same words the
+# reader saw. `TestOneHouseWordTable` fails if a second twelve-house table
+# appears in any app module.
 
 HOUSE_MATTERS = {
     1: "the body, vitality and how one is met",
@@ -394,6 +409,18 @@ _HOUSE = dict(
        "Bhava significations, Brihat Parashara Hora Shastra")
     for h, matters in HOUSE_MATTERS.items()
 )
+
+
+def house_matters(house: int) -> str:
+    """The whole clause — rule.house.<h>'s own words for what it governs."""
+    return HOUSE_MATTERS[house]
+
+
+def house_words(house: int) -> str:
+    """The short form: the first clause, for a line that names the house in
+    passing — "the part of your chart that holds partnership". Always a
+    prefix of `house_matters(house)`, so the two can never disagree."""
+    return HOUSE_MATTERS[house].split(",")[0].strip()
 
 # --- arudhas: the image a house casts ----------------------------------------
 

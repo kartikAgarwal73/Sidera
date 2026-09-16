@@ -115,6 +115,11 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
                      "geometry table"),
     "TestFixtureHygiene": (
         "invariant", "standing rule: no real birth record is ever a fixture"),
+    "TestOneHouseWordTable": (
+        "invariant", "product rule: a house is named by what it holds from "
+                     "ONE table, app-wide — no second twelve-house table in "
+                     "any module, and every surface's words are that "
+                     "table's"),
     "TestRuleLibrary": (
         "external", "classical dasha-phala and gochara rules, each with its "
                     "named source"),

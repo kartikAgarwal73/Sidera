@@ -42,7 +42,7 @@ from datetime import datetime, timedelta
 import voice
 from engine import (Chart, PLANETS, SIGNS, sidereal_positions,
                     julian_day_ut)
-from rulelib import HOUSE_MATTERS, KARAKATVAS
+from rulelib import KARAKATVAS, house_words
 from transits import (
     CONJUNCTION_ORB,
     angular_distance,
@@ -197,7 +197,7 @@ def _holds(chart: Chart, sign: str) -> str:
     in plain words rather than by number, per the plain-register rule.
     """
     house = (SIGNS.index(sign) - chart.lagna.sign_index) % 12 + 1
-    return HOUSE_MATTERS[house].split(",")[0].strip()
+    return house_words(house)
 
 
 def _months_between(a: datetime | None, b: datetime) -> str:

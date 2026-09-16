@@ -42,7 +42,7 @@ from datetime import datetime
 import voice
 from dashas import vimshottari
 from engine import Chart, PLANETS, SIGNS
-from rulelib import HOUSE_MATTERS, KARAKATVAS
+from rulelib import KARAKATVAS, house_words
 from transits import CONJUNCTION_ORB, angular_distance, transit_snapshot
 from vargas import VargaChart, varga_chart
 from yogas import Yoga, detect_all, dignity_at, sign_lord
@@ -301,7 +301,7 @@ def _where(yoga: Yoga) -> str:
         if h in seen:
             continue
         seen.add(h)
-        parts.append(HOUSE_MATTERS[h].split(",")[0].strip())
+        parts.append(house_words(h))
     return _and_list(parts) if parts else "the chart as a whole"
 
 

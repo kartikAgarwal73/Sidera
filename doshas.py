@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from engine import PLANETS, SIGNS, Chart
+from rulelib import house_words
 from transits import (
     TransitSnapshot,
     angular_distance,
@@ -247,16 +248,6 @@ GOCARA_FAVOURABLE = {
     "Ketu": (3, 6, 10, 11),
 }
 
-HOUSE_MEANING_BRIEF = {
-    1: "the body and self-presentation", 2: "resources and speech",
-    3: "effort and courage", 4: "home and the heart's ease",
-    5: "creativity and study", 6: "work, health and debts",
-    7: "partnership", 8: "transformation and the hidden",
-    9: "dharma, teachers and fortune", 10: "career and public standing",
-    11: "gains and networks", 12: "retreat, expenditure and release",
-}
-
-
 def _ordinal(n: int) -> str:
     return {1: "1st", 2: "2nd", 3: "3rd"}.get(n, f"{n}th")
 
@@ -299,7 +290,7 @@ def transit_weather(chart: Chart, snapshot: TransitSnapshot) -> list[dict]:
                             "working uphill terrain, and finite."))
         # (ii) natal house + one-line meaning
         parts.append(f"It works through your {_ordinal(tp.natal_house)} "
-                     f"house — {HOUSE_MEANING_BRIEF[tp.natal_house]}.")
+                     f"house — {house_words(tp.natal_house)}.")
         # (iii) Moon-relative gocara quality
         parts.append(f"Counted from the Moon it stands {_ordinal(from_moon)}"
                      f" — a {quality} gocara position"

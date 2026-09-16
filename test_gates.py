@@ -12850,3 +12850,180 @@ class TestMalformedCompletionsAreWithheld:
         assert r.status_code == 422
         assert r.get_json()["withheld"] is True
         assert agent_mod.LIMITER.remaining(sid) == before
+
+
+class TestOneHouseWordTable:
+    """A house is named by what it holds from ONE table, app-wide.
+
+    Pinned 2026-09-16 as the precondition to the resolver. Three tables
+    named the houses: rulelib.HOUSE_MATTERS behind rule.house.<h>, a brief
+    one in doshas.py for the weather cards, a third in explain.py for the
+    Explore meaning layer. On the reference chart the 8th read as "shared
+    and other people's resources" on the Transits pane and "transformation
+    and the hidden" on the weather card, one scroll apart. The resolver
+    cites rule.house.<h>, so the words it fires must be the words the reader
+    saw everywhere else — which means one table and two accessors.
+    """
+
+    #: Every phrase from the two retired tables that is NOT the one table's
+    #: wording. If any of these renders anywhere, a second table is back.
+    RETIRED = (
+        # doshas.HOUSE_MEANING_BRIEF
+        "the body and self-presentation", "resources and speech",
+        "effort and courage", "home and the heart's ease",
+        "creativity and study", "work, health and debts",
+        "transformation and the hidden", "dharma, teachers and fortune",
+        "career and public standing", "gains and networks",
+        "retreat, expenditure and release",
+        # explain.HOUSE_THEME
+        "the body, temperament and self-presentation",
+        "wealth, speech and family resources",
+        "courage, effort and younger siblings",
+        "home, mother, land and the heart's ease",
+        "creativity, children, intellect and merit",
+        "obstacles, service, debts and health",
+        "partnership, marriage and the other",
+        "transformation, longevity and the hidden",
+        "dharma, fortune, teachers and grace",
+        "karma, career and public standing",
+        "gains, networks and aspirations",
+        "expenditure, retreat, foreign shores and liberation",
+    )
+
+    @staticmethod
+    def _app_modules():
+        import pathlib
+        root = pathlib.Path(__file__).resolve().parent
+        return sorted(p for p in root.glob("*.py")
+                      if not p.name.startswith("test_")
+                      and p.name != "conftest.py")
+
+    @classmethod
+    def _twelve_house_tables(cls):
+        """(module, line) of every dict LITERAL keyed exactly 1..12 whose
+        values are prose — words, not polygon coordinates."""
+        import ast
+        import re
+        out = []
+        for path in cls._app_modules():
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Dict) or len(node.keys) != 12:
+                    continue
+                keys = [k.value for k in node.keys
+                        if isinstance(k, ast.Constant)
+                        and isinstance(k.value, int)]
+                if sorted(keys) != list(range(1, 13)):
+                    continue
+                values = [v.value for v in node.values
+                          if isinstance(v, ast.Constant)
+                          and isinstance(v.value, str)]
+                if len(values) != 12:
+                    continue
+                if all(re.search(r"[A-Za-z]{3,}", v) for v in values):
+                    out.append((path.name, node.lineno))
+        return out
+
+    def test_the_one_table_is_the_only_twelve_house_table_in_the_app(self):
+        import rulelib
+        tables = self._twelve_house_tables()
+        assert tables, "the scan found no table at all — it is broken"
+        assert all(name == "rulelib.py" for name, _ in tables), tables
+        assert len(tables) == 1, tables
+        assert len(rulelib.HOUSE_MATTERS) == 12
+
+    def test_the_two_retired_tables_are_gone(self):
+        import doshas
+        import explain
+        assert not hasattr(doshas, "HOUSE_MEANING_BRIEF")
+        assert not hasattr(explain, "HOUSE_THEME")
+
+    def test_every_consumer_goes_through_the_accessors(self):
+        """No module but rulelib indexes the table itself, so no module can
+        quietly split it a different way or copy it."""
+        for path in self._app_modules():
+            if path.name == "rulelib.py":
+                continue
+            src = path.read_text(encoding="utf-8")
+            assert "HOUSE_MATTERS[" not in src, path.name
+            assert "HOUSE_MATTERS.get" not in src, path.name
+
+    def test_the_short_form_is_a_prefix_of_the_rule_text(self):
+        import rulelib
+        for h in range(1, 13):
+            words = rulelib.house_words(h)
+            whole = rulelib.house_matters(h)
+            assert words and whole.startswith(words), (h, words, whole)
+            assert whole in rulelib.RULES[f"rule.house.{h}"].text, h
+            assert "," not in words, (h, words)
+
+    @classmethod
+    @pytest.fixture(scope="class")
+    def surfaces(cls):
+        import fixtures
+        out = []
+        for key in ("reference", "partner"):
+            out.append((key, compute_chart(fixtures.birth(key)), AGENT_WHEN))
+        return out
+
+    def test_every_surface_names_a_house_from_the_one_table(self, surfaces):
+        import rulelib
+        import today
+        import yogaread
+        from app import ashtakavarga_view, planet_explorer, transits_panel
+        from chartfacts import build_facts
+        from doshas import transit_weather
+        from explain import explain_planet
+        from transits import transit_snapshot
+        for key, chart, when in surfaces:
+            # weather cards
+            for card in transit_weather(chart, transit_snapshot(chart, when)):
+                assert rulelib.house_words(card["natal_house"]) in card["note"], \
+                    (key, card["planet"], card["note"])
+            # Explore meaning layer, every graha
+            for name in PLANETS:
+                house = chart.planets[name].house
+                assert rulelib.house_matters(house) in \
+                    explain_planet(chart, name).meaning, (key, name)
+            # Transits pane
+            facts = {f.id: f for f in build_facts(chart, when)}
+            panel = transits_panel(chart, when, facts)
+            for r in panel["now"] + panel["upcoming"]:
+                assert r["house_words"] == rulelib.house_words(r["natal_house"])
+                assert r["house_words"] in r["effect"]
+            # Today lines: an ingress names the house the sign is here
+            for e in today.entries(chart, when):
+                if e.kind == "ingress":
+                    assert any(rulelib.house_words(h) in e.text
+                               for h in range(1, 13)), (key, e.text)
+            # planet explorer
+            for name, p in planet_explorer(chart).items():
+                assert p["nak_lord_house_matters"] == \
+                    rulelib.house_words(p["nak_lord_house"]), (key, name)
+            # Aṣṭakavarga grid
+            for row in ashtakavarga_view(chart)["rows"]:
+                assert row["matters"] == rulelib.house_words(row["house"])
+            # yoga rows
+            for r in yogaread.read_all(chart, when):
+                for h in r.yoga.houses:
+                    assert rulelib.house_words(h) in r.where, (key, r.yoga.name)
+
+    def test_no_retired_phrase_renders_anywhere(self, client, surfaces):
+        """The dashboard for both fixtures, and the Explore payload every
+        graha's explanation goes into, carry none of the twenty-three
+        phrases the dead tables used."""
+        import fixtures
+        from explain import explain_planet
+        for key, chart, when in surfaces:
+            b = fixtures.birth(key)
+            form = {"date": f"{b.year:04d}-{b.month:02d}-{b.day:02d}",
+                    "time": f"{b.hour:02d}:{b.minute:02d}",
+                    "lat": str(b.latitude), "lon": str(b.longitude),
+                    "tz": b.tz, "place": b.place}
+            html = client.post("/", data=form).get_data(as_text=True)
+            for phrase in self.RETIRED:
+                assert phrase not in html, (key, phrase)
+            for name in PLANETS:
+                meaning = explain_planet(chart, name).meaning
+                for phrase in self.RETIRED:
+                    assert phrase not in meaning, (key, name, phrase)

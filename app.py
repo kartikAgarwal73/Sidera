@@ -40,7 +40,7 @@ from doshas import (WEATHER_FRAMING, combinations, doshas_all,
 from lessons import CONTEXT_LESSONS, LESSONS
 from engine import SIGNS, PLANETS, BirthData, compute_chart
 from explain import DASHA_THEME, explain_dashboard, explain_yoga, ordinal
-from rulelib import HOUSE_MATTERS
+from rulelib import house_words
 import schools
 from transits import (
     DRISHTI_OFFSETS,
@@ -289,7 +289,7 @@ def plate_reading(key: str, chart) -> str:
     the D60 all told the reader about the tenth division.
     """
     def matters(house: int) -> str:
-        return HOUSE_MATTERS[house].split(",")[0].strip()
+        return house_words(house)
 
     def plain(name: str) -> str:
         return voice.plain(name)
@@ -454,7 +454,7 @@ def ashtakavarga_view(chart) -> dict:
             "band": ("strong" if score >= av_mod.STRONG_FLOOR
                      else "thin" if score <= av_mod.THIN_CEILING
                      else "middling"),
-            "matters": HOUSE_MATTERS[h].split(",")[0].strip(),
+            "matters": house_words(h),
             "bav": {p: av.by_house(av.bav_by_sign[p])[h]
                     for p in av_mod.BODIES},
         })
@@ -525,8 +525,8 @@ def _owned(planet: str, names) -> str:
 
 def _house_words(house: int) -> str:
     """What a house is for, in rule.house.<h>'s own first clause — the same
-    words the Today entries use, never a number."""
-    return HOUSE_MATTERS[house].split(",")[0].strip()
+    words every other surface uses, never a number."""
+    return house_words(house)
 
 
 SLOW_MOVERS = ("Saturn", "Jupiter", "Rahu", "Ketu")

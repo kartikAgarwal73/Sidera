@@ -25,6 +25,7 @@ from dashas import (
     nakshatra_of,
 )
 from engine import PLANETS, SIGNS, Chart
+from rulelib import house_matters
 import schools
 from transits import DRISHTI_OFFSETS, TransitSnapshot
 from yogas import (
@@ -93,21 +94,6 @@ PLANET_SIGNIFIES = {
     "Saturn": "discipline, time, labour, endurance",
     "Rahu": "appetite, amplification, the foreign, ambition",
     "Ketu": "detachment, insight, past mastery, release",
-}
-
-HOUSE_THEME = {
-    1: "the body, temperament and self-presentation",
-    2: "wealth, speech and family resources",
-    3: "courage, effort and younger siblings",
-    4: "home, mother, land and the heart's ease",
-    5: "creativity, children, intellect and merit",
-    6: "obstacles, service, debts and health",
-    7: "partnership, marriage and the other",
-    8: "transformation, longevity and the hidden",
-    9: "dharma, fortune, teachers and grace",
-    10: "karma, career and public standing",
-    11: "gains, networks and aspirations",
-    12: "expenditure, retreat, foreign shores and liberation",
 }
 
 SIGN_TEMPERAMENT = {
@@ -285,7 +271,7 @@ def explain_planet(chart: Chart, name: str) -> Explanation:
         meaning=(
             f"{name} carries {PLANET_SIGNIFIES[name]}; placed in the "
             f"{ordinal(pos.house)} house it works through "
-            f"{HOUSE_THEME[pos.house]}."
+            f"{house_matters(pos.house)}."
         ),
         confidence="Interpretive",
     )
