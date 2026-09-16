@@ -127,6 +127,12 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
                      "spouse karaka, the Upapada's own split and its 2nd, "
                      "rule ids on doshas — and the domain brief must name "
                      "only facts that exist"),
+    "TestTheLandingShowsTwoPlates": (
+        "invariant", "product rule: the Today screen carries the D1 and D9 "
+                     "side by side at desktop widths and stacked D1-first "
+                     "on a phone, degrees on by default, with the full "
+                     "tabbed plate, the D10 and the Aṣṭakavarga overlay "
+                     "behind 'See the chart' — measured in a browser"),
     "TestTheSignedWeightTable": (
         "external", "the weight and confidence table the owner signed on "
                     "2026-09-16, row for row, with the two amendments"),

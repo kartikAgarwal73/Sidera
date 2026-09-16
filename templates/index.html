@@ -325,88 +325,69 @@
 <div class="view" id="view-arrival">
 <p class="folio"><span class="folio-p">P. 01</span> · Today<br>
   <span class="folio-of">Fold 1 of 5</span></p>
-{# SCREEN 1 — TODAY. The leaf is two columns: the day on the left, the plate
-   pinned on the right with today's transits ticked around its edge. At 390px
-   it collapses to one column, plate first. #}
+{# SCREEN 1 — TODAY. Two plates head the leaf — the birth chart and its
+   navāṃśa, side by side from 1040px up — with today's transits ticked around
+   the D1's edge; the day's reading runs beneath. On a phone the day comes
+   first and the plates stack under it, D1 then D9. #}
 <div class="leaf">
 <section class="plate showdeg" id="plate">
-  <div class="switcher" role="tablist">
-    <button class="tab active" role="tab" data-tab="d1">Rāśi · D1</button>
-    <button class="tab" role="tab" data-tab="d9">Navāṃśa · D9</button>
-    <button class="tab" role="tab" data-tab="d10">Daśāṃśa · D10</button>
+  {# TWO PLATES, SIDE BY SIDE. The birth chart and its navāṃśa — the plate
+     and the plate that tests it — read together, D1 left and D9 right at
+     desktop widths, stacked D1 first on a phone. Degrees on by default on
+     the D1; the D9 stays at sign level on the figure, because its degree
+     is a scaling convention (rule.varga.degree_convention) and drawing it
+     on a plate would quote it as a figure. The full tabbed plate, the
+     Aṣṭakavarga overlay and the D10 are one tap down, behind "See the
+     chart". Revised 2026-09-16; see ui-design/DOSSIER.md. #}
+  <div class="platehead">
+    <label class="degtoggle"><input type="checkbox" id="degToggle" checked>
+      Show degrees <span class="opt">· D1</span></label>
+    <div class="platelearn"><button class="learn" data-lesson="plate">ⓘ how to read this plate</button> <button class="learn" data-lesson="d9">ⓘ read your D9</button></div>
   </div>
-  <div style="text-align:right;margin-top:8px"><button class="learn" data-lesson="plate">ⓘ how to read this plate</button> <button class="learn" data-lesson="d9">ⓘ read your D9</button></div>
-  <label class="degtoggle"><input type="checkbox" id="degToggle" checked>
-    Show degrees <span class="opt">· D1</span></label>
-  <label class="degtoggle"><input type="checkbox" id="savToggle">
-    Aṣṭakavarga <span class="opt">· support per house, D1</span></label>
-
+  <div class="duo">
   {% for key, houses, sub in [("d1", data.kundli_d1, data.lagna_sign ~ " rising"),
-                              ("d9", data.kundli_d9, "D9 lagna " ~ data.d9_lagna),
-                              ("d10", data.kundli_d10, "D10 lagna " ~ data.d10_lagna)] %}
-  <div class="pane {% if key != 'd1' %}hidden{% endif %}" id="pane-{{ key }}">
-    <svg viewBox="{% if key == 'd1' %}-30 -30 360 360{% else %}0 0 300 300{% endif %}"
-         class="kundli" aria-label="North-Indian chart {{ key }}">
-      <g fill="none" class="plate-rule" stroke-width="0.75">
-        <rect x="3" y="3" width="294" height="294"/>
-        <path d="M3 3 L297 297 M297 3 L3 297"/>
-      </g>
-      <path class="plate-diamond" fill="none" stroke-width="1"
-            d="M150 3 L297 150 L150 297 L3 150 Z"/>
-      <g class="signnum" text-anchor="middle">
-        {# A cell whose marks stack onto two or more rows gives up its sign
-           numeral: a numeral under a graha mark is unreadable, and the sign
-           is in the graha table either way. #}
-        {% for h in houses %}{% if not h.hide_signnum %}<text x="{{ h.num_pos[0] }}" y="{{ h.num_pos[1] }}"{% if h.crowded %} class="crowded"{% endif %}>{{ h.sign_num }}</text>{% endif %}{% endfor %}
-      </g>
-      {% if key == 'd1' %}
-      {# THE SARVĀṢṬAKAVARGA TOTAL PER HOUSE, in the sign numeral's slot —
-         and instead of it, never beside it. A North-Indian cell already
-         carries a numeral and a graha stack; measured, a third number
-         collided with one or the other in every arrangement tried, and
-         shrinking it to fit would put it under the legibility floor. So it
-         is the reader's choice, the same way the degrees are.
-
-         D1 only: the Aṣṭakavarga tables are defined against the birth
-         chart and mean nothing rotated into a division. #}
-      <g class="savnum" text-anchor="middle">
-        {% for h in houses %}{% if h.sav and not h.hide_signnum %}<text x="{{ h.num_pos[0] }}" y="{{ h.num_pos[1] }}"{% if h.crowded %} class="crowded"{% endif %}>{{ h.sav }}</text>{% endif %}{% endfor %}
-      </g>
-      {% endif %}
-      </g>
-      {{ grahalayer(houses, size=COMPACT_SIZE) }}
-      {% if key == 'd1' %}
-      {# The same marks, with the degree each one stands at. Same macro, so
-         the glyph, the ink weight, ℞ and ⊙ cannot differ between the two
-         layers — which they did while this group wrote its own text. #}
-      {{ grahalayer(houses, size=DEG_SIZE, degrees=true) }}
-      {% endif %}
-      {% if key == 'd1' %}
-      {# Today's transits, ticked around the outside — the sky now, against
-         the birth chart. Outside the frame on purpose: the plate itself is
-         the birth moment and must not be overwritten by today. #}
-      <g class="ticks" text-anchor="middle">
-        {% for t in data.transit_ticks %}
-        <text x="{{ t.x }}" y="{{ t.y }}">{{ t.label }}</text>
-        {% endfor %}
-      </g>
-      {% endif %}
-    </svg>
-    {# A plate in printed matter carries its own caption: what it is, when
-       it was cast, and under which ayanāṃśa. #}
-    <div class="platecaption">
-      <span class="plateno">Plate {{ {'d1':'I','d9':'II','d10':'III'}[key] }}</span>
-      {{ sub }}{% if key == 'd9' and data.vargottama %} · Vargottama: {{ data.vargottama | join(", ") }}{% endif %}
-      <span class="platecast">cast {{ data.today.strftime("%-d %B %Y") }} · Lahiri ayanāṃśa</span>
-    </div>
-  </div>
+                              ("d9", data.kundli_d9, "D9 lagna " ~ data.d9_lagna)] %}
+    <figure class="duoplate" id="plate-{{ key }}">
+      {# The same viewBox on both, so the two frames are the same size on the
+         page: the D1 needs the 30-unit margin for today's ticks, and a D9
+         drawn tight to its frame read a fifth larger beside it. #}
+      <svg viewBox="-30 -30 360 360"
+           class="kundli" aria-label="North-Indian chart {{ key }}">
+        <g fill="none" class="plate-rule" stroke-width="0.75">
+          <rect x="3" y="3" width="294" height="294"/>
+          <path d="M3 3 L297 297 M297 3 L3 297"/>
+        </g>
+        <path class="plate-diamond" fill="none" stroke-width="1"
+              d="M150 3 L297 150 L150 297 L3 150 Z"/>
+        <g class="signnum" text-anchor="middle">
+          {% for h in houses %}{% if not h.hide_signnum %}<text x="{{ h.num_pos[0] }}" y="{{ h.num_pos[1] }}"{% if h.crowded %} class="crowded"{% endif %}>{{ h.sign_num }}</text>{% endif %}{% endfor %}
+        </g>
+        {{ grahalayer(houses, size=COMPACT_SIZE) }}
+        {% if key == 'd1' %}
+        {{ grahalayer(houses, size=DEG_SIZE, degrees=true) }}
+        {# Today's transits, ticked around the outside — the sky now, against
+           the birth chart. Outside the frame on purpose. #}
+        <g class="ticks" text-anchor="middle">
+          {% for t in data.transit_ticks %}
+          <text x="{{ t.x }}" y="{{ t.y }}">{{ t.label }}</text>
+          {% endfor %}
+        </g>
+        {% endif %}
+      </svg>
+      <figcaption class="platecaption">
+        <span class="plateno">Plate {{ {'d1':'I','d9':'II'}[key] }}</span>
+        {{ sub }}{% if key == 'd9' and data.vargottama %} · Vargottama: {{ data.vargottama | join(", ") }}{% endif %}
+        <span class="platecast">cast {{ data.today.strftime("%-d %B %Y") }} · Lahiri ayanāṃśa</span>
+      </figcaption>
+    </figure>
   {% endfor %}
+  </div>
   {# The graha chips below already pair every abbreviation with its name and
      open its working — a second name list here would be the same legend
      printed twice. Only the marks are new. #}
   {{ platelegend(names=false) }}
 
-  <!-- Phase 8: tap a graha to see its working -->
+  <!-- Phase 8: tap a graha to see its working — on the D1 above -->
   <div class="chips" id="chips">
     {% for name, px in data.explorer.items() %}
     <button class="chip-planet" data-planet="{{ name }}"><span class="chip-gl">{{ px.glyph }}</span>{{ px.abbr }} · {{ name }}</button>
@@ -419,6 +400,75 @@
     </div>
     <div class="xcard-body" id="xcard-body"></div>
   </div>
+
+  {# THE FULL PLATE, one tap down: the three tabs, the D10, the Aṣṭakavarga
+     overlay. Nothing is deleted; it is re-homed behind a fold, closed by
+     default, so the Today screen carries the two plates and the day. #}
+  <details class="fold seechart" id="seechart">
+    <summary class="readlink">See the chart</summary>
+    <div class="switcher" role="tablist">
+      <button class="tab active" role="tab" data-tab="d1">Rāśi · D1</button>
+      <button class="tab" role="tab" data-tab="d9">Navāṃśa · D9</button>
+      <button class="tab" role="tab" data-tab="d10">Daśāṃśa · D10</button>
+    </div>
+    <label class="degtoggle savtoggle"><input type="checkbox" id="savToggle">
+      Aṣṭakavarga <span class="opt">· support per house, D1</span></label>
+
+    {% for key, houses, sub in [("d1", data.kundli_d1, data.lagna_sign ~ " rising"),
+                                ("d9", data.kundli_d9, "D9 lagna " ~ data.d9_lagna),
+                                ("d10", data.kundli_d10, "D10 lagna " ~ data.d10_lagna)] %}
+    <div class="pane {% if key != 'd1' %}hidden{% endif %}" id="pane-{{ key }}">
+      <svg viewBox="{% if key == 'd1' %}-30 -30 360 360{% else %}0 0 300 300{% endif %}"
+           class="kundli" aria-label="North-Indian chart {{ key }}">
+        <g fill="none" class="plate-rule" stroke-width="0.75">
+          <rect x="3" y="3" width="294" height="294"/>
+          <path d="M3 3 L297 297 M297 3 L3 297"/>
+        </g>
+        <path class="plate-diamond" fill="none" stroke-width="1"
+              d="M150 3 L297 150 L150 297 L3 150 Z"/>
+        <g class="signnum" text-anchor="middle">
+          {# A cell whose marks stack onto two or more rows gives up its sign
+             numeral: a numeral under a graha mark is unreadable, and the sign
+             is in the graha table either way. #}
+          {% for h in houses %}{% if not h.hide_signnum %}<text x="{{ h.num_pos[0] }}" y="{{ h.num_pos[1] }}"{% if h.crowded %} class="crowded"{% endif %}>{{ h.sign_num }}</text>{% endif %}{% endfor %}
+        </g>
+        {% if key == 'd1' %}
+        {# THE SARVĀṢṬAKAVARGA TOTAL PER HOUSE, in the sign numeral's slot —
+           and instead of it, never beside it. A North-Indian cell already
+           carries a numeral and a graha stack; measured, a third number
+           collided with one or the other in every arrangement tried, and
+           shrinking it to fit would put it under the legibility floor. So it
+           is the reader's choice, the same way the degrees are.
+
+           D1 only: the Aṣṭakavarga tables are defined against the birth
+           chart and mean nothing rotated into a division. #}
+        <g class="savnum" text-anchor="middle">
+          {% for h in houses %}{% if h.sav and not h.hide_signnum %}<text x="{{ h.num_pos[0] }}" y="{{ h.num_pos[1] }}"{% if h.crowded %} class="crowded"{% endif %}>{{ h.sav }}</text>{% endif %}{% endfor %}
+        </g>
+        {% endif %}
+        {{ grahalayer(houses, size=COMPACT_SIZE) }}
+        {% if key == 'd1' %}
+        {# The same marks, with the degree each one stands at. Same macro, so
+           the glyph, the ink weight, ℞ and ⊙ cannot differ between the two
+           layers — which they did while this group wrote its own text. #}
+        {{ grahalayer(houses, size=DEG_SIZE, degrees=true) }}
+        <g class="ticks" text-anchor="middle">
+          {% for t in data.transit_ticks %}
+          <text x="{{ t.x }}" y="{{ t.y }}">{{ t.label }}</text>
+          {% endfor %}
+        </g>
+        {% endif %}
+      </svg>
+      {# A plate in printed matter carries its own caption: what it is, when
+         it was cast, and under which ayanāṃśa. #}
+      <div class="platecaption">
+        <span class="plateno">Plate {{ {'d1':'I','d9':'II','d10':'III'}[key] }}</span>
+        {{ sub }}{% if key == 'd9' and data.vargottama %} · Vargottama: {{ data.vargottama | join(", ") }}{% endif %}
+        <span class="platecast">cast {{ data.today.strftime("%-d %B %Y") }} · Lahiri ayanāṃśa</span>
+      </div>
+    </div>
+    {% endfor %}
+  </details>
 </section>
 
 <section class="daycol">
@@ -1919,7 +1969,9 @@ const HOUSE_SHAPES = {{ house_poly | tojson }};
 const HOUSE_CENTER = {{ house_center | tojson }};
 const SVGNS = "http://www.w3.org/2000/svg";
 const ord = n => n + (n === 2 ? "nd" : n === 3 ? "rd" : "th");
-const d1svg = document.querySelector("#pane-d1 svg");
+// The landing's own D1 — the one under the reader's thumb — not the copy
+// inside the "See the chart" fold.
+const d1svg = document.querySelector("#plate-d1 svg");
 const hlGroup = document.createElementNS(SVGNS, "g");
 hlGroup.setAttribute("id", "hlgroup");
 if (d1svg) d1svg.appendChild(hlGroup);
@@ -2002,10 +2054,7 @@ function selectPlanet(name) {
 }
 
 document.querySelectorAll(".chip-planet").forEach(chip =>
-  chip.addEventListener("click", () => {
-    document.querySelector('.tab[data-tab="d1"]').click();
-    selectPlanet(chip.dataset.planet);
-  }));
+  chip.addEventListener("click", () => selectPlanet(chip.dataset.planet)));
 document.getElementById("xcard-close")?.addEventListener("click", () => {
   document.getElementById("xcard").hidden = true; clearHighlights();
 });

@@ -218,9 +218,10 @@ nothing loops, nothing moves that a reader did not scroll into.
    is a pseudo-element.
 2. **The plate pins** beside the day's verdict and the contents, and
    **releases at the last contents entry**. No JavaScript decides the release
-   point: the sticky column sits in a grid that ends there.
+   point: the sticky column sits in a grid that ends there. *Retired
+   2026-09-16 — see the revision below: two plates head the leaf now.*
 3. **A ghost numeral** — the folio, at 12% ink, with the title overlapping its
-   lower half — carries the plate's presence down-leaf after it releases.
+   lower half — carries the plate's presence down-leaf.
 4. **Each domain opens on a full-viewport verdict**, rising 22px into place
    (8px on a phone).
 5. **Rhythm:** airy verdict → dense two-column working that fades in as one
@@ -342,7 +343,8 @@ Kṛṣṇa Amāvāsyā*, the day named twice, once by the civil calendar and on
 the Moon. Under it three or four dated entries, then one italic verdict line.
 Right, the birth plate, pinned, with today's transits ticked around its
 **outer** edge — the plate is the birth moment and today is a marginal note
-on it, never drawn inside the frame.
+on it, never drawn inside the frame. *(Revised 2026-09-16: the plate is two
+plates now, heading the leaf; see the revision at the end.)*
 
 `today.py` composes the entries. The ledger already knew a transit was inside
 3° of a natal point and it already knew when a planet changes sign; it did
@@ -540,3 +542,35 @@ Under it, four labelled answers in a two-column grid — **Gives**, **Where**,
 gains), **Now** or **Next** — and behind the expander the mechanism, the
 classical meaning, the division-by-division dignities, every period of every
 forming graha, and the rule ids and fact ids the whole entry rests on.
+
+
+---
+
+## Revision 2026-09-16 — two plates on the Today screen
+
+The single tabbed plate is two plates: the **D1 left and the D9 right**
+from 1040px up, in one row capped at 1000px, each figure 486px at 1280 with
+the degree layer on by default; below that they **stack, D1 first**, under
+the day. 1040 and not lower because the degree layer is 10 user units and
+the type floor is 13px: two plates in a 940px row rendered it at 12.7px,
+which `TestTypeFloors` caught on the first full run. The D1 carries today's ticks and the degrees; the D9 stays at sign
+level on the figure, because its degree is a scaling convention
+(`rule.varga.degree_convention`) and drawing it would quote it as a figure.
+Both figures share one viewBox, so a D9 drawn tight to its frame does not
+read a fifth larger than a D1 with a tick margin.
+
+The full tabbed plate — the three tabs, the **D10**, the **Aṣṭakavarga
+overlay** — is one tap down, behind **See the chart**, closed by default.
+Nothing is deleted. The graha chips stay on the landing and highlight the
+landing's own D1.
+
+**The pinned column is retired at desktop.** Two plates a reader can read
+the degrees on do not fit beside a column of text at any desktop width, so
+the leaf is a flex column, 1000px at desktop: plates, then the day,
+measure-capped at 680px.
+The ghost numeral stays. The four gates that pinned the sticky column were
+re-pinned to this layout rather than dropped; `TestTheLandingShowsTwoPlates`
+measures the row, the stack, the default degrees and the fold in a browser
+at both widths. The fold's full plate draws at 640px, not the 900px
+breakout, because at 900 the one-unit diamond renders at 2.5px and the
+engraved ceiling is 1.8.

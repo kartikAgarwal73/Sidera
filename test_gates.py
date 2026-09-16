@@ -1554,7 +1554,7 @@ class TestPlateGeometry:
                 real = pg.evaluate(
                     """(args) => {
                       const [samples, size] = args;
-                      const svg = document.querySelector('#pane-d1 svg');
+                      const svg = document.querySelector('#plate-d1 svg');
                       const NS = 'http://www.w3.org/2000/svg';
                       const t = document.createElementNS(NS, 'text');
                       t.setAttribute('x', '-900');
@@ -8590,40 +8590,40 @@ class TestScrollChoreography:
 
     # --- 2. the plate pins and releases ------------------------------------
 
-    def test_the_plate_pins_beside_the_reading(self):
+    def test_the_two_plates_head_the_leaf(self):
+        """Re-pinned 2026-09-16. This pinned the sticky plate column — the
+        plate beside the reading, released at the end of the grid. Two
+        plates a reader can read the degrees on do not fit beside a column
+        of text at any desktop width, so the pin is retired: the D1 and D9
+        head the leaf in one row and the day runs beneath."""
         css = self._css()
-        assert '<div class="leaf">' in self._page_src()
-        block = css[css.index(".leaf > .plate {"):]
-        block = block[:block.index("}")]
-        assert "position: sticky" in block
-        assert "align-self: start" in block
-        assert "grid-row: 1 / -1" in block, (
-            "the pin must span the whole leaf, or it releases early")
-        # And EVERY other child is placed explicitly. Auto-placement is what
-        # dropped the headline and the identity strip into column 1, under
-        # the pinned plate — a collision nobody saw until the page scrolled.
-        assert ".leaf > *:not(.plate) { grid-column: 2;" in css
+        page = self._page_src()
+        assert '<div class="leaf">' in page
+        # The template source: one figure per plate, D1 then D9 in the loop.
+        assert '<figure class="duoplate" id="plate-{{ key }}">' in page
+        duo = page[page.index('<div class="duo">'):page.index('id="seechart"')]
+        assert duo.index('("d1", data.kundli_d1') < duo.index('("d9", data.kundli_d9')
+        block = css[css.index(".leaf { display: flex; flex-direction: column; }"):]
+        assert "position: sticky" not in block[:block.index("/* --- 3. the ghost numeral")]
+        assert ".leaf > *:not(.plate) { grid-column: 2;" not in css
+        duo = css[css.index("@media (min-width: 1040px) {\n  .duo {"):]
+        assert "grid-template-columns: 1fr 1fr" in duo[:duo.index("}")]
 
-    def test_the_pin_is_desktop_only_and_the_phone_gets_the_plate_first(self):
-        """At 390px the plate leads, unpinned — a pinned plate on a phone
-        would eat the screen the reading needs."""
+    def test_the_phone_gets_the_day_first_and_the_plates_stacked(self):
+        """At 390px the day leads and the two plates stack under it, D1
+        first — a plate-first phone screen showed a wheel and nothing else
+        (measured 2026-09-11)."""
         css = self._css()
-        pin = css.index(".leaf > .plate {")
-        media = css.rindex("@media (min-width: 1000px)", 0, pin)
-        assert media < pin
-        # …and nothing pins it outside that query.
-        outside = css[:media] + css[css.index("/* --- 3. the ghost numeral"):]
-        assert ".leaf > .plate" not in outside
+        order = css.index(".leaf > .daycol { order: -1; }")
+        media = css.rindex("@media (max-width: 999px)", 0, order)
+        assert media < order
+        base = css[css.index(".duo {"):]
+        assert "grid-template-columns: 1fr;" in base[:base.index("}")]
 
-    def test_the_release_point_is_the_last_contents_entry(self):
-        """No JS decides this: the sticky column ends where its grid ends,
-        and the grid ends after the contents. The proof is the DOM order."""
+    def test_the_plates_come_before_the_day_in_the_source(self):
+        """The DOM order is the desktop order: plates, then the day."""
         page = self._page_src()
         leaf = page[page.index('<div class="leaf">'):page.index("<!-- /leaf -->")]
-        # Re-pinned 2026-09-11: the leaf is the TODAY screen now — the plate
-        # beside the day — and the contents page moved to Readings. The pin
-        # still releases where the grid ends, which is the end of the day
-        # column rather than the end of the contents list.
         assert leaf.index('class="plate') < leaf.index('class="daycol"')
         assert 'class="todaylist"' in leaf
         assert leaf.rindex("dayverdict") < len(leaf)
@@ -8737,14 +8737,15 @@ class TestScrollChoreography:
         assert "opacity: 1 !important" in block
         assert "transform: none !important" in block
 
-    def test_reduced_motion_keeps_the_pin(self):
-        """'Un-pins nothing essential.' A sticky element is layout, not
-        motion; dropping it would take the plate away from the reading it
-        belongs beside, which is a content loss, not a motion reduction."""
+    def test_reduced_motion_changes_no_layout(self):
+        """'Un-pins nothing essential.' The reduced-motion block turns off
+        motion and touches no position: the plates, the day and every
+        fold stay exactly where the layout puts them."""
         css = self._css()
         block = css[css.index("@media (prefers-reduced-motion: reduce)"):]
         assert "position: static" not in block
         assert "position: relative !important" not in block
+        assert "position:" not in block[:block.index("\n}\n")]
 
     def test_the_observer_stands_down_under_reduced_motion(self):
         page = self._page_src()
@@ -8812,11 +8813,19 @@ class TestReducedMotionInARealBrowser:
                   const mark = document.querySelector('.mark');
                   const rule = mark ? getComputedStyle(mark, '::before') : null;
                   const plate = document.querySelector('.leaf > .plate');
+                  const d1 = document.getElementById('plate-d1');
+                  const d9 = document.getElementById('plate-d9');
                   return {
                     elements: vis,
                     ruleTransform: rule ? rule.transform : null,
                     platePosition: plate
                       ? getComputedStyle(plate).position : null,
+                    // Measured on a DOMAIN view (see above), where the
+                    // arrival leaf is hidden: the plates' own display is
+                    // what the preference could have touched, not rects.
+                    platesInFlow: !!(d1 && d9
+                                     && getComputedStyle(d1).display !== 'none'
+                                     && getComputedStyle(d9).display !== 'none'),
                     prefersReduced: matchMedia(
                       '(prefers-reduced-motion: reduce)').matches,
                   };
@@ -8850,11 +8859,13 @@ class TestReducedMotionInARealBrowser:
         assert quiet["ruleTransform"] in ("none", "matrix(1, 0, 0, 1, 0, 0)"), \
             quiet["ruleTransform"]
 
-    def test_the_pin_survives(self, quiet):
-        """Un-pins nothing essential. A sticky element is layout, not motion;
-        dropping it would take the plate away from the reading it belongs
-        beside, which is a content loss dressed up as an accessibility win."""
-        assert quiet["platePosition"] == "sticky"
+    def test_the_plates_survive(self, quiet):
+        """Un-pins nothing essential. Re-pinned 2026-09-16 when the sticky
+        column was retired for the two-plate row: under reduced motion both
+        plates are laid out in flow, and the section's position is the
+        layout's, not something the preference moved."""
+        assert quiet["platesInFlow"] is True
+        assert quiet["platePosition"] in ("static", "relative")
 
 
 # Leaf text nodes with their boxes, filtered to what is ACTUALLY on screen.
@@ -9041,7 +9052,10 @@ class TestNothingOverlaps:
         Every child is placed explicitly now.
         """
         css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
-        assert ".leaf > *:not(.plate) { grid-column: 2;" in css
+        # Re-pinned 2026-09-16: the leaf is a flex column now, so there is
+        # no auto-placement to get wrong — and still no rule naming a
+        # section by a class it does not carry.
+        assert ".leaf { display: flex; flex-direction: column; }" in css
         assert ".leaf > .glance" not in css, (
             "naming a section by a class it does not carry is what caused "
             "the collision in the first place")
@@ -10975,7 +10989,9 @@ class TestAshtakavarga:
         twelve either way.
         """
         import ashtakavarga
-        d1 = page[page.index('aria-label="North-Indian chart d1"'):]
+        # The full plate in the "See the chart" fold — the landing's own D1
+        # above it carries no overlay (2026-09-16).
+        d1 = page[page.index('id="pane-d1"'):]
         d1 = d1[:d1.index("</svg>")]
         block = d1[d1.index('<g class="savnum"'):]
         block = block[:block.index("</g>")]
@@ -13798,3 +13814,148 @@ class TestConditions:
             for f in service:
                 if f.slot == "occupants":
                     assert f.kind == "cited" and f.weight == 0
+
+
+class TestTheLandingShowsTwoPlates:
+    """The Today screen carries the birth chart and its navāṃśa together.
+
+    Pinned 2026-09-16 from the owner's brief: D1 left and D9 right at 1280,
+    stacked D1 first at 390, degrees on by default, and the full tabbed
+    plate — the D10 and the Aṣṭakavarga overlay — behind "See the chart".
+    Measured in a browser at both widths; the source checks are the
+    tripwires.
+    """
+
+    @classmethod
+    @pytest.fixture(scope="class")
+    def measured(cls):
+        pw = pytest.importorskip("playwright.sync_api",
+                                 reason="playwright not installed")
+        import threading
+        from werkzeug.serving import make_server
+        from app import app
+        srv = make_server("127.0.0.1", 0, app, threaded=True)
+        port = srv.socket.getsockname()[1]
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        script = r"""() => {
+          const box = e => { if (!e) return null; const r = e.getBoundingClientRect();
+            return {top: Math.round(r.top + scrollY), left: Math.round(r.left),
+                    w: Math.round(r.width), h: Math.round(r.height)}; };
+          const q = s => document.querySelector(s);
+          // A closed <details> lays its content out and hides it with
+          // content-visibility, so a client rect is not proof of visibility;
+          // checkVisibility() knows about skipped subtrees.
+          const vis = e => !!(e && (e.checkVisibility ? e.checkVisibility()
+                                                       : e.getClientRects().length));
+          const d1svg = q('#plate-d1 svg');
+          const scale = d1svg ? d1svg.getBoundingClientRect().width / 360 : 0;
+          return {
+            d1: box(q('#plate-d1')), d9: box(q('#plate-d9')),
+            daycol: box(q('.daycol')), plate: box(q('#plate')),
+            degDisplay: getComputedStyle(q('#plate-d1 .grahas-deg')).display,
+            compactDisplay: getComputedStyle(q('#plate-d1 .grahas-compact')).display,
+            d9HasDeg: !!q('#plate-d9 .grahas-deg'),
+            d9Compact: getComputedStyle(q('#plate-d9 .grahas-compact')).display,
+            degPx: +(10 * scale).toFixed(2),
+            seechartOpen: q('#seechart').open,
+            d10Visible: vis(q('#pane-d10')), savVisible: vis(q('#savToggle')),
+            switcherVisible: vis(q('.switcher')),
+            degToggleChecked: q('#degToggle').checked,
+            degToggleVisible: vis(q('#degToggle')),
+            chipsVisible: vis(q('#chips')),
+            ticks: q('#plate-d1 .ticks') ? q('#plate-d1 .ticks').children.length : 0,
+          };
+        }"""
+        out = {}
+        try:
+            with pw.sync_playwright() as p:
+                browser = TestMaskedBirthFieldsInARealBrowser._launch(p, pytest)
+                for width in (390, 1280):
+                    pg = browser.new_context(
+                        viewport={"width": width, "height": 1000}).new_page()
+                    pg.goto(f"http://127.0.0.1:{port}/")
+                    for k, v in GATE_FORM.items():
+                        pg.evaluate(
+                            "([k,v]) => { const e = document.querySelector("
+                            "`[name=\"${k}\"]`); if (e) e.value = v; }", [k, v])
+                    with pg.expect_navigation():
+                        pg.evaluate("document.querySelector('#cast').submit()")
+                    pg.wait_for_load_state("load")
+                    pg.wait_for_timeout(700)
+                    closed = pg.evaluate(script)
+                    pg.click("#seechart > summary")
+                    pg.wait_for_timeout(300)
+                    opened = pg.evaluate(script)
+                    out[width] = {"closed": closed, "open": opened}
+                browser.close()
+        finally:
+            srv.shutdown()
+        return out
+
+    def test_at_1280_the_plates_sit_side_by_side_d1_left(self, measured):
+        m = measured[1280]["closed"]
+        assert m["d1"] and m["d9"], m
+        assert m["d1"]["left"] < m["d9"]["left"]
+        assert abs(m["d1"]["top"] - m["d9"]["top"]) <= 2, (m["d1"], m["d9"])
+        assert abs(m["d1"]["w"] - m["d9"]["w"]) <= 2
+        assert 460 <= m["d1"]["w"] <= 520, m["d1"]
+        # …and they head the leaf: the day runs beneath.
+        assert m["plate"]["top"] < m["daycol"]["top"]
+
+    def test_at_390_the_plates_stack_d1_first_under_the_day(self, measured):
+        m = measured[390]["closed"]
+        assert m["d1"]["top"] < m["d9"]["top"]
+        assert m["d1"]["left"] == m["d9"]["left"]
+        assert abs(m["d1"]["w"] - m["d9"]["w"]) <= 2
+        assert m["d1"]["w"] >= 300, m["d1"]
+        assert m["daycol"]["top"] < m["d1"]["top"]     # the day is the reading
+
+    def test_degrees_are_on_by_default_where_they_are_legible(self, measured):
+        m = measured[1280]["closed"]
+        assert m["degToggleChecked"] is True
+        assert m["degDisplay"] == "block" and m["compactDisplay"] == "none"
+        assert m["degPx"] >= 12, m["degPx"]           # the legibility floor
+        # The D9 stays at sign level on the figure: its degree is a scaling
+        # convention and drawing it would quote it as a figure.
+        assert m["d9HasDeg"] is False and m["d9Compact"] != "none"
+        assert m["ticks"] > 0                          # today's sky, on the D1
+        # At 390 the plate draws its viewBox at under 1:1 and the degree
+        # layer would be under the floor — the existing rule keeps it off.
+        s = measured[390]["closed"]
+        assert s["degDisplay"] == "none" and s["compactDisplay"] != "none"
+        # …and the toggle for a layer that cannot show is not offered there.
+        # It was, until 2026-09-16: the hiding rule sat before the base rule.
+        assert s["degToggleVisible"] is False
+        assert m["degToggleVisible"] is True
+
+    def test_the_full_plate_is_behind_see_the_chart(self, measured):
+        for width in (390, 1280):
+            closed, opened = measured[width]["closed"], measured[width]["open"]
+            assert closed["seechartOpen"] is False, width
+            assert closed["d10Visible"] is False and closed["savVisible"] is False
+            assert closed["switcherVisible"] is False
+            assert closed["chipsVisible"] is True      # the explorer stays out
+            assert opened["seechartOpen"] is True
+            assert opened["savVisible"] is True and opened["switcherVisible"] is True
+
+    def test_the_source_says_the_same(self, page):
+        arrival = page[page.index('id="view-arrival"'):
+                       page.index("<!-- /view-arrival -->")]
+        assert arrival.index('id="plate-d1"') < arrival.index('id="plate-d9"')
+        fold = arrival[arrival.index('id="seechart"'):arrival.index("</details>",
+                                                                    arrival.index('id="seechart"'))]
+        assert '<details class="fold seechart" id="seechart">' in arrival
+        assert '<details class="fold seechart" id="seechart" open' not in arrival
+        for inside in ('id="pane-d10"', 'id="savToggle"', 'class="switcher"'):
+            assert inside in fold, inside
+        assert 'id="degToggle"' in arrival and 'id="degToggle"' not in fold
+        assert 'id="chips"' not in fold
+        assert 'class="plate showdeg"' in arrival
+        assert 'id="degToggle" checked' in arrival
+        # No degree layer on the landing's D9.
+        d9 = arrival[arrival.index('id="plate-d9"'):arrival.index('</figure>', arrival.index('id="plate-d9"'))]
+        assert "grahas-deg" not in d9 and "grahas-compact" in d9
+
+    def test_the_explorer_highlights_the_landing_d1(self, page):
+        js = page[page.index("const d1svg ="):]
+        assert 'document.querySelector("#plate-d1 svg")' in js[:120]

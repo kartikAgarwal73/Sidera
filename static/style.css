@@ -512,6 +512,8 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 .plate .grahas-deg { display: none; }
 .plate.showdeg #pane-d1 .grahas-deg { display: block; }
 .plate.showdeg #pane-d1 .grahas-compact { display: none; }
+.plate.showdeg #plate-d1 .grahas-deg { display: block; }
+.plate.showdeg #plate-d1 .grahas-compact { display: none; }
 /* DEGREES AT THE LARGER SIZES ONLY. On a 390px screen the plate draws its
    360-unit viewBox at about .95, so a 9-unit degree label rendered at 7.6
    effective pixels — under the floor and genuinely unreadable. The glyph
@@ -522,7 +524,8 @@ details.yoga > summary::-webkit-details-marker { display: none; }
 @media (max-width: 560px) {
   .plate.showdeg #pane-d1 .grahas-deg { display: none; }
   .plate.showdeg #pane-d1 .grahas-compact { display: block; }
-  .degtoggle { display: none; }
+  .plate.showdeg #plate-d1 .grahas-deg { display: none; }
+  .plate.showdeg #plate-d1 .grahas-compact { display: block; }
 }
 .degtoggle {
   display: flex; justify-content: flex-end; align-items: center; gap: 7px;
@@ -530,6 +533,11 @@ details.yoga > summary::-webkit-details-marker { display: none; }
   text-transform: uppercase; color: var(--ink-50); cursor: pointer;
   user-select: none;
 }
+/* AFTER the base rule, at the same specificity — it sat inside the media
+   block above the base rule until 2026-09-16, so the base rule's
+   display:flex won and the toggle showed on a phone where the degrees it
+   controls are off by the legibility rule. */
+@media (max-width: 560px) { .degtoggle:not(.savtoggle) { display: none; } }
 .degtoggle input { accent-color: var(--accent-ink); width: 12px; height: 12px; }
 /* The plate caption, set as printed matter sets one: the plate number in
    small caps, the subject, then the imprint line beneath. */
@@ -1050,6 +1058,7 @@ details.yogarow > summary {
    number; showing both renders neither. The number returns as soon as the
    degree layer is toggled off. */
 .plate.showdeg #pane-d1 .signnum text.crowded { display: none; }
+.plate.showdeg #plate-d1 .signnum text.crowded { display: none; }
 /* …and the stack itself steps down a size, because three lines at 9px are
    wider than the narrow triangles (houses 3, 5, 9, 11) are at that height. */
 /* NO LONGER SMALLER. A crowded cell used to drop to 8 units, which was
@@ -1310,39 +1319,52 @@ button.cast.recast { margin-top: 4px; }
    Two columns at desktop; the plate is sticky inside a grid that ENDS at
    the last contents entry, which is what releases it. No JS: the release
    point is the end of the grid. */
-/* On a phone there is no second column to pin into, so the two halves
-   stack — and the DAY goes first. Measured 2026-09-11: with the plate
-   first, the day's dated lines began around y=1000 on a 390px screen, so
-   arrival showed a wheel and nothing else. The plate is the illustration;
-   the day is the reading. */
+/* THE LEAF, REVISED 2026-09-16. Two plates head it — the birth chart and
+   its navāṃśa, side by side from 1040px up in a row capped at 1000px — and
+   the day's reading runs beneath, measure-capped. The pinned plate column
+   and its two-column grid are retired: two plates a reader can read the
+   degrees on do not fit beside a column of text at any desktop width, and
+   the row is what the brief asked for. On a phone the DAY goes first
+   (measured 2026-09-11: with the plate first, the day's dated lines began
+   around y=1000 on a 390px screen) and the plates stack under it, D1 then
+   D9. */
 .leaf { display: flex; flex-direction: column; }
-.leaf > .daycol { order: -1; }
+@media (max-width: 999px) {
+  .leaf > .daycol { order: -1; }
+}
 @media (min-width: 1000px) {
   .leaf {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-auto-rows: min-content;
-    column-gap: 56px;
-    width: min(1120px, 94vw);
+    width: min(1000px, 94vw);
     position: relative; left: 50%; transform: translateX(-50%);
   }
-  /* EVERY child is placed explicitly. Nothing is left to auto-placement:
-     the leaf's second section is `class="chartof" id="glance"` while a
-     DIFFERENT section is `class="glance"`, so a rule naming `.glance` placed
-     the wrong one and auto-placement dropped the headline and the identity
-     strip into column 1 — underneath the pinned plate. The symptom was text
-     printing over text, and only once the page was scrolled.
-     `*:not(.plate) → column 2` cannot make that mistake again, and it holds
-     for any section added later. */
-  .leaf > .plate {
-    grid-column: 1; grid-row: 1 / -1;
-    position: sticky; top: 20px; align-self: start;
-  }
-  .leaf > *:not(.plate) { grid-column: 2; padding-top: 0; }
-  /* Inside the pinned column the plate no longer breaks out of the reading
-     column — it IS a column. */
-  .leaf .kundli { width: 100%; left: auto; transform: none; }
+  .leaf > .daycol { max-width: 680px; }
 }
+/* The two plates. One column below 1040px, two above; the figures are the
+   column's width, never the breakout width the full plate in the fold
+   keeps. 1040, not 700: the degree layer is 10 user units, and two plates
+   in a 940px row render it at 12.7px — under the 13px floor. From 1040 the
+   leaf is at least 977px, each plate at least 474px, the label 13.2px. */
+.platehead {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 8px 16px; flex-wrap: wrap;
+}
+.platehead .degtoggle { margin-top: 0; order: 2; }
+.platelearn { order: 1; }
+.duo { display: grid; grid-template-columns: 1fr; gap: 26px; margin-top: 14px; }
+@media (min-width: 1040px) {
+  .duo { grid-template-columns: 1fr 1fr; gap: 28px; }
+}
+.duoplate { margin: 0; min-width: 0; }
+.duo .kundli { width: 100%; left: auto; transform: none; }
+.duo .platecaption { margin-top: 10px; }
+/* "See the chart": the full tabbed plate, one tap down. */
+.seechart { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--hairline); }
+.seechart > summary.readlink { display: inline-block; margin-top: 0; }
+.seechart .switcher { margin-top: 14px; }
+/* The full plate in the fold: 640px, not the 900px breakout — at 900 the
+   one-unit diamond renders at 2.5px, past the engraved ceiling of 1.8; at
+   640 it is 1.78, where the pinned 532px column had it at 1.48. */
+.seechart .kundli { width: min(88vw, 640px); }
 
 /* --- 3. the ghost numeral: the plate's presence, continued -------------- */
 .domainread { position: relative; }
