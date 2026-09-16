@@ -57,7 +57,8 @@ from ashtakavarga import ashtakavarga
 from ashtakavarga import strongest as av_strongest
 from ashtakavarga import thinnest as av_thinnest
 from ashtakavarga import verdict as ashtakavarga_verdict
-from yogas import (detect_all, dignity, dignity_at, dignity_grade,
+from yogas import (COMBUSTION_ORB, COMBUSTION_ORB_RETRO, combust,
+                   detect_all, dignity, dignity_at, dignity_grade,
                    house_lords, houses_owned_by, sign_lord)
 
 
@@ -91,6 +92,30 @@ def school_note(*option_ids: str) -> str:
     """
     note = schools.note_for(*option_ids)
     return f" (Computed under: {note}.)" if note else ""
+
+
+def _combustion(chart: Chart, name: str) -> dict:
+    """Whether a graha is burnt, with the orb it was judged by and its
+    distance from the Sun — so a fact can say "combust, 3.63° from the Sun
+    inside Mercury's 14°" rather than a bare flag. The orb table and the
+    retrograde tightening are `yogas`'s; rule.graha.combust states them.
+    The Sun and the nodes carry `combust: False` and no orb."""
+    if name not in COMBUSTION_ORB:
+        return {"combust": False, "combust_orb": None, "sun_distance": None}
+    pos = chart.planets[name]
+    orb = COMBUSTION_ORB[name]
+    if pos.retrograde and name in COMBUSTION_ORB_RETRO:
+        orb = COMBUSTION_ORB_RETRO[name]
+    gap = angular_distance(pos.longitude, chart.planets["Sun"].longitude)
+    return {"combust": combust(chart, name), "combust_orb": orb,
+            "sun_distance": round(gap, 2)}
+
+
+def _combust_clause(c: dict) -> str:
+    if not c["combust"]:
+        return ""
+    return (f" It is combust (asta), {c['sun_distance']}° from the Sun "
+            f"inside its {c['combust_orb']:g}° orb.")
 
 
 def _and_list(items: list[str]) -> str:
@@ -300,6 +325,7 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
         grade = dignity_grade(chart, name)
         nak = naks[name]
         retro = " (retrograde)" if p.retrograde else ""
+        burnt = _combustion(chart, name)
         facts.append(Fact(
             id=f"planet.{name.lower()}",
             kind="planet",
@@ -308,12 +334,13 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
                 f"{ordinal(p.house)} house, in the nakshatra {nak.name} "
                 f"pada {nak.pada} (lord {nak.lord})"
                 + (f" — dignity: {grade}." if grade else ".")
+                + _combust_clause(burnt)
                 + (school_note("node_position") if name in NODES else "")),
             value={"planet": name, "sign": p.sign, "house": p.house,
                    "degree": round(p.degree_in_sign, 4),
                    "retrograde": p.retrograde, "nakshatra": nak.name,
                    "pada": nak.pada, "nakshatra_lord": nak.lord,
-                   "dignity": grade or None},
+                   "dignity": grade or None, **burnt},
         ))
 
     # --- houses ------------------------------------------------------------
@@ -375,6 +402,7 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
         onto = [a.aspecting for a in natal_aspect_table(chart)
                 if a.aspected == name]
         owns = houses_owned_by(chart, name)
+        burnt = _combustion(chart, name)
         facts.append(Fact(
             id=f"karaka.{name.lower()}",
             kind="karaka",
@@ -384,6 +412,7 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
                 f"{ordinal(p.house)} house"
                 + (f", dignity {grade}" if grade else "")
                 + (", retrograde" if p.retrograde else "")
+                + (", combust" if burnt["combust"] else "")
                 + (", ruling the " + _and_list([ordinal(h) for h in owns])
                    + " house" + ("s" if len(owns) > 1 else "")
                    if owns else ", ruling no sign")
@@ -394,7 +423,7 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
                    "sign": p.sign, "house": p.house,
                    "dignity": grade or None, "retrograde": p.retrograde,
                    "rules": list(owns), "aspected_by": onto,
-                   "benefic": name in NATURAL_BENEFICS},
+                   "benefic": name in NATURAL_BENEFICS, **burnt},
         ))
 
     # --- natal aspects -----------------------------------------------------
@@ -792,7 +821,10 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
                 + f" {dosha.detail}"),
             value={"name": dosha.name, "formed": dosha.formed,
                    "active": dosha.active, "detail": dosha.detail,
-                   "cancellations": list(dosha.cancellations)},
+                   "cancellations": list(dosha.cancellations),
+                   # The library rules this dosha is read by. Mangal has
+                   # two since C1; Kaal Sarpa and Sade Sati none yet.
+                   "rule_ids": list(dosha.rule_ids)},
         ))
 
     # --- arudhas and the Upapada -------------------------------------------
@@ -836,6 +868,14 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
                    "parashari": SIGNS[both_arudhas["single"][house - 1]],
                    "jaimini": SIGNS[both_arudhas["stronger"][house - 1]]},
         ))
+    # The Upapada's OWN split, as `arudha.a12` carries it. `schools_agree`
+    # below is a statement about the whole chart — on the reference fixture
+    # it is False while A12 itself agrees — and the interim marriage reading
+    # had to reach into `arudha.a12` to learn whether the Upapada moves. A
+    # predicate reads one fact; this fact now answers for itself.
+    ul_split = (both_arudhas["single"][11] != both_arudhas["stronger"][11])
+    ul_pair = {"parashari": SIGNS[both_arudhas["single"][11]],
+               "jaimini": SIGNS[both_arudhas["stronger"][11]]}
     facts.append(Fact(
         id="arudha.upapada",
         kind="arudha",
@@ -847,6 +887,10 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
             + (f", with {_and_list(arudha_view['upapada_occupants'])} on it."
                if arudha_view["upapada_occupants"] else ", with no graha on it.")
             + " It is read for marriage and for the spouse."
+            + (f" The two co-lord readings disagree here: "
+               f"{ul_pair['parashari']} under the sole classical lord, "
+               f"{ul_pair['jaimini']} under the stronger co-lord."
+               if ul_split else "")
             + ("" if arudha_view["schools_agree"] else
                " The two co-lord readings do not agree across this chart.")
             + school_note("dual_lord")),
@@ -856,12 +900,61 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
                "lord": arudha_view["upapada_lord"],
                "occupants": arudha_view["upapada_occupants"],
                "contested": arudha_view["upapada_contested"],
-               "schools_agree": arudha_view["schools_agree"]},
+               "schools_agree": arudha_view["schools_agree"],
+               "schools_differ": ul_split, **ul_pair},
+    ))
+    # The 2nd from the Upapada — read for the durability of the marriage
+    # (rule.arudha.second_from_upapada). The rule was in the library with no
+    # fact to fire on; this is the fact. Counted from the Upapada's sign, not
+    # from the lagna, which is the whole point of bhavat bhavam.
+    ul_index = arudha_view["upapada_sign_index"]
+    second_index = (ul_index + 1) % 12
+    second_lord = sign_lord(second_index)
+    second_lord_pos = chart.planets[second_lord]
+    second_occupants = [p for p in PLANETS
+                        if chart.planets[p].sign_index == second_index]
+    second_lord_grade = (dignity_grade(chart, second_lord)
+                         or dignity(chart, second_lord))
+    facts.append(Fact(
+        id="arudha.upapada_2nd",
+        kind="arudha",
+        statement=(
+            f"The 2nd from the Upapada is {SIGNS[second_index]}, the "
+            f"{ordinal((second_index - chart.lagna.sign_index) % 12 + 1)} "
+            f"house from the lagna"
+            + (f", with {_and_list(second_occupants)} in it" if second_occupants
+               else ", with no graha in it")
+            + f"; its lord {second_lord} sits in {second_lord_pos.sign} in "
+            f"the {ordinal(second_lord_pos.house)} house"
+            + (f" — dignity: {second_lord_grade}." if second_lord_grade
+               and second_lord_grade != "neutral" else ".")
+            + " It is read for the durability of the marriage."
+            + school_note("dual_lord")),
+        value={"sign": SIGNS[second_index], "sign_index": second_index,
+               "house_from_lagna":
+                   (second_index - chart.lagna.sign_index) % 12 + 1,
+               "occupants": second_occupants,
+               "lord": second_lord, "lord_sign": second_lord_pos.sign,
+               "lord_house": second_lord_pos.house,
+               "lord_dignity": second_lord_grade or None,
+               "upapada_sign": arudha_view["upapada_sign"],
+               "rule_ids": ["rule.arudha.second_from_upapada"]},
     ))
 
     # --- chara karakas ------------------------------------------------------
+    # Each office carries the graha's CONDITION as well as its seat — dignity,
+    # what aspects it, combustion, retrogression — because rule.karaka.
+    # darakaraka reads "its sign, its house, its dignity and what aspects
+    # it", and a predicate that had to join two facts to evaluate one rule
+    # would cite two and read as though it had read one.
+    aspect_table = natal_aspect_table(chart)
     for karaka in karakas.karakas(chart):
         position = chart.planets[karaka.planet]
+        grade = (dignity_grade(chart, karaka.planet)
+                 or dignity(chart, karaka.planet))
+        onto = [a.aspecting for a in aspect_table
+                if a.aspected == karaka.planet]
+        burnt = _combustion(chart, karaka.planet)
         facts.append(Fact(
             id=f"karaka.chara.{karaka.office.lower()}",
             kind="karaka",
@@ -870,6 +963,11 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
                 f"signifying {karaka.signifies}. It sits in "
                 f"{position.sign} at {position.degree_in_sign:.2f}°, in the "
                 f"{ordinal(position.house)} house"
+                + (f", dignity {grade}" if grade and grade != "neutral" else "")
+                + (", retrograde" if position.retrograde else "")
+                + (", combust" if burnt["combust"] else "")
+                + (", aspected by " + _and_list(onto) if onto
+                   else ", unaspected")
                 + (" — ranked by its degree counted BACKWARDS, since Rahu "
                    "travels that way." if karaka.reversed_for_rahu else ".")
                 + school_note("karaka_count")),
@@ -878,8 +976,55 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
                    "house": position.house,
                    "degree_in_sign": round(karaka.degree_in_sign, 4),
                    "ranked_by": round(karaka.ranked_by, 4),
-                   "signifies": karaka.signifies},
+                   "signifies": karaka.signifies,
+                   "dignity": grade or None, "aspected_by": onto,
+                   "retrograde": position.retrograde, **burnt},
         ))
+    # Both schemes side by side. The seven-karaka count and the eight can
+    # give different grahas for the same office — the spouse's most of all,
+    # since Rahu's admission moves every office below it — and a reading
+    # that names the Darakaraka must be able to say whether the other school
+    # names the same one. One fact, both answers, which is in force.
+    schemes = karakas.both_schemes(chart)
+    differ_on = sorted(office for office in schemes["seven"]
+                       if schemes["seven"][office] != schemes["eight"].get(office))
+    dk_pair = {"seven": schemes["seven"]["Darakaraka"],
+               "eight": schemes["eight"]["Darakaraka"]}
+    facts.append(Fact(
+        id="karaka.chara.schemes",
+        kind="karaka",
+        statement=(
+            f"Under the seven-karaka scheme the Darakaraka is "
+            f"{dk_pair['seven']}; under the eight-karaka scheme it is "
+            f"{dk_pair['eight']}"
+            + (" — the two schemes agree on the spouse's significator."
+               if dk_pair["seven"] == dk_pair["eight"] else
+               " — the two schemes DISAGREE on the spouse's significator.")
+            + (" Offices that move between the schemes: "
+               + _and_list(differ_on) + "." if differ_on
+               else " No office moves between the schemes on this chart.")
+            + school_note("karaka_count")),
+        value={"seven": schemes["seven"], "eight": schemes["eight"],
+               "differ_on": differ_on, "darakaraka": dk_pair,
+               "in_force": karakas.scheme(),
+               "schemes_differ_on_spouse":
+                   dk_pair["seven"] != dk_pair["eight"]},
+    ))
+    # The spouse's natural significator. Venus for the wife in a man's
+    # chart, Jupiter for the husband in a woman's (rule.karaka.by_sex); the
+    # chart does not yet carry its owner's sex, so this reads under the
+    # stated convention (rule.karaka.by_sex_unset) — both, Venus first — and
+    # says so. Component 8 makes it switch.
+    facts.append(Fact(
+        id="karaka.spouse",
+        kind="karaka",
+        statement=(
+            "The spouse's natural significator is read as both Venus and "
+            "Jupiter, Venus first: the chart's owner has not said, and "
+            "Sidera's convention is to read both."),
+        value={"primary": "Venus", "secondary": "Jupiter", "basis": "unset",
+               "rule_ids": ["rule.karaka.by_sex_unset"]},
+    ))
     karakamsa = karakas.karakamsa(chart)
     facts.append(Fact(
         id="karaka.karakamsa",
@@ -1003,6 +1148,20 @@ def domain_brief(chart: Chart, question: str) -> dict | None:
         return None
     lords = house_lords(chart)
     varga = domain.varga.lower()
+    # The spouse's own facts, marriage only — the Dārakāraka, the two
+    # karaka schemes, the spouse karaka, the Upapada and its 2nd, and Mangal
+    # dosha — filed under the step each belongs to, so a reading that
+    # cites them is credited with the step and one that skips them is seen
+    # to. `vimsopaka.<lord>` for every domain-house lord that has a score
+    # (the nodes take none), and the main-house lord's own varga placement.
+    spouse_natal = (["arudha.upapada", "arudha.upapada_2nd",
+                     "dosha.mangal-dosha"]
+                    if domain.id == "marriage" else [])
+    spouse_karaka = (["karaka.chara.darakaraka", "karaka.chara.schemes",
+                      "karaka.spouse"]
+                     if domain.id == "marriage" else [])
+    scored_lords = sorted({lords[h] for h in domain.houses}
+                          - {"Rahu", "Ketu"})
     return {
         **domain.as_dict(),
         "checklist": [{"step": name, "do": what}
@@ -1011,10 +1170,16 @@ def domain_brief(chart: Chart, question: str) -> dict | None:
             "NATAL": ([f"house.{h}" for h in domain.houses]
                       + [f"natal.{h}L" for h in domain.houses]
                       + sorted({f"planet.{lords[h].lower()}"
-                                for h in domain.houses})),
-            "KARAKA": [f"karaka.{k.lower()}" for k in domain.karakas],
-            "VARGA": ([f"{varga}.lagna" if False else f"varga.{varga}.lagna"]
-                      + [f"{varga}.{ordinal(h)}" for h in domain.houses]),
+                                for h in domain.houses})
+                      + spouse_natal),
+            "KARAKA": ([f"karaka.{k.lower()}" for k in domain.karakas]
+                       + [f"avastha.{k.lower()}" for k in domain.karakas
+                          if k not in ("Rahu", "Ketu")]
+                       + spouse_karaka),
+            "VARGA": ([f"varga.{varga}.lagna"]
+                      + [f"{varga}.{ordinal(h)}" for h in domain.houses]
+                      + [f"varga.{varga}.{lords[domain.main_house].lower()}"]
+                      + [f"vimsopaka.{lord.lower()}" for lord in scored_lords]),
             "DASHA": ["dasha.current"] + [f"dasha.md.{p.lower()}"
                                           for p in PLANETS],
             "TRANSIT": ([f"transit.{p.lower()}" for p in
@@ -1056,7 +1221,7 @@ def _varga_in_prompt(fact_id: str, wanted: frozenset[str]) -> bool:
 #: table of twelve undifferentiated rows that almost no question touches,
 #: and eleven of them would be weight without reach. A12 is different: the
 #: Upapada is read for marriage and carries an actual reading.
-_PROMPT_ARUDHAS = frozenset({"arudha.upapada"})
+_PROMPT_ARUDHAS = frozenset({"arudha.upapada", "arudha.upapada_2nd"})
 
 
 def _in_prompt(fact: Fact) -> bool:

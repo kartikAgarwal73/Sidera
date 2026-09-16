@@ -13155,3 +13155,230 @@ class TestResolverRuleAdditions:
             set(rulelib._KARAKA)
         assert set(rulelib._EMPLOYMENT) == {"rule.house.6_service",
                                             "rule.career.employment_period"}
+
+
+class TestLedgerGapsForTheResolver:
+    """Component 2 of the resolver: the facts its predicates will read.
+
+    Every rule the resolver fires reads ONE fact and returns its id. Five
+    rules in the library had no fact to read — combustion, the 2nd from
+    the Upapada, the Darakaraka's condition, the Upapada's own school
+    split, the karaka-count fork — and the marriage brief did not name
+    the spouse facts, so a reading that skipped them was not seen to.
+    Pinned 2026-09-16 on both fixtures.
+    """
+
+    @classmethod
+    @pytest.fixture(scope="class")
+    def ledgers(cls):
+        import fixtures
+        from chartfacts import build_facts
+        out = {}
+        for key in ("reference", "partner"):
+            chart = compute_chart(fixtures.birth(key))
+            out[key] = (chart, {f.id: f for f in build_facts(chart, AGENT_WHEN)})
+        return out
+
+    # --- combustion -----------------------------------------------------------
+
+    def test_every_graha_fact_carries_combustion_from_the_orb_table(self, ledgers):
+        from yogas import COMBUSTION_ORB, COMBUSTION_ORB_RETRO, combust
+        for key, (chart, facts) in ledgers.items():
+            for name in PLANETS:
+                for fid in (f"planet.{name.lower()}", f"karaka.{name.lower()}"):
+                    v = facts[fid].value
+                    assert v["combust"] == combust(chart, name), (key, fid)
+                    if name in COMBUSTION_ORB:
+                        pos = chart.planets[name]
+                        orb = COMBUSTION_ORB[name]
+                        if pos.retrograde and name in COMBUSTION_ORB_RETRO:
+                            orb = COMBUSTION_ORB_RETRO[name]
+                        assert v["combust_orb"] == orb, (key, fid)
+                        assert v["sun_distance"] is not None
+                        assert v["combust"] == (v["sun_distance"] <= orb), (key, fid)
+                    else:                      # the Sun and the nodes
+                        assert v["combust"] is False and v["combust_orb"] is None
+                # …and the statement says so, with the figure, when it is.
+                s = facts[f"planet.{name.lower()}"].statement
+                assert ("combust" in s) == facts[f"planet.{name.lower()}"].value["combust"], (key, name)
+                if "combust" in s:
+                    assert f"{facts[f'planet.{name.lower()}'].value['sun_distance']}°" in s
+
+    def test_the_fixtures_burn_the_grahas_they_burn(self, ledgers):
+        """Reference: Mercury only, 3.63° from the Sun. Partner: Mercury and
+        Saturn. Pinned so a wrong orb table shows here, not in a reading."""
+        burnt = {key: sorted(n for n in PLANETS
+                             if facts[f"planet.{n.lower()}"].value["combust"])
+                 for key, (chart, facts) in ledgers.items()}
+        assert burnt == {"reference": ["Mercury"],
+                         "partner": ["Mercury", "Saturn"]}, burnt
+        assert ledgers["reference"][1]["planet.mercury"].value["sun_distance"] == 3.63
+
+    # --- chara karakas ----------------------------------------------------------
+
+    def test_every_chara_karaka_carries_its_condition(self, ledgers):
+        """rule.karaka.darakaraka reads "its sign, its house, its dignity and
+        what aspects it" — one fact answers all four, and agrees with the
+        graha's own karaka fact."""
+        import karakas
+        for key, (chart, facts) in ledgers.items():
+            for k in karakas.karakas(chart):
+                f = facts[f"karaka.chara.{k.office.lower()}"]
+                own = facts[f"karaka.{k.planet.lower()}"].value
+                for field in ("dignity", "aspected_by", "combust", "retrograde"):
+                    assert f.value[field] == own[field], (key, k.office, field)
+                assert ("unaspected" in f.statement) == (not own["aspected_by"])
+                assert "Upapada" not in f.statement        # still not merged
+
+    def test_both_karaka_schemes_travel_in_one_fact(self, ledgers):
+        import karakas
+        for key, (chart, facts) in ledgers.items():
+            f = facts["karaka.chara.schemes"]
+            both = karakas.both_schemes(chart)
+            assert f.value["seven"] == both["seven"]
+            assert f.value["eight"] == both["eight"]
+            assert f.value["darakaraka"] == {"seven": both["seven"]["Darakaraka"],
+                                             "eight": both["eight"]["Darakaraka"]}
+            expect = sorted(o for o in both["seven"]
+                            if both["seven"][o] != both["eight"].get(o))
+            assert f.value["differ_on"] == expect, key
+            assert f.value["in_force"] in ("seven", "eight")
+            assert f.value["darakaraka"]["seven"] in f.statement
+            assert f.value["darakaraka"]["eight"] in f.statement
+            agree = both["seven"]["Darakaraka"] == both["eight"]["Darakaraka"]
+            assert f.value["schemes_differ_on_spouse"] is (not agree)
+            assert ("agree on the spouse" in f.statement) is agree
+            # Rahu's admission moves offices on both fixtures — the fork is
+            # real, whatever it does to the spouse's office.
+            assert f.value["differ_on"], key
+
+    def test_the_spouse_karaka_reads_under_the_stated_convention(self, ledgers):
+        for key, (chart, facts) in ledgers.items():
+            f = facts["karaka.spouse"]
+            assert f.value == {"primary": "Venus", "secondary": "Jupiter",
+                               "basis": "unset",
+                               "rule_ids": ["rule.karaka.by_sex_unset"]}
+            assert "has not said" in f.statement
+            assert "Venus first" in f.statement
+
+    # --- the Upapada ------------------------------------------------------------
+
+    def test_the_upapada_answers_for_its_own_split(self, ledgers):
+        """It used to be read off arudha.a12. Same three keys, same values,
+        and the prose names both signs whenever they differ."""
+        for key, (chart, facts) in ledgers.items():
+            ul, a12 = facts["arudha.upapada"].value, facts["arudha.a12"].value
+            for k in ("parashari", "jaimini", "schools_differ"):
+                assert ul[k] == a12[k], (key, k)
+            assert ul["sign"] == a12["sign"]
+            s = facts["arudha.upapada"].statement
+            assert ("disagree here" in s) is ul["schools_differ"], key
+            assert "schools_agree" in ul                 # the chart-wide flag stays
+            assert "Darakaraka" not in s
+
+    def test_the_second_from_the_upapada_is_counted_from_the_upapada(self, ledgers):
+        from yogas import dignity, dignity_grade, sign_lord
+        for key, (chart, facts) in ledgers.items():
+            ul = facts["arudha.upapada"].value
+            f = facts["arudha.upapada_2nd"]
+            second = (ul["sign_index"] + 1) % 12
+            assert f.kind == "arudha"
+            assert f.value["sign"] == SIGNS[second], key
+            assert f.value["upapada_sign"] == ul["sign"]
+            assert f.value["house_from_lagna"] == \
+                (second - chart.lagna.sign_index) % 12 + 1
+            assert f.value["occupants"] == [p for p in PLANETS
+                                            if chart.planets[p].sign_index == second]
+            lord = sign_lord(second)
+            assert f.value["lord"] == lord
+            assert f.value["lord_house"] == chart.planets[lord].house
+            assert f.value["lord_dignity"] == (dignity_grade(chart, lord)
+                                               or dignity(chart, lord))
+            assert f.value["rule_ids"] == ["rule.arudha.second_from_upapada"]
+            assert "durability of the marriage" in f.statement
+            assert f.value["sign"] in f.statement and lord in f.statement
+
+    def test_the_reference_second_from_upapada_is_aries_with_saturn(self, ledgers):
+        chart, facts = ledgers["reference"]
+        f = facts["arudha.upapada_2nd"].value
+        assert facts["arudha.upapada"].value["sign"] == "Pisces"
+        assert f["sign"] == "Aries" and f["occupants"] == ["Saturn"]
+        assert f["lord"] == "Mars" and f["lord_house"] == 12
+        assert "debilitated" in f["lord_dignity"]
+
+    def test_the_upapada_second_travels_to_the_agent(self):
+        import chartfacts
+        import fixtures
+        chart = compute_chart(fixtures.birth("reference"))
+        sent = {f["id"] for f in chartfacts.facts_payload(chart, AGENT_WHEN)["facts"]}
+        assert "arudha.upapada_2nd" in sent
+        assert "karaka.chara.schemes" in sent and "karaka.spouse" in sent
+
+    # --- doshas -----------------------------------------------------------------
+
+    def test_dosha_facts_carry_their_rule_ids(self, ledgers):
+        from rulelib import is_known
+        for key, (chart, facts) in ledgers.items():
+            m = facts["dosha.mangal-dosha"].value
+            assert m["rule_ids"][0] == "rule.dosha.mangal"
+            assert ("rule.dosha.mangal_cancelled" in m["rule_ids"]) is \
+                (m["formed"] and not m["active"])
+            for f in facts.values():
+                if f.kind == "dosha":
+                    assert "rule_ids" in f.value, f.id
+                    for rid in f.value["rule_ids"]:
+                        assert is_known(rid), (f.id, rid)
+
+    # --- the domain brief -------------------------------------------------------
+
+    def test_every_id_the_brief_names_exists_in_the_ledger(self, ledgers):
+        """A brief that named a fact the ledger lacks would credit a step
+        nobody can walk, or hide one nobody can skip."""
+        import chartfacts
+        from domains import DOMAINS
+        for key, (chart, facts) in ledgers.items():
+            for domain in DOMAINS.values():
+                brief = chartfacts.domain_brief(chart, domain.triggers[0])
+                assert brief and brief["id"] == domain.id, (key, domain.id)
+                for step, ids in brief["fact_ids"].items():
+                    for fid in ids:
+                        assert fid in facts, (key, domain.id, step, fid)
+                    assert len(ids) == len(set(ids)), (key, domain.id, step)
+
+    def test_the_marriage_brief_names_the_spouse_facts_under_their_steps(self, ledgers):
+        import chartfacts
+        from app import _step_for
+        chart, facts = ledgers["reference"]
+        brief = chartfacts.domain_brief(chart, "will I marry")
+        ids = brief["fact_ids"]
+        for fid in ("arudha.upapada", "arudha.upapada_2nd", "dosha.mangal-dosha"):
+            assert fid in ids["NATAL"], fid
+            assert _step_for((fid,)) == "NATAL"
+        for fid in ("karaka.chara.darakaraka", "karaka.chara.schemes",
+                    "karaka.spouse", "avastha.venus", "avastha.jupiter"):
+            assert fid in ids["KARAKA"], fid
+            assert _step_for((fid,)) == "KARAKA"
+        assert "varga.d9.saturn" in ids["VARGA"]         # the 7th lord's own D9 seat
+        assert "vimsopaka.saturn" in ids["VARGA"]
+        # …and the other four domains name none of the spouse facts.
+        for domain_id, word in (("career", "job"), ("vitality", "health"),
+                                ("home", "property"), ("learning", "exam")):
+            other = chartfacts.domain_brief(chart, word)
+            assert other["id"] == domain_id
+            named = {fid for ids in other["fact_ids"].values() for fid in ids}
+            assert not any(f.startswith(("arudha.", "karaka.chara.", "dosha."))
+                           or f == "karaka.spouse" for f in named), domain_id
+
+    def test_the_career_brief_scores_its_lords_and_seats_its_tenth_lord(self, ledgers):
+        import chartfacts
+        from yogas import house_lords
+        for key, (chart, facts) in ledgers.items():
+            brief = chartfacts.domain_brief(chart, "when will I find a job")
+            assert brief["id"] == "career"
+            lords = house_lords(chart)
+            for h in (10, 11, 6, 2, 1):
+                lord = lords[h]
+                if lord not in ("Rahu", "Ketu"):
+                    assert f"vimsopaka.{lord.lower()}" in brief["fact_ids"]["VARGA"], (key, h)
+            assert f"varga.d10.{lords[10].lower()}" in brief["fact_ids"]["VARGA"]
+            assert "avastha.saturn" in brief["fact_ids"]["KARAKA"]

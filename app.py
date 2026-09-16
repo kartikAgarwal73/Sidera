@@ -1532,7 +1532,7 @@ DOMAIN_ORDER = ("marriage", "career", "home", "vitality", "learning")
 # composed in.
 _STEP_OF_ID = (
     ("NATAL", ("natal.", "house.")),
-    ("KARAKA", ("karaka.",)),
+    ("KARAKA", ("karaka.", "avastha.")),
     ("VARGA", ("d9.", "d10.", "varga.", "vimsopaka.")),
     ("DASHA", ("dasha.",)),
     ("TRANSIT", ("transit.", "contact.")),

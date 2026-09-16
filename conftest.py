@@ -120,6 +120,13 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
                      "ONE table, app-wide — no second twelve-house table in "
                      "any module, and every surface's words are that "
                      "table's"),
+    "TestLedgerGapsForTheResolver": (
+        "invariant", "the ledger must carry every fact the resolver's "
+                     "predicates read — combustion on every graha, the "
+                     "chara karakas' condition, both karaka schemes, the "
+                     "spouse karaka, the Upapada's own split and its 2nd, "
+                     "rule ids on doshas — and the domain brief must name "
+                     "only facts that exist"),
     "TestResolverRuleAdditions": (
         "external", "the seven rules the resolver fires on that the library "
                     "lacked — Mangal dosha and its four cancellations, the "
