@@ -127,6 +127,19 @@ KARAKATVAS = {
 # below says so rather than silently flattening it.
 NATURAL_BENEFICS = ("Jupiter", "Venus", "Moon", "Mercury")
 
+# Natal drishti onto a HOUSE. The interim domain reading cited
+# rule.transit.aspect for it, which is a rule about transiting grahas; this
+# is the natal one. Approved 2026-09-16.
+_DRISHTI = dict([
+    _r("rule.drishti.on_house",
+       "A graha casts its drishti onto houses as well as onto grahas. A "
+       "natural benefic's drishti on a house is read as protection over "
+       "that house's matters; a natural malefic's as pressure on them.",
+       "Graha drishti and the śubha and pāpa influence on bhavas, Brihat "
+       "Parashara Hora Shastra; the benefic and malefic classes per "
+       "rule.graha.nature"),
+])
+
 _CONTACT = dict([
     _r("rule.transit.contact",
        "A transiting graha within about 3° of a natal graha or of the lagna "
@@ -678,7 +691,7 @@ _AVASTHA = dict([
 RULES: dict[str, Rule] = {
     **_DASHA, **_TRANSIT_GENERAL, **_TRANSIT_GRAHA, **_CONTACT, **_VARGA,
     **_GRAHA_STATE, **_YOGA, **_HOUSE, **_ARUDHA, **_KARAKA, **_VIMSOPAKA,
-    **_AVASTHA, **_DOSHA, **_EMPLOYMENT,
+    **_AVASTHA, **_DOSHA, **_EMPLOYMENT, **_DRISHTI,
 }
 
 # The general rule a contact displaces, and the rule that says so. Kept as

@@ -18,8 +18,9 @@ can verify that every placement the model asserted actually exists here.
 """
 from __future__ import annotations
 
+import functools
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from dashas import nakshatra_table, vimshottari
 from doshas import doshas_all, transit_weather
@@ -94,6 +95,10 @@ def school_note(*option_ids: str) -> str:
     return f" (Computed under: {note}.)" if note else ""
 
 
+def _year_of(iso: str) -> str:
+    return datetime.fromisoformat(iso).strftime("%b %Y")
+
+
 def _combustion(chart: Chart, name: str) -> dict:
     """Whether a graha is burnt, with the orb it was judged by and its
     distance from the Sun — so a fact can say "combust, 3.63° from the Sun
@@ -163,6 +168,12 @@ def transit_contacts_summary(chart: Chart, when: datetime,
             gap = angular_distance(tp.position.longitude, longitude)
             if gap > orb:
                 continue
+            # The contact's own end, bisected to the hour, so a reading
+            # can say "until Oct 2026" from the fact rather than from the
+            # sign exit, which for a fast mover is weeks later.
+            from today import contact_window as _contact_window
+            _, leaves = _contact_window(t, longitude, when, orb=orb)
+            until_iso = leaves.date().isoformat() if leaves else None
             if point == "Lagna":
                 owns, karaka = (), "the body, vitality and how you are met"
                 sign, house = chart.lagna.sign, 1
@@ -193,6 +204,7 @@ def transit_contacts_summary(chart: Chart, when: datetime,
                                    if t in ("Rahu", "Ketu")
                                    else "rule.transit.contact"),
                 "slow_mover": t in ("Saturn", "Jupiter", "Rahu", "Ketu"),
+                "until_iso": until_iso,
             })
     out.sort(key=lambda c: (c["orb"], c["id"]))
     return out
@@ -241,6 +253,48 @@ def _window(planet: str, when: datetime) -> dict:
         "entered_iso": entered.date().isoformat() if entered else None,
         "until_iso": leaves_at.date().isoformat() if leaves_at else None,
     }
+
+
+#: How far ahead the timing facts look. The dasha windows fact carries
+#: eight years; the transit spans about seven (2600 days) — the horizons
+#: the Ask panel has used since it was built.
+WINDOW_HORIZON_YEARS = 8.0
+SPAN_HORIZON_DAYS = 2600
+
+
+@functools.lru_cache(maxsize=256)
+def _raw_spans(planet: str, when_iso: str, horizon_days: int) -> tuple:
+    """(sign_index, start_iso, end_iso, running) per sign, from the
+    ephemeris alone. Cached: the sky is the same for every chart cast at
+    the same moment, and the scan is the expensive half of a ledger build."""
+    when = datetime.fromisoformat(when_iso)
+    out = []
+    start = sign_entry_before(planet, when) or when
+    t = start
+    while (t - when).days < horizon_days:
+        ing = next_sign_ingress(planet, t, max_days=horizon_days)
+        if ing is None:
+            break
+        out.append((ing.from_sign_index, max(t, when).date().isoformat(),
+                    ing.when.date().isoformat(), t <= when))
+        t = ing.when
+    return tuple(out)
+
+
+def transit_spans_ahead(chart: Chart, planet: str, when: datetime,
+                        horizon_days: int = SPAN_HORIZON_DAYS) -> list[dict]:
+    """The signs a slow mover passes through from now to the horizon, each
+    with the natal house that sign is and the natal houses its drishti
+    reaches from there. Every date is the ephemeris's own."""
+    lagna = chart.lagna.sign_index
+    return [{
+        "sign": SIGNS[sign_index], "sign_index": sign_index,
+        "natal_house": (sign_index - lagna) % 12 + 1,
+        "aspects": sorted((s - lagna) % 12 + 1
+                          for s in aspected_signs(planet, sign_index)),
+        "start": start, "end": end, "running": running,
+    } for sign_index, start, end, running
+        in _raw_spans(planet, when.isoformat(), horizon_days)]
 
 
 def _contact_statement(c: dict) -> str:
@@ -667,6 +721,32 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
                    "ad_start": ad.start.isoformat(),
                    "ad_end": ad.end.isoformat()},
         ))
+    # Every antardasha window inside the horizon, running or ahead — the
+    # dated windows a timing answer is made of. One fact; the resolver's
+    # window predicates read it and cite it.
+    horizon = when + timedelta(days=WINDOW_HORIZON_YEARS * 365.25)
+    windows = []
+    for md in timeline.mahadashas:
+        if md.end < when or md.start > horizon:
+            continue
+        for ad in md.antardashas:
+            if ad.end < when or ad.start > horizon:
+                continue
+            windows.append({"md": md.lord, "ad": ad.lord,
+                            "start": ad.start.isoformat(),
+                            "end": ad.end.isoformat(),
+                            "running": ad.contains(when)})
+    facts.append(Fact(
+        id="dasha.windows",
+        kind="dasha",
+        statement=(
+            f"Antardasha windows from today to {WINDOW_HORIZON_YEARS:g} years "
+            f"ahead: " + "; ".join(
+                f"{w['md']}–{w['ad']} {_year_of(w['start'])}–{_year_of(w['end'])}"
+                + (" (running)" if w["running"] else "") for w in windows)
+            + "."),
+        value={"horizon_years": WINDOW_HORIZON_YEARS, "windows": windows},
+    ))
     for md in timeline.mahadashas:
         facts.append(Fact(
             id=f"dasha.md.{md.lord.lower()}",
@@ -796,6 +876,27 @@ def build_facts(chart: Chart, when: datetime) -> list[Fact]:
                        "natal_house": tp.natal_house,
                        "aspects": houses},
             ))
+
+    # --- the spans ahead — timing the resolver may quote -------------------
+    # Jupiter and Saturn, sign by sign, to the horizon. The Ask panel has
+    # computed these since it was built and cited nothing; a window a
+    # reading quotes has to be a fact, or the validator cannot check it.
+    for name in ("Jupiter", "Saturn"):
+        spans = transit_spans_ahead(chart, name, when)
+        facts.append(Fact(
+            id=f"transit.{name.lower()}.ahead",
+            kind="transit",
+            statement=(
+                f"TRANSIT SPANS AHEAD (today onward): {name} "
+                + "; ".join(
+                    f"in {s['sign']} (your {ordinal(s['natal_house'])}) "
+                    f"{_year_of(s['start'])}–{_year_of(s['end'])}"
+                    for s in spans)
+                + f". Horizon {SPAN_HORIZON_DAYS} days."
+                + (school_note("node_reach") if name in NODES else "")),
+            value={"planet": name, "horizon_days": SPAN_HORIZON_DAYS,
+                   "spans": spans},
+        ))
 
     # --- transit-to-natal contacts ----------------------------------------
     # A separate fact per contact, so it has an id the answer can cite and
@@ -1180,12 +1281,13 @@ def domain_brief(chart: Chart, question: str) -> dict | None:
                       + [f"{varga}.{ordinal(h)}" for h in domain.houses]
                       + [f"varga.{varga}.{lords[domain.main_house].lower()}"]
                       + [f"vimsopaka.{lord.lower()}" for lord in scored_lords]),
-            "DASHA": ["dasha.current"] + [f"dasha.md.{p.lower()}"
-                                          for p in PLANETS],
+            "DASHA": (["dasha.current", "dasha.windows"]
+                      + [f"dasha.md.{p.lower()}" for p in PLANETS]),
             "TRANSIT": ([f"transit.{p.lower()}" for p in
                          ("Saturn", "Jupiter", "Rahu", "Ketu")]
                         + [f"transit.{p.lower()}.aspects" for p in
-                           ("Saturn", "Jupiter", "Rahu", "Ketu")]),
+                           ("Saturn", "Jupiter", "Rahu", "Ketu")]
+                        + ["transit.jupiter.ahead", "transit.saturn.ahead"]),
         },
     }
 

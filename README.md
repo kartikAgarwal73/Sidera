@@ -559,6 +559,8 @@ domainread.py     the domain reading, composed deterministically (no LLM)
 voice.py          the editorial doctrine: budgets, banned phrases, checkers
 ui-design/DOSSIER.md   the visual direction: type, pagination, rules
 rulelib.py        classical rules the agent interprets through, each sourced
+conditions.py     one predicate per rule the resolver fires, and the signed
+                  weight table; dated findings never enter the balance
 agent.py          grounded 'Ask about this chart' + its answer validator
 reading/          the daily reading: detect · select · compose · fragments
 today.py          the day's dated lines, both edges found by bisection

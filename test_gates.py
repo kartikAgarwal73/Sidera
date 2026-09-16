@@ -3572,15 +3572,24 @@ class TestGroundedAgent:
         assert any(v.kind == "asserted-certainty" for v in result.violations)
 
     def test_an_invented_date_is_withheld(self, chart):
+        """A month the ledger did not produce. It was "December 2028" until
+        component 3 of the resolver put every dasha window and every
+        Jupiter and Saturn span to the horizon INTO the ledger — after
+        which December 2028 is a date this chart genuinely produces
+        (Jupiter's span), and quoting it is no longer invention."""
         from agent import ask_chart
+        from chartfacts import build_facts
+        ledger = " ".join(f.statement for f in build_facts(chart, AGENT_WHEN))
+        assert "Dec 2028" in ledger          # the old fixture date is real now
+        assert "Mar 2150" not in ledger
         client = FakeClient([_reply(
-            "The opening comes around December 2028, once Jupiter has moved.",
+            "The opening comes around March 2150, once Jupiter has moved.",
             facts=["transit.jupiter"])])
         result = ask_chart(chart, AGENT_WHEN, "When does it ease?",
                            client=client, model="test-model")
         assert not result.ok
         bad = [v for v in result.violations if v.kind == "invented-date"]
-        assert bad and "December 2028" in bad[0].claim
+        assert bad and "March 2150" in bad[0].claim
 
     def test_interpretation_must_cite_a_rule_that_exists(self, chart):
         from agent import ask_chart
@@ -13382,3 +13391,410 @@ class TestLedgerGapsForTheResolver:
                     assert f"vimsopaka.{lord.lower()}" in brief["fact_ids"]["VARGA"], (key, h)
             assert f"varga.d10.{lords[10].lower()}" in brief["fact_ids"]["VARGA"]
             assert "avastha.saturn" in brief["fact_ids"]["KARAKA"]
+
+
+class TestTheSignedWeightTable:
+    """The table the owner signed on 2026-09-16, pinned row for row.
+
+    Seeded from the approved derivation — main house 3, supporting 2,
+    modifier 1, co-citation 0 — with two amendments: an empty varga house
+    is cited, never a strain; and dated rows are timing output only. A
+    change to any number here is a change to a signed document and needs
+    the owner's name on it again.
+    """
+
+    SIGNED = {
+        ("rule.house.<h>", "main_strong"): ("support", 3, "Moderate"),
+        ("rule.house.<h>", "main_weak"): ("strain", 3, "Moderate"),
+        ("rule.house.<h>", "supporting_strong"): ("support", 2, "Moderate"),
+        ("rule.house.<h>", "supporting_weak"): ("strain", 2, "Moderate"),
+        ("rule.drishti.on_house", "benefic_main"): ("support", 2, "Moderate"),
+        ("rule.drishti.on_house", "benefic_supporting"): ("support", 1, "Moderate"),
+        ("rule.drishti.on_house", "malefic_main"): ("strain", 2, "Moderate"),
+        ("rule.house.6_service", "lord_strong"): ("support", 2, "Moderate"),
+        ("rule.house.6_service", "lord_weak"): ("strain", 2, "Moderate"),
+        ("rule.house.6_service", "occupants"): ("cited", 0, "Moderate"),
+        ("rule.graha.karakatva", "primary_strong"): ("support", 3, "Moderate"),
+        ("rule.graha.karakatva", "primary_weak"): ("strain", 3, "Moderate"),
+        ("rule.graha.karakatva", "primary_hidden"): ("strain", 2, "Moderate"),
+        ("rule.graha.karakatva", "primary_sound"): ("support", 1, "Moderate"),
+        ("rule.graha.karakatva", "secondary_strong"): ("support", 1, "Moderate"),
+        ("rule.graha.karakatva", "secondary_weak"): ("strain", 1, "Moderate"),
+        ("rule.graha.karakatva", "secondary_hidden"): ("strain", 1, "Moderate"),
+        ("rule.graha.karakatva", "secondary_sound"): ("support", 1, "Moderate"),
+        ("rule.karaka.by_sex", "set"): ("cited", 0, "Moderate"),
+        ("rule.karaka.by_sex_unset", "unset"): ("cited", 0, "Interpretive"),
+        ("rule.graha.combust", "main_lord"): ("strain", 2, "Moderate"),
+        ("rule.graha.combust", "primary_karaka"): ("strain", 2, "Moderate"),
+        ("rule.avastha.baladi", "main_lord"): ("cited", 0, "Interpretive"),
+        ("rule.avastha.baladi", "primary_karaka"): ("cited", 0, "Interpretive"),
+        ("rule.avastha.jagradadi", "main_lord"): ("cited", 0, "Interpretive"),
+        ("rule.avastha.jagradadi", "primary_karaka"): ("cited", 0, "Interpretive"),
+        ("rule.karaka.darakaraka", "strong"): ("support", 2, "Moderate"),
+        ("rule.karaka.darakaraka", "weak"): ("strain", 2, "Moderate"),
+        ("rule.karaka.darakaraka", "hidden"): ("strain", 2, "Moderate"),
+        ("rule.karaka.darakaraka", "sound"): ("support", 1, "Moderate"),
+        ("rule.karaka.darakaraka", "strong_cited"): ("support", 1, "Moderate"),
+        ("rule.karaka.darakaraka", "weak_cited"): ("strain", 1, "Moderate"),
+        ("rule.karaka.darakaraka", "hidden_cited"): ("strain", 1, "Moderate"),
+        ("rule.arudha.upapada_occupants", "malefic"): ("strain", 2, "Moderate"),
+        ("rule.arudha.upapada_occupants", "benefic"): ("support", 2, "Moderate"),
+        ("rule.arudha.upapada_lord", "strong"): ("support", 2, "Moderate"),
+        ("rule.arudha.upapada_lord", "weak"): ("strain", 2, "Moderate"),
+        ("rule.arudha.upapada_lord", "neutral"): ("cited", 0, "Moderate"),
+        ("rule.arudha.second_from_upapada", "support"): ("support", 1, "Moderate"),
+        ("rule.arudha.second_from_upapada", "strain"): ("strain", 1, "Moderate"),
+        ("rule.arudha.second_from_upapada", "neutral"): ("cited", 0, "Moderate"),
+        ("rule.dosha.mangal", "active"): ("strain", 2, "Moderate"),
+        ("rule.dosha.mangal_cancelled", "cancelled"): ("cited", 0, "Moderate"),
+        ("rule.dosha.mangal", "not_formed"): ("cited", 0, "Moderate"),
+        ("rule.varga.confirms", "benefic"): ("support", 2, "Interpretive"),
+        ("rule.varga.confirms", "malefic"): ("strain", 2, "Interpretive"),
+        ("rule.varga.confirms", "empty"): ("cited", 0, "Interpretive"),
+        ("rule.varga.from_varga_lagna", "strong"): ("support", 1, "Interpretive"),
+        ("rule.varga.from_varga_lagna", "weak"): ("strain", 1, "Interpretive"),
+        ("rule.varga.from_varga_lagna", "neutral"): ("cited", 0, "Interpretive"),
+        ("rule.varga.vargottama", "main_lord"): ("support", 2, "High"),
+        ("rule.vimsopaka.bala", "strong"): ("support", 2, "Moderate"),
+        ("rule.vimsopaka.bala", "thin"): ("strain", 2, "Moderate"),
+        ("rule.vimsopaka.bala", "middling"): ("cited", 0, "Moderate"),
+        ("rule.dasha.lordship", "md"): ("period", 3, "High"),
+        ("rule.dasha.lordship", "ad"): ("period", 2, "High"),
+        ("rule.dasha.lordship", "window_running"): ("window", 2, "High"),
+        ("rule.dasha.lordship", "window_upcoming"): ("window", 1, "High"),
+        ("rule.career.employment_period", "window_running"): ("window", 2, "High"),
+        ("rule.career.employment_period", "window_upcoming"): ("window", 1, "High"),
+        ("rule.transit.<slow>", "on"): ("live", 2, "Moderate"),
+        ("rule.transit.<slow>", "aspecting"): ("live", 1, "Moderate"),
+        ("rule.transit.contact", "contact"): ("live", 3, "High"),
+        ("rule.transit.node_on_natal", "contact"): ("live", 3, "High"),
+        ("rule.transit.<slow>", "window"): ("window", 1, "Moderate"),
+    }
+
+    def test_the_table_is_the_signed_table_row_for_row(self):
+        import conditions
+        actual = {(r.rule, r.slot): (r.kind, r.weight, r.confidence)
+                  for r in conditions.WEIGHTS}
+        assert actual == self.SIGNED
+        assert len(conditions.WEIGHTS) == len(self.SIGNED)   # no duplicates
+        for r in conditions.WEIGHTS:
+            assert r.why.strip(), (r.rule, r.slot)
+
+    def test_every_row_is_well_formed_against_the_library(self):
+        import conditions
+        assert conditions.check_table() == []
+
+    def test_the_two_amendments(self):
+        import conditions
+        assert conditions.row("rule.varga.confirms", "empty").kind == "cited"
+        assert conditions.row("rule.varga.confirms", "empty").weight == 0
+        for r in conditions.WEIGHTS:
+            if r.kind in conditions.TIMING_KINDS:
+                assert r.kind not in conditions.BALANCE_KINDS
+        dated = {(r.rule, r.slot) for r in conditions.WEIGHTS
+                 if r.kind in conditions.TIMING_KINDS}
+        assert ("rule.transit.contact", "contact") in dated
+        assert ("rule.dasha.lordship", "md") in dated
+
+    def test_the_drishti_rule_is_in_the_library_as_approved(self):
+        from rulelib import RULES
+        r = RULES["rule.drishti.on_house"]
+        assert "onto houses as well as onto grahas" in r.text
+        assert "protection" in r.text and "pressure" in r.text
+        assert "Brihat Parashara Hora Shastra" in r.source
+        assert "rule.graha.nature" in r.source
+
+
+class TestConditions:
+    """A predicate fires one rule on the facts it names, takes every number
+    from the signed table, reports a missing fact rather than guessing,
+    declares the options it reads, and dated findings never enter the
+    balance. Component 3 of the resolver, pinned 2026-09-16 on both
+    fixtures across all five domains.
+    """
+
+    @classmethod
+    @pytest.fixture(scope="class")
+    def runs(cls):
+        import conditions
+        import fixtures
+        from chartfacts import build_facts
+        from domains import DOMAINS
+        out = {}
+        for key in ("reference", "partner"):
+            chart = compute_chart(fixtures.birth(key))
+            facts = {f.id: f for f in build_facts(chart, AGENT_WHEN)}
+            for did in DOMAINS:
+                out[(key, did)] = (chart, facts,
+                                   conditions.evaluate(did, facts, AGENT_WHEN))
+        return out
+
+    def test_every_finding_takes_its_numbers_from_the_signed_table(self, runs):
+        import conditions
+        for (key, did), (chart, facts, findings) in runs.items():
+            for f in findings:
+                if f.kind == conditions.MISSING:
+                    continue
+                r = conditions.row(f.rule_id, f.slot)
+                assert (f.kind, f.weight, f.confidence) == \
+                    (r.kind, r.weight, r.confidence), (key, did, f.rule_id, f.slot)
+                assert f.step in conditions.STEPS
+
+    def test_every_finding_cites_facts_that_exist_and_a_rule_that_exists(self, runs):
+        from rulelib import is_known
+        for (key, did), (chart, facts, findings) in runs.items():
+            for f in findings:
+                assert f.fact_ids, (key, did, f.rule_id)
+                for fid in f.fact_ids:
+                    assert fid in facts, (key, did, f.rule_id, fid)
+                assert is_known(f.rule_id), f.rule_id
+                for rid in f.also:
+                    assert is_known(rid), (f.rule_id, rid)
+                assert f.text.strip(), (key, did, f.rule_id)
+
+    def test_no_finding_is_missing_on_the_fixtures(self, runs):
+        import conditions
+        for (key, did), (chart, facts, findings) in runs.items():
+            missing = [f for f in findings if f.kind == conditions.MISSING]
+            assert not missing, (key, did, [f.values for f in missing])
+
+    def test_a_missing_fact_is_reported_not_raised_and_not_silent(self):
+        import conditions
+        import fixtures
+        from chartfacts import build_facts
+        chart = compute_chart(fixtures.birth("reference"))
+        facts = {f.id: f for f in build_facts(chart, AGENT_WHEN)}
+        del facts["karaka.chara.darakaraka"]
+        findings = conditions.evaluate("marriage", facts, AGENT_WHEN)
+        missing = [f for f in findings if f.kind == conditions.MISSING]
+        # Every predicate that needed it says so — the Darakaraka rule, and
+        # the two timing predicates whose targets include the Darakaraka.
+        assert {f.values["missing"] for f in missing} == {"karaka.chara.darakaraka"}
+        assert {f.rule_id for f in missing} == {"rule.karaka.darakaraka",
+                                                "rule.dasha.lordship",
+                                                "rule.transit.contact"}
+        assert all(f.weight == 0 for f in missing)
+        assert not any(f.rule_id == "rule.karaka.darakaraka"
+                       and f.kind != conditions.MISSING for f in findings)
+
+    def test_evaluation_is_deterministic(self, runs):
+        import conditions
+        for (key, did), (chart, facts, findings) in runs.items():
+            again = conditions.evaluate(did, facts, AGENT_WHEN)
+            assert [f.as_dict() for f in again] == [f.as_dict() for f in findings]
+
+    def test_dated_findings_carry_dates_and_the_rest_carry_none(self, runs):
+        import conditions
+        for (key, did), (chart, facts, findings) in runs.items():
+            for f in findings:
+                if f.kind in conditions.TIMING_KINDS:
+                    assert f.start or f.end, (key, did, f.rule_id, f.slot)
+                    for d in (f.start, f.end):
+                        if d:
+                            datetime.fromisoformat(d)
+                else:
+                    assert f.start is None and f.end is None, (f.rule_id, f.slot)
+
+    def test_the_balance_sums_support_and_strain_only(self, runs):
+        """The owner's amendment, as a property of the function: a contact
+        at weight 3, a running mahadasha at 3 and a window at 2 cannot
+        move a verdict by a hair."""
+        import conditions
+        for (key, did), (chart, facts, findings) in runs.items():
+            natal = [f for f in findings if f.kind in conditions.BALANCE_KINDS]
+            timing = [f for f in findings if f.kind in conditions.TIMING_KINDS]
+            assert conditions.balance(findings) == conditions.balance(natal)
+            assert conditions.balance(natal + timing) == conditions.balance(natal)
+        # …and with a constructed heavyweight on either side.
+        heavy = conditions.Finding(
+            rule_id="rule.transit.contact", slot="contact", kind="live",
+            weight=3, confidence="High", step="TRANSIT",
+            fact_ids=("contact.x",), text="x", start="2026-09-03", end=None)
+        cited = conditions.Finding(
+            rule_id="rule.varga.confirms", slot="empty", kind="cited",
+            weight=0, confidence="Interpretive", step="VARGA",
+            fact_ids=("d9.7th",), text="x")
+        assert conditions.balance([heavy]) == conditions.balance([])
+        assert conditions.balance([heavy, cited]) == ("Mixed", "cuts both ways")
+        one = conditions.Finding(
+            rule_id="rule.house.7", slot="main_weak", kind="strain",
+            weight=3, confidence="Moderate", step="NATAL",
+            fact_ids=("natal.7L",), text="x")
+        assert conditions.balance([one]) == conditions.balance([one, heavy, heavy])
+
+    def test_an_empty_varga_house_is_cited_not_a_strain(self, runs):
+        """The owner's first amendment. The reference chart's D9 7th is
+        empty: the finding is cited at weight 0 and its lord's condition
+        is read by rule.varga.from_varga_lagna."""
+        import conditions
+        chart, facts, findings = runs[("reference", "marriage")]
+        assert facts["d9.7th"].value["occupants"] == []
+        f = next(x for x in findings if x.rule_id == "rule.varga.confirms")
+        assert (f.slot, f.kind, f.weight) == ("empty", "cited", 0)
+        lord = next(x for x in findings
+                    if x.rule_id == "rule.varga.from_varga_lagna")
+        assert lord.values["lord"] == facts["natal.7L"].value["lord"]
+        # A benefic there is a support, a malefic a strain — on a ledger
+        # patched to say so, since neither fixture has an occupied D9 7th.
+        for group, slot in (("Jupiter", "benefic"), ("Saturn", "malefic")):
+            patched = dict(facts)
+            v = dict(facts["d9.7th"].value, occupants=[group])
+            patched["d9.7th"] = type(facts["d9.7th"])(
+                id="d9.7th", kind="varga", statement="patched", value=v)
+            got = [x for x in conditions.evaluate("marriage", patched, AGENT_WHEN)
+                   if x.rule_id == "rule.varga.confirms"]
+            assert [(x.slot, x.weight) for x in got] == [(slot, 2)], group
+
+    def test_every_predicate_declares_options_the_schools_module_knows(self):
+        import conditions
+        import schools
+        for p in conditions.PREDICATES:
+            for o in p.reads_options:
+                assert o in schools.OPTIONS, (p.rule_id, o)
+            assert p.step in conditions.STEPS
+        # The ones the report named, by predicate.
+        declared = {p.fn.__name__: set(p.reads_options) for p in conditions.PREDICATES}
+        assert declared["drishti_on_house"] == {"node_reach", "node_position"}
+        assert declared["darakaraka"] == {"karaka_count"}
+        assert declared["upapada_occupants"] == {"dual_lord", "node_position"}
+        assert declared["upapada_lord"] == {"dual_lord"}
+        assert declared["vimsopaka"] == {"vimsopaka_group", "dual_lord"}
+        assert declared["house_lord_dignity"] == set()
+
+    def test_a_finding_cannot_declare_an_option_its_predicate_did_not(
+            self, monkeypatch):
+        """evaluate() enforces it: a predicate that emits a finding reading
+        an undeclared option is a programming error, not a quiet split."""
+        import conditions
+        import fixtures
+        from chartfacts import build_facts
+        chart = compute_chart(fixtures.birth("reference"))
+        facts = {f.id: f for f in build_facts(chart, AGENT_WHEN)}
+
+        def rogue(ctx):
+            return [conditions._finding(
+                "rule.house.7", "main_weak", step="NATAL",
+                fact_ids=("natal.7L",), text="x",
+                reads_options=("hora_scheme",))]
+        monkeypatch.setattr(conditions, "PREDICATES", [
+            conditions.Predicate("rule.house.<h>", "NATAL", (), None, rogue)])
+        with pytest.raises(AssertionError):
+            conditions.evaluate("marriage", facts, AGENT_WHEN)
+        # …and on the real register every finding's options are a subset
+        # of its predicate's (evaluate() asserts it on every call).
+        monkeypatch.undo()
+        conditions.evaluate("marriage", facts, AGENT_WHEN)
+
+    def test_the_plain_register_holds_on_every_finding(self, runs):
+        import voice
+        for (key, did), (chart, facts, findings) in runs.items():
+            for f in findings:
+                if f.plain:
+                    assert not voice.find_jargon(f.plain), (f.rule_id, f.plain)
+                    assert voice.names_a_planet(f.plain) or f.kind == "window", \
+                        (f.rule_id, f.plain)
+
+    def test_every_signed_row_fires_somewhere_or_is_explained(self, runs):
+        """A row nobody can reach is a number nobody can check. Rows the two
+        fixtures cannot reach are named with the reason; C10's constructed
+        fixture is where they get exercised."""
+        import conditions
+        fired = {(conditions.family(f.rule_id), f.slot)
+                 for runs_ in runs.values() for f in runs_[2]}
+        unreachable_here = {
+            ("rule.karaka.by_sex", "set"),                  # needs C8's field
+            ("rule.house.6_service", "lord_strong"),
+            ("rule.karaka.darakaraka", "strong"),
+            ("rule.karaka.darakaraka", "weak"),
+            ("rule.karaka.darakaraka", "hidden"),
+            ("rule.karaka.darakaraka", "weak_cited"),
+            ("rule.karaka.darakaraka", "hidden_cited"),
+            ("rule.arudha.upapada_lord", "strong"),         # both Upapadas are occupied
+            ("rule.arudha.upapada_lord", "weak"),
+            ("rule.arudha.upapada_lord", "neutral"),
+            ("rule.arudha.second_from_upapada", "neutral"),
+            ("rule.dosha.mangal", "active"),                # both are cancelled
+            ("rule.dosha.mangal", "not_formed"),            # both form
+            ("rule.transit.contact", "contact"),            # only nodes touch a target today
+        }
+        never = {(r.rule, r.slot) for r in conditions.WEIGHTS} - fired
+        assert never <= unreachable_here, sorted(never - unreachable_here)
+        # and the list above is not padded: every entry really is unfired
+        assert unreachable_here <= never, sorted(unreachable_here - never)
+
+    def test_the_marriage_reading_fires_the_spouse_facts_on_the_reference(self, runs):
+        chart, facts, findings = runs[("reference", "marriage")]
+        by_rule = {}
+        for f in findings:
+            by_rule.setdefault(f.rule_id, []).append(f)
+        assert "rule.dosha.mangal_cancelled" in by_rule
+        assert by_rule["rule.dosha.mangal_cancelled"][0].kind == "cited"
+        assert "Jupiter" in by_rule["rule.dosha.mangal_cancelled"][0].text
+        dk = by_rule["rule.karaka.darakaraka"][0]
+        assert dk.values["darakaraka"] == "Jupiter"
+        assert dk.values["already_cited"] is True          # Jupiter is a karaka here
+        assert dk.slot.endswith("_cited") and dk.weight == 1
+        ul = by_rule["rule.arudha.upapada_occupants"]
+        assert any(f.slot == "benefic" and "Jupiter" in f.values["group"] for f in ul)
+        second = by_rule["rule.arudha.second_from_upapada"][0]
+        assert second.slot == "strain" and "Saturn" in second.values["occupants"]
+        assert "rule.karaka.by_sex_unset" in by_rule
+        assert "rule.vimsopaka.bala" in by_rule
+        assert "rule.graha.combust" not in by_rule                 # Saturn, Venus not burnt
+
+    def test_the_job_question_gets_dated_windows_and_never_a_bare_month(self, runs):
+        """Career on both fixtures: every window is a ledger span with ISO
+        dates, the employment rule fires for the 6th or 10th lord's periods
+        and the dasha rule for the others, and no finding's text names a
+        month the ledger did not give."""
+        import conditions
+        for key in ("reference", "partner"):
+            chart, facts, findings = runs[(key, "career")]
+            windows = [f for f in findings if f.kind == "window"]
+            assert windows, key
+            lords = {h: facts[f"natal.{h}L"].value["lord"] for h in (6, 10)}
+            ledger_text = " ".join(f.statement for f in facts.values())
+            for w in windows:
+                assert w.start and w.end
+                if w.rule_id == "rule.career.employment_period":
+                    assert set(w.values["hit"]) & set(lords.values()), w.values
+                elif w.rule_id == "rule.dasha.lordship":
+                    assert not (set(w.values["hit"]) & set(lords.values())), w.values
+                # every month named in the text is in the ledger's own prose
+                for m in re.findall(r"\b[A-Z][a-z]{2} \d{4}\b", w.text):
+                    assert m in ledger_text, (key, w.rule_id, m)
+            assert any(w.rule_id == "rule.career.employment_period" for w in windows), key
+            assert any(w.rule_id.startswith("rule.transit.") for w in windows), key
+
+    def test_the_timing_facts_are_in_the_ledger_and_the_brief(self, runs):
+        import chartfacts
+        for key in ("reference", "partner"):
+            chart, facts, _ = runs[(key, "career")]
+            w = facts["dasha.windows"].value
+            assert w["horizon_years"] == chartfacts.WINDOW_HORIZON_YEARS
+            assert w["windows"] and sum(x["running"] for x in w["windows"]) == 1
+            for x in w["windows"]:
+                assert x["start"] <= x["end"]
+            for p in ("jupiter", "saturn"):
+                spans = facts[f"transit.{p}.ahead"].value["spans"]
+                assert spans and spans[0]["running"] is True
+                for a, b in zip(spans, spans[1:]):
+                    assert a["end"] == b["start"], (p, a, b)
+                    assert (b["sign_index"] - a["sign_index"]) % 12 in (1, 11)
+            brief = chartfacts.domain_brief(chart, "job")
+            assert "dasha.windows" in brief["fact_ids"]["DASHA"]
+            assert "transit.jupiter.ahead" in brief["fact_ids"]["TRANSIT"]
+            # a contact carries the date it ends
+            for f in facts.values():
+                if f.kind == "contact":
+                    assert "until_iso" in f.value
+
+    def test_the_sixth_lord_is_weighed_once_in_career(self, runs):
+        for key in ("reference", "partner"):
+            chart, facts, findings = runs[(key, "career")]
+            generic = [f for f in findings if f.rule_id == "rule.house.6"]
+            assert not generic, key
+            service = [f for f in findings if f.rule_id == "rule.house.6_service"]
+            for f in service:
+                if f.slot == "occupants":
+                    assert f.kind == "cited" and f.weight == 0

@@ -127,6 +127,15 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
                      "spouse karaka, the Upapada's own split and its 2nd, "
                      "rule ids on doshas — and the domain brief must name "
                      "only facts that exist"),
+    "TestTheSignedWeightTable": (
+        "external", "the weight and confidence table the owner signed on "
+                    "2026-09-16, row for row, with the two amendments"),
+    "TestConditions": (
+        "invariant", "product rule: a predicate fires one rule on the facts "
+                     "it names, takes every number from the signed table, "
+                     "reports a missing fact rather than guessing, declares "
+                     "the options it reads, and dated findings never enter "
+                     "the balance"),
     "TestResolverRuleAdditions": (
         "external", "the seven rules the resolver fires on that the library "
                     "lacked — Mangal dosha and its four cancellations, the "
