@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from engine import PLANETS, SIGNS, Chart
-from rulelib import house_words
+from rulelib import MANGAL_HOUSES, RULES, house_words
 from transits import (
     TransitSnapshot,
     angular_distance,
@@ -57,6 +57,10 @@ class Dosha:
     rule: str             # classical formation rule, verbatim
     detail: str           # chart-specific working
     cancellations: tuple[str, ...] = field(default=())  # checks that PASSED
+    #: The library rules this dosha is read by, so a fact built from it can
+    #: cite them and a reading can be checked against them. Empty for the
+    #: two doshas that have no rule id yet.
+    rule_ids: tuple[str, ...] = field(default=())
     checks_run: tuple[str, ...] = field(default=())     # every check tried
     start: datetime | None = None   # for time-bound doshas
     end: datetime | None = None
@@ -73,21 +77,28 @@ def _sign_distance(a: int, b: int) -> int:
 # The widely-carried exception verse pairs a sign with each dosha house:
 # Aries in the 1st, Scorpio in the 4th, Capricorn in the 7th, Cancer in the
 # 8th, Sagittarius in the 12th — Mars there forms no dosha.
-_MANGAL_HOUSES = (1, 2, 4, 7, 8, 12)
+#
+# THE RULE TEXT IS THE LIBRARY'S. This module used to carry its own sentence
+# for the formation rule, which made it a second authority the validator
+# could not check against. The houses, the rule and its cancellations are
+# rule.dosha.mangal and rule.dosha.mangal_cancelled in rulelib; the four
+# checks below are the four that rule names, and TestResolverRuleAdditions
+# fails if a fifth appears here without appearing there.
+_MANGAL_HOUSES = MANGAL_HOUSES
 _MANGAL_SIGN_EXCEPTION = {1: 0, 4: 7, 7: 9, 8: 3, 12: 8}
 
 
 def detect_mangal(chart: Chart) -> Dosha:
     mars = chart.planets["Mars"]
     formed = mars.house in _MANGAL_HOUSES
-    rule = ("Mangal dosha forms when Mars occupies house 1, 2, 4, 7, 8 or "
-            "12 from the Lagna.")
+    rule = RULES["rule.dosha.mangal"].text
     if not formed:
         return Dosha(
             subject=("Mars", f"house-{mars.house}"),
             name="Mangal dosha", formed=False, active=False, rule=rule,
             detail=f"Mars occupies house {mars.house} — the pattern does "
                    "not form.",
+            rule_ids=("rule.dosha.mangal",),
         )
 
     checks, passed = [], []
@@ -126,6 +137,8 @@ def detect_mangal(chart: Chart) -> Dosha:
                "textbook pattern appears, so the cancellation checks run "
                "automatically.",
         cancellations=tuple(passed), checks_run=tuple(checks),
+        rule_ids=(("rule.dosha.mangal", "rule.dosha.mangal_cancelled")
+                  if passed else ("rule.dosha.mangal",)),
     )
 
 

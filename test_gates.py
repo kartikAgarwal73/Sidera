@@ -13027,3 +13027,131 @@ class TestOneHouseWordTable:
                 meaning = explain_planet(chart, name).meaning
                 for phrase in self.RETIRED:
                     assert phrase not in meaning, (key, name, phrase)
+
+
+class TestResolverRuleAdditions:
+    """The seven rules the resolver fires on that the library lacked.
+
+    Approved 2026-09-16, text and source, with two decisions pinned here:
+    Neecha Bhanga is NOT a Mangal cancellation — the four classical
+    conditions stand and a fifth would be a Sidera invention — and a
+    citation says what the source actually says, so the 6th-as-service rule
+    names Phaladeepika and Jataka Parijata for service and states what
+    Brihat Parashara Hora Shastra's own 6th-house list is.
+
+    The dosha module reads the Mangal rule from the library now, which
+    ends its life as a second citation authority.
+    """
+
+    SEVEN = ("rule.dosha.mangal", "rule.dosha.mangal_cancelled",
+             "rule.arudha.upapada_lord", "rule.karaka.by_sex",
+             "rule.karaka.by_sex_unset", "rule.house.6_service",
+             "rule.career.employment_period")
+
+    def test_the_seven_rules_exist_and_name_their_sources(self):
+        from rulelib import RULES, is_known
+        for rid in self.SEVEN:
+            assert is_known(rid), rid
+            assert RULES[rid].text.strip().endswith("."), rid
+            assert RULES[rid].source.strip(), rid
+        src = {rid: RULES[rid].source for rid in self.SEVEN}
+        assert "compendia" in src["rule.dosha.mangal"]
+        assert "rather than in Brihat Parashara" in src["rule.dosha.mangal"]
+        assert "Standard modern practice" in src["rule.dosha.mangal_cancelled"]
+        assert "Jaimini Sutras 1.4" in src["rule.arudha.upapada_lord"]
+        assert "Strī Jātaka" in src["rule.karaka.by_sex"]
+        assert "Sidera convention" in src["rule.karaka.by_sex_unset"]
+        assert "Vimshottari dasha phala" in src["rule.career.employment_period"]
+
+    def test_the_sixth_house_source_says_what_each_source_says(self):
+        from rulelib import RULES
+        source = RULES["rule.house.6_service"].source
+        assert "Phaladeepika" in source and "Jataka Parijata" in source
+        for word in ("enemies", "disease", "debts", "maternal uncle"):
+            assert word in source, word
+        assert "Brihat Parashara Hora Shastra" in source
+        text = RULES["rule.house.6_service"].text
+        assert "employment" in text and "service" in text
+        assert "10th" in text            # against the vocation of the 10th
+
+    def test_the_mangal_rule_names_six_houses_and_four_cancellations(self):
+        import rulelib
+        from rulelib import RULES
+        assert rulelib.MANGAL_HOUSES == (1, 2, 4, 7, 8, 12)
+        text = RULES["rule.dosha.mangal"].text
+        assert "1st, 2nd, 4th, 7th, 8th or 12th" in text
+        assert "never read bare" in text
+        cancelled = RULES["rule.dosha.mangal_cancelled"].text
+        for condition in ("exception verse", "own or exaltation sign",
+                          "Jupiter joining Mars or casting drishti",
+                          "the Moon joining Mars"):
+            assert condition in cancelled, condition
+        assert "Aries in the 1st, Scorpio in the 4th, Capricorn in the 7th, " \
+               "Cancer in the 8th, Sagittarius in the 12th" in cancelled
+        assert "Neecha" not in text and "Neecha" not in cancelled
+
+    def test_the_dosha_module_runs_exactly_the_four_the_rule_names(self, chart):
+        """A fifth check in doshas.py that the rule does not name would be
+        a cancellation the library never granted."""
+        import doshas
+        from doshas import detect_mangal
+        d = detect_mangal(chart)
+        assert len(d.checks_run) == 4
+        assert not any("Neecha" in c for c in d.checks_run)
+        assert not any("Neecha" in c for c in d.cancellations)
+        assert doshas._MANGAL_HOUSES == (1, 2, 4, 7, 8, 12)
+        # …and the module carries no rule sentence of its own any more.
+        src = open(doshas.__file__, encoding="utf-8").read()
+        assert "Mangal dosha forms when" not in src
+
+    def test_the_dosha_reads_its_rule_from_the_library_and_cites_it(self, chart):
+        from doshas import detect_mangal
+        from rulelib import RULES
+        d = detect_mangal(chart)
+        assert d.rule == RULES["rule.dosha.mangal"].text
+        assert "rule.dosha.mangal" in d.rule_ids
+        assert d.formed and not d.active
+        assert "rule.dosha.mangal_cancelled" in d.rule_ids
+        # A chart where the pattern does not form cites the rule alone.
+        not_formed = detect_mangal(synthetic_chart(0, {"Mars": 2}))  # Mars 3rd
+        assert not not_formed.formed
+        assert not_formed.rule_ids == ("rule.dosha.mangal",)
+        assert not_formed.rule == RULES["rule.dosha.mangal"].text
+
+    def test_both_fixtures_read_formed_and_cancelled(self):
+        """The reference chart: Mars in Cancer in the 12th, cancelled by
+        Jupiter's drishti — and Neecha Bhanga is satisfied on that same
+        Mars, which is exactly the case where an invented fifth condition
+        would have hidden behind a real one. The partner chart: Mars in
+        Gemini in the 1st, cancelled by the Moon joining it."""
+        import fixtures
+        from doshas import detect_mangal
+        from yogas import detect_neecha_bhanga
+        ref = compute_chart(fixtures.birth("reference"))
+        d = detect_mangal(ref)
+        assert ref.planets["Mars"].house == 12 and ref.planets["Mars"].sign == "Cancer"
+        assert d.formed and not d.active
+        assert [c for c in d.cancellations if "Jupiter" in c]
+        assert any(y.name == "Neecha Bhanga (Mars)" for y in detect_neecha_bhanga(ref))
+        assert not any("Neecha" in c for c in d.cancellations)
+        partner = compute_chart(fixtures.birth("partner"))
+        d2 = detect_mangal(partner)
+        assert partner.planets["Mars"].house == 1
+        assert d2.formed and not d2.active
+        assert [c for c in d2.cancellations if "Moon" in c]
+
+    def test_the_rendered_fold_prints_the_library_rule(self, page):
+        assert "the cancellation conditions are run with it" in page
+        assert "Mangal dosha forms when Mars occupies house 1, 2, 4" not in page
+
+    def test_the_seven_are_in_the_families_the_reading_needs(self):
+        """Grouped where the ids say: the dosha pair in the dosha group,
+        the lord with the arudhas, the karaka pair with the karakas."""
+        import rulelib
+        assert set(rulelib._DOSHA) == {"rule.dosha.mangal",
+                                       "rule.dosha.mangal_cancelled"}
+        assert "rule.arudha.upapada_lord" in rulelib._ARUDHA
+        assert {"rule.karaka.by_sex", "rule.karaka.by_sex_unset"} <= \
+            set(rulelib._KARAKA)
+        assert set(rulelib._EMPLOYMENT) == {"rule.house.6_service",
+                                            "rule.career.employment_period"}

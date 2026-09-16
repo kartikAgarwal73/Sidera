@@ -120,6 +120,12 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
                      "ONE table, app-wide — no second twelve-house table in "
                      "any module, and every surface's words are that "
                      "table's"),
+    "TestResolverRuleAdditions": (
+        "external", "the seven rules the resolver fires on that the library "
+                    "lacked — Mangal dosha and its four cancellations, the "
+                    "Upapada's lord, the spouse karaka by sex and the unset "
+                    "convention, the 6th as service, the employment period — "
+                    "each with the source that actually says it"),
     "TestRuleLibrary": (
         "external", "classical dasha-phala and gochara rules, each with its "
                     "named source"),

@@ -371,6 +371,69 @@ _YOGA = dict([
 ])
 
 
+# --- doshas: a pattern and its cancellations, cited together ----------------
+#
+# WHY THIS GROUP EXISTS
+# Mangal dosha had no rule id. `doshas.py` carried its own prose rule, which
+# made it a second citation authority: the validator could not check a
+# statement about the dosha against anything, and the interim marriage
+# reading could not cite it at all. The texts below are the library's; the
+# dosha module reads them from here. Approved 2026-09-16 with the four
+# cancellation conditions as they stand — Neecha Bhanga is NOT one of them,
+# because it is not a classical Mangal cancellation and adding it would be
+# a Sidera invention.
+
+MANGAL_HOUSES = (1, 2, 4, 7, 8, 12)
+
+_DOSHA = dict([
+    _r("rule.dosha.mangal",
+       "Mangal dosha forms when Mars occupies the 1st, 2nd, 4th, 7th, 8th "
+       "or 12th house from the Lagna. It is read for strain on the marriage "
+       "and the partner's wellbeing, and it is never read bare: the "
+       "cancellation conditions are run with it and the result is stated "
+       "with them.",
+       "The lagne vyaye ca pātāle verse, as carried in the marriage-matching "
+       "compendia rather than in Brihat Parashara Hora Shastra; the "
+       "six-house form is the common carrying, some carriers omit the 2nd"),
+    _r("rule.dosha.mangal_cancelled",
+       "Mangal dosha is held cancelled when any of these stands: Mars in "
+       "the sign the exception verse pairs with its house (Aries in the "
+       "1st, Scorpio in the 4th, Capricorn in the 7th, Cancer in the 8th, "
+       "Sagittarius in the 12th); Mars in its own or exaltation sign; "
+       "Jupiter joining Mars or casting drishti on it; the Moon joining "
+       "Mars. A cancelled dosha is cited, not dropped: the reading says it "
+       "formed and what cancelled it.",
+       "Standard modern practice for the cancellation conditions; the "
+       "sign-exception pairing is the verse's own second half"),
+])
+
+# --- employment: the 6th as service, and the period that brings it forward --
+#
+# The 6th is in the career domain's house list as "employment, in the plain
+# sense, as against vocation" and had no rule to fire on. The source line
+# says what each source actually says: BPHS's own 6th-house list is enemies,
+# disease, debts and the maternal uncle; service as employment is the
+# Phaladeepika and Jataka Parijata reading.
+
+_EMPLOYMENT = dict([
+    _r("rule.house.6_service",
+       "The 6th house is the house of service: work done for another, "
+       "employment in the plain sense as against the vocation and standing "
+       "of the 10th. Its lord's condition and what occupies it are read for "
+       "the holding and keeping of a job.",
+       "The 6th as service and servants, Phaladeepika ch. 1 and Jataka "
+       "Parijata; Brihat Parashara Hora Shastra's own 6th-house list is "
+       "enemies, disease, debts and the maternal uncle"),
+    _r("rule.career.employment_period",
+       "A period run by the lord of the 6th or of the 10th brings "
+       "employment forward, because a dasha lord delivers the affairs of "
+       "the houses it owns. The window is the period's own dates from the "
+       "ledger; the rule times the season, never the day.",
+       "Vimshottari dasha phala, Brihat Parashara Hora Shastra — the lord's "
+       "period delivers its houses' matters, applied to the 6th and the "
+       "10th"),
+])
+
 # --- what each house carries --------------------------------------------------
 #
 # THE ONE TABLE. Every surface that names a house by what it holds reads it
@@ -448,6 +511,11 @@ _ARUDHA = dict([
        "benefics there support it, malefics ask more of it. The lord of the "
        "Upapada's sign, and where that lord sits, carries the same weight.",
        "Upapada reading, Jaimini Sutras 1.4 with Parasara's bhava rules"),
+    _r("rule.arudha.upapada_lord",
+       "The lord of the Upapada's sign speaks for the marriage where "
+       "nothing occupies the Upapada: its dignity and its house describe "
+       "how the marriage is carried and where it is worked out.",
+       "Upapada reading, Jaimini Sutras 1.4 with Parasara's bhava rules"),
     _r("rule.arudha.second_from_upapada",
        "The 2nd from the Upapada is read for the durability of the "
        "marriage, as the 2nd from any house is read for the sustenance of "
@@ -519,6 +587,20 @@ _KARAKA = dict([
        "house, its dignity and what aspects it describe the partner and "
        "the partnership.",
        "Darakaraka, Jaimini Sutras 1.1 with Parasara's bhava rules"),
+    _r("rule.karaka.by_sex",
+       "The natural significator of the spouse depends on the chart's "
+       "owner: Venus stands for the wife in a man's chart, Jupiter for the "
+       "husband in a woman's. The other remains a general significator of "
+       "partnership and is read second.",
+       "Kalatra karaka Venus, Brihat Parashara Hora Shastra; Jupiter as the "
+       "husband's karaka in a woman's chart, Brihat Parashara Hora Shastra, "
+       "Strī Jātaka chapter"),
+    _r("rule.karaka.by_sex_unset",
+       "Where the chart's owner has not said, Sidera reads both Venus and "
+       "Jupiter as spouse significators, Venus first, and says so. This is "
+       "a stated convention, not a classical rule.",
+       "Sidera convention, recorded because a karaka chosen silently is not "
+       "a rule"),
     _r("rule.karaka.maturation",
        "Each karaka is held to mature at a classical age, after which its "
        "matters come properly into play — the tradition gives the "
@@ -596,7 +678,7 @@ _AVASTHA = dict([
 RULES: dict[str, Rule] = {
     **_DASHA, **_TRANSIT_GENERAL, **_TRANSIT_GRAHA, **_CONTACT, **_VARGA,
     **_GRAHA_STATE, **_YOGA, **_HOUSE, **_ARUDHA, **_KARAKA, **_VIMSOPAKA,
-    **_AVASTHA,
+    **_AVASTHA, **_DOSHA, **_EMPLOYMENT,
 }
 
 # The general rule a contact displaces, and the rule that says so. Kept as
