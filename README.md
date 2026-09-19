@@ -561,6 +561,12 @@ ui-design/DOSSIER.md   the visual direction: type, pagination, rules
 rulelib.py        classical rules the agent interprets through, each sourced
 conditions.py     one predicate per rule the resolver fires, and the signed
                   weight table; dated findings never enter the balance
+frames.py         the eight frames of reference (leaf): openers, anchors,
+                  the second reader
+rulesets.py       what a question is read through: marriage · career ·
+                  money and their timing twins, each with declared frames
+resolver.py       fires the predicates for one rule set → one FrameResult
+                  per declared frame, the frame verdict, disagreement
 agent.py          grounded 'Ask about this chart' + its answer validator
 reading/          the daily reading: detect · select · compose · fragments
 today.py          the day's dated lines, both edges found by bisection

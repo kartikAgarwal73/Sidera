@@ -32,10 +32,13 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from typing import Callable
 
+import math
+
 import schools
 import voice
 from domains import DOMAINS, Domain
 from explain import ordinal
+from frames import FRAMES
 from rulelib import KARAKATVAS, NATURAL_BENEFICS, RULES, house_words
 
 NATURAL_MALEFICS = ("Sun", "Mars", "Saturn", "Rahu", "Ketu")
@@ -298,6 +301,11 @@ class Finding:
     start: str | None = None
     end: str | None = None
     reads_options: tuple[str, ...] = ()
+    #: The ONE frame this finding is attributed to (frames.FRAMES), set by
+    #: the resolver from its predicate's declaration — "" until then. A
+    #: finding counts in one frame only, so a rule that reads two frames
+    #: cannot vote twice.
+    frame: str = ""
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -329,6 +337,119 @@ def _missing(rule_id, step, fact_id, reads_options=()) -> Finding:
                    reads_options=tuple(reads_options))
 
 
+# --- the frame verdict: the C3-c rows -------------------------------------------
+#
+# A SECOND SIGNED TABLE, beside WEIGHTS and never inside it (WEIGHTS is
+# pinned row for row). These rows weigh FRAMES, not findings: each frame
+# with weighed findings has a polarity, and the rows say what the frames
+# together amount to. Signed 2026-09-19 against the owner's C3-c: a
+# majority of frames favourable is favourable WITH the disagreeing frames
+# always named; a tie is a split the narrator never resolves.
+
+@dataclass(frozen=True)
+class FrameRow:
+    id: str
+    when: str        # the condition, in words
+    result: str      # what the row yields
+    why: str
+
+    def as_dict(self) -> dict:
+        return asdict(self)
+
+
+VERDICTS = ("favourable", "unfavourable", "split", "undecided")
+
+FRAME_VERDICT: tuple[FrameRow, ...] = (
+    FrameRow("frame.polarity",
+             "support > strain → favourable; strain > support → "
+             "unfavourable; equal and not zero → mixed; no weighed finding "
+             "→ no polarity",
+             "one polarity per frame, from that frame's own findings",
+             "a frame votes with the findings attributed to it and nothing "
+             "else; cited findings weigh 0 and give no polarity"),
+    FrameRow("frame.count",
+             "n = the frames with a polarity (favourable, unfavourable or "
+             "mixed); silent frames and dated-only frames are not in n",
+             "n",
+             "a frame that said nothing cannot vote; a frame that only "
+             "dated something never enters a natal verdict (the owner's "
+             "amendment that dated rows are timing output)"),
+    FrameRow("frame.favourable",
+             "favourable ≥ ceil(n/2) and favourable > unfavourable",
+             "verdict favourable; disagreement = every frame in n whose "
+             "polarity is not favourable, always emitted, [] when empty",
+             "the owner's C3-c row; the strict second clause is what "
+             "sends an even tie to the split row"),
+    FrameRow("frame.unfavourable",
+             "unfavourable ≥ ceil(n/2) and unfavourable > favourable",
+             "verdict unfavourable; disagreement = every frame in n whose "
+             "polarity is not unfavourable",
+             "the mirror of the favourable row"),
+    FrameRow("frame.split",
+             "neither majority row holds, and at least one frame took a "
+             "side — an even tie, or mixed frames that deny either side a "
+             "majority",
+             "verdict split; disagreement = every frame in n, both sides "
+             "named; the narrator never resolves it",
+             "the owner's C3-c: ties → split. Mixed frames count in n "
+             "because they spoke, so one favourable frame among mixed "
+             "ones is not a verdict"),
+    FrameRow("frame.undecided",
+             "n = 0, or every frame in n is mixed",
+             "verdict undecided; disagreement = the mixed frames, [] when "
+             "nothing weighed",
+             "no frame took a side: the reading says so rather than "
+             "inventing one. A lone mixed frame is not a split — a split "
+             "needs two sides"),
+    FrameRow("frame.timing",
+             "a dated frame is in_play when a window or period is running "
+             "at the moment read, quiet when it holds dated windows and "
+             "none is running, silent when it holds none",
+             "dasha and transit carry in_play / quiet / silent, never a "
+             "polarity; two dated frames that differ are a split",
+             "timing is when, not whether; mapping in_play to favourable "
+             "would let the majority row call a running Saturn a verdict"),
+)
+
+
+def frame_polarity(support: int, strain: int) -> str | None:
+    if support == 0 and strain == 0:
+        return None
+    if support > strain:
+        return "favourable"
+    if strain > support:
+        return "unfavourable"
+    return "mixed"
+
+
+def frame_verdict(polarities: dict) -> tuple[str, list[str]]:
+    """(verdict, disagreement) from {frame: polarity | None}, exactly the
+    FRAME_VERDICT rows. `disagreement` is always a list, [] when empty."""
+    voting = {f: p for f, p in polarities.items() if p is not None}
+    n = len(voting)
+    fav = sorted(f for f, p in voting.items() if p == "favourable")
+    unf = sorted(f for f, p in voting.items() if p == "unfavourable")
+    if not fav and not unf:
+        return "undecided", sorted(voting)
+    need = math.ceil(n / 2)
+    if len(fav) >= need and len(fav) > len(unf):
+        return "favourable", sorted(f for f in voting if f not in fav)
+    if len(unf) >= need and len(unf) > len(fav):
+        return "unfavourable", sorted(f for f in voting if f not in unf)
+    return "split", sorted(voting)
+
+
+def timing_status(findings) -> str:
+    """in_play | quiet | silent for one dated frame's findings."""
+    dated = [f for f in findings if f.kind in TIMING_KINDS]
+    if not dated:
+        return "silent"
+    running = [f for f in dated
+               if f.kind in ("period", "live") or f.slot == "window_running"
+               or f.values.get("running")]
+    return "in_play" if running else "quiet"
+
+
 # --- the register --------------------------------------------------------------
 
 @dataclass(frozen=True)
@@ -338,19 +459,31 @@ class Predicate:
     reads_options: tuple[str, ...]
     domains: tuple[str, ...] | None       # None: every domain
     fn: Callable
+    #: The frame this predicate's findings are attributed to: one of
+    #: frames.FRAMES, or "varga" — resolved by the resolver to the rule
+    #: set's testing division — or None for a predicate that only cites
+    #: (its findings weigh nothing and belong to no frame's vote).
+    frame: str | None = None
+
+    def frame_for(self, varga: str) -> str | None:
+        if self.frame == "varga":
+            return varga.lower()
+        return self.frame
 
 
 PREDICATES: list[Predicate] = []
 
 
-def predicate(rule_id: str, step: str, options=(), domains=None):
+def predicate(rule_id: str, step: str, options=(), domains=None, frame=None):
     assert step in STEPS, step
+    assert frame is None or frame == "varga" or frame in FRAMES, frame
     for o in options:
         assert o in schools.OPTIONS, o
 
     def wrap(fn):
         PREDICATES.append(Predicate(rule_id, step, tuple(options),
-                                    tuple(domains) if domains else None, fn))
+                                    tuple(domains) if domains else None, fn,
+                                    frame))
         return fn
     return wrap
 
@@ -478,7 +611,7 @@ def _iso_date(iso: str | None) -> str | None:
 
 # --- NATAL ---------------------------------------------------------------------
 
-@predicate("rule.house.<h>", "NATAL")
+@predicate("rule.house.<h>", "NATAL", frame="lagna")
 def house_lord_dignity(ctx: Ctx) -> list[Finding]:
     out = []
     for h in ctx.domain.houses:
@@ -511,7 +644,7 @@ def house_lord_dignity(ctx: Ctx) -> list[Finding]:
 
 
 @predicate("rule.drishti.on_house", "NATAL",
-           options=("node_reach", "node_position"))
+           options=("node_reach", "node_position"), frame="lagna")
 def drishti_on_house(ctx: Ctx) -> list[Finding]:
     out = []
     for h in ctx.domain.houses:
@@ -554,7 +687,8 @@ def drishti_on_house(ctx: Ctx) -> list[Finding]:
     return out
 
 
-@predicate("rule.house.6_service", "NATAL", domains=("career",))
+@predicate("rule.house.6_service", "NATAL", domains=("career",),
+           frame="lagna")
 def sixth_as_employment(ctx: Ctx) -> list[Finding]:
     v = ctx.v("natal.6L")
     d = _dignity(v)
@@ -630,14 +764,14 @@ def _karaka_finding(ctx: Ctx, name: str, primary: bool) -> Finding:
                     values={"karaka": name, "dignity": d, "house": v["house"]})
 
 
-@predicate("rule.graha.karakatva", "KARAKA")
+@predicate("rule.graha.karakatva", "KARAKA", frame="lagna")
 def karaka_condition(ctx: Ctx) -> list[Finding]:
     out = [_karaka_finding(ctx, ctx.primary_karaka, True)]
     out += [_karaka_finding(ctx, k, False) for k in ctx.secondary_karakas]
     return out
 
 
-@predicate("rule.karaka.by_sex_unset", "KARAKA", domains=("marriage",))
+@predicate("rule.karaka.by_sex_unset", "KARAKA", domains=("marriage",))  # cites only: no frame
 def spouse_karaka_convention(ctx: Ctx) -> list[Finding]:
     v = ctx.v("karaka.spouse")
     if v["basis"] == "unset":
@@ -662,7 +796,7 @@ def spouse_karaka_convention(ctx: Ctx) -> list[Finding]:
                 "basis": v["basis"]})]
 
 
-@predicate("rule.graha.combust", "KARAKA")
+@predicate("rule.graha.combust", "KARAKA", frame="lagna")
 def combust(ctx: Ctx) -> list[Finding]:
     out = []
     for slot, name, fid in (("main_lord", ctx.main_lord,
@@ -708,7 +842,7 @@ def _avastha(ctx: Ctx, rule_id: str, slot: str, name: str) -> Finding | None:
                     also=("rule.avastha.independent",), values=vals)
 
 
-@predicate("rule.avastha.baladi", "KARAKA")
+@predicate("rule.avastha.baladi", "KARAKA", frame="lagna")
 def avastha_baladi(ctx: Ctx) -> list[Finding]:
     out = [_avastha(ctx, "rule.avastha.baladi", "main_lord", ctx.main_lord),
            _avastha(ctx, "rule.avastha.baladi", "primary_karaka",
@@ -716,7 +850,7 @@ def avastha_baladi(ctx: Ctx) -> list[Finding]:
     return [f for f in out if f]
 
 
-@predicate("rule.avastha.jagradadi", "KARAKA")
+@predicate("rule.avastha.jagradadi", "KARAKA", frame="lagna")
 def avastha_jagradadi(ctx: Ctx) -> list[Finding]:
     out = [_avastha(ctx, "rule.avastha.jagradadi", "main_lord", ctx.main_lord),
            _avastha(ctx, "rule.avastha.jagradadi", "primary_karaka",
@@ -725,7 +859,7 @@ def avastha_jagradadi(ctx: Ctx) -> list[Finding]:
 
 
 @predicate("rule.karaka.darakaraka", "KARAKA", options=("karaka_count",),
-           domains=("marriage",))
+           domains=("marriage",), frame="jaimini")
 def darakaraka(ctx: Ctx) -> list[Finding]:
     v = ctx.v("karaka.chara.darakaraka")
     dk = v["planet"]
@@ -761,7 +895,8 @@ def darakaraka(ctx: Ctx) -> list[Finding]:
 
 
 @predicate("rule.arudha.upapada_occupants", "NATAL",
-           options=("dual_lord", "node_position"), domains=("marriage",))
+           options=("dual_lord", "node_position"), domains=("marriage",),
+           frame="jaimini")
 def upapada_occupants(ctx: Ctx) -> list[Finding]:
     v = ctx.v("arudha.upapada")
     occupants = list(v["occupants"])
@@ -791,7 +926,7 @@ def upapada_occupants(ctx: Ctx) -> list[Finding]:
 
 
 @predicate("rule.arudha.upapada_lord", "NATAL", options=("dual_lord",),
-           domains=("marriage",))
+           domains=("marriage",), frame="jaimini")
 def upapada_lord(ctx: Ctx) -> list[Finding]:
     v = ctx.v("arudha.upapada")
     if v["occupants"]:
@@ -816,7 +951,7 @@ def upapada_lord(ctx: Ctx) -> list[Finding]:
 
 
 @predicate("rule.arudha.second_from_upapada", "NATAL", options=("dual_lord",),
-           domains=("marriage",))
+           domains=("marriage",), frame="jaimini")
 def upapada_second(ctx: Ctx) -> list[Finding]:
     v = ctx.v("arudha.upapada_2nd")
     d = (v.get("lord_dignity") or "").split(" (")[0]
@@ -850,7 +985,7 @@ def upapada_second(ctx: Ctx) -> list[Finding]:
         reads_options=("dual_lord",))]
 
 
-@predicate("rule.dosha.mangal", "NATAL", domains=("marriage",))
+@predicate("rule.dosha.mangal", "NATAL", domains=("marriage",), frame="lagna")
 def mangal(ctx: Ctx) -> list[Finding]:
     v = ctx.v("dosha.mangal-dosha")
     ids = ("dosha.mangal-dosha", "planet.mars")
@@ -890,7 +1025,7 @@ def mangal(ctx: Ctx) -> list[Finding]:
 
 # --- VARGA ---------------------------------------------------------------------
 
-@predicate("rule.varga.confirms", "VARGA")
+@predicate("rule.varga.confirms", "VARGA", frame="varga")
 def varga_confirms(ctx: Ctx) -> list[Finding]:
     code = ctx.domain.varga
     label = code.lower()
@@ -928,7 +1063,7 @@ def varga_confirms(ctx: Ctx) -> list[Finding]:
     return out
 
 
-@predicate("rule.varga.from_varga_lagna", "VARGA")
+@predicate("rule.varga.from_varga_lagna", "VARGA", frame="varga")
 def varga_lord_dignity(ctx: Ctx) -> list[Finding]:
     code = ctx.domain.varga
     label = code.lower()
@@ -951,7 +1086,7 @@ def varga_lord_dignity(ctx: Ctx) -> list[Finding]:
                 "house": v["house"], "dignity": d})]
 
 
-@predicate("rule.varga.vargottama", "VARGA")
+@predicate("rule.varga.vargottama", "VARGA", frame="d9")
 def vargottama(ctx: Ctx) -> list[Finding]:
     lord = ctx.main_lord
     fid = f"varga.d9.{lord.lower()}"
@@ -969,7 +1104,7 @@ def vargottama(ctx: Ctx) -> list[Finding]:
 
 
 @predicate("rule.vimsopaka.bala", "VARGA",
-           options=("vimsopaka_group", "dual_lord"))
+           options=("vimsopaka_group", "dual_lord"), frame="d9")
 def vimsopaka(ctx: Ctx) -> list[Finding]:
     lord = ctx.main_lord
     fid = f"vimsopaka.{lord.lower()}"
@@ -997,7 +1132,7 @@ def vimsopaka(ctx: Ctx) -> list[Finding]:
 
 # --- DASHA ---------------------------------------------------------------------
 
-@predicate("rule.dasha.lordship", "DASHA")
+@predicate("rule.dasha.lordship", "DASHA", frame="dasha")
 def dasha_running(ctx: Ctx) -> list[Finding]:
     if "dasha.current" not in ctx.facts:     # outside the 120-year cycle
         return []
@@ -1048,7 +1183,8 @@ def _window_targets(ctx: Ctx) -> dict[str, str]:
     return why
 
 
-@predicate("rule.dasha.lordship", "DASHA", options=("karaka_count",))
+@predicate("rule.dasha.lordship", "DASHA", options=("karaka_count",),
+           frame="dasha")
 def dasha_windows(ctx: Ctx) -> list[Finding]:
     """Dated windows, inside the horizon, whose lord bears on the domain.
     For career the 6th and 10th lords fire rule.career.employment_period
@@ -1091,7 +1227,7 @@ def dasha_windows(ctx: Ctx) -> list[Finding]:
 # --- TRANSIT -------------------------------------------------------------------
 
 @predicate("rule.transit.<slow>", "TRANSIT",
-           options=("node_reach", "node_position"))
+           options=("node_reach", "node_position"), frame="transit")
 def transit_slow(ctx: Ctx) -> list[Finding]:
     out = []
     for planet in SLOW_MOVERS:
@@ -1125,7 +1261,8 @@ def transit_slow(ctx: Ctx) -> list[Finding]:
     return out
 
 
-@predicate("rule.transit.contact", "TRANSIT", options=("node_position",))
+@predicate("rule.transit.contact", "TRANSIT", options=("node_position",),
+           frame="transit")
 def transit_contact(ctx: Ctx) -> list[Finding]:
     """A transit within orb of a domain lord, karaka or main-house
     occupant. The contact governs the from-the-Moon verdict, and the fact
@@ -1160,7 +1297,8 @@ def transit_contact(ctx: Ctx) -> list[Finding]:
     return out
 
 
-@predicate("rule.transit.<slow>", "TRANSIT", options=("node_reach",))
+@predicate("rule.transit.<slow>", "TRANSIT", options=("node_reach",),
+           frame="transit")
 def transit_ahead(ctx: Ctx) -> list[Finding]:
     """Jupiter and Saturn reaching or aspecting the main house, ahead,
     inside the horizon — dated windows, from the ledger's own spans."""
@@ -1202,20 +1340,26 @@ def applicable(domain: Domain) -> list[Predicate]:
             if p.domains is None or domain.id in p.domains]
 
 
-def evaluate(domain: Domain | str, facts: dict, when: datetime) -> list[Finding]:
+def evaluate_by_predicate(domain: Domain | str, facts: dict, when: datetime,
+                          only=None) -> list[tuple[Predicate, Finding]]:
     """Every applicable predicate, in register order, under the live
-    school selection. A fact a predicate needed and could not find is a
-    MISSING finding, never an exception and never silence."""
+    school selection — each finding paired with the predicate that fired
+    it, which is how the resolver knows a finding's frame. A fact a
+    predicate needed and could not find is a MISSING finding, never an
+    exception and never silence. `only`, when given, restricts the run to
+    those Predicate objects (a rule set's own steps)."""
     if isinstance(domain, str):
         domain = DOMAINS[domain]
     ctx = Ctx(domain, facts, when)
-    out: list[Finding] = []
+    out: list[tuple[Predicate, Finding]] = []
     for p in applicable(domain):
+        if only is not None and p not in only:
+            continue
         try:
             found = p.fn(ctx)
         except KeyError as exc:
-            out.append(_missing(p.rule_id, p.step, str(exc.args[0]),
-                                p.reads_options))
+            out.append((p, _missing(p.rule_id, p.step, str(exc.args[0]),
+                                    p.reads_options)))
             continue
         for f in found:
             # A finding may declare a subset of its predicate's options,
@@ -1224,8 +1368,14 @@ def evaluate(domain: Domain | str, facts: dict, when: datetime) -> list[Finding]
             assert set(f.reads_options) <= set(p.reads_options), (
                 p.rule_id, f.rule_id, f.reads_options, p.reads_options)
             assert f.step == p.step, (p.rule_id, f.rule_id)
-        out.extend(found)
+            out.append((p, f))
     return out
+
+
+def evaluate(domain: Domain | str, facts: dict, when: datetime,
+             only=None) -> list[Finding]:
+    """The findings alone — see evaluate_by_predicate."""
+    return [f for _, f in evaluate_by_predicate(domain, facts, when, only)]
 
 
 def rule_ids_in_table() -> set[str]:

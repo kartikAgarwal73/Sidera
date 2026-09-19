@@ -32,6 +32,10 @@ class Rule:
     id: str
     text: str
     source: str
+    #: The frames of reference this rule reads — frames.FRAMES — declared
+    #: in FRAMES_REQUIRED below and stamped on at import. A convention rule
+    #: that reads no chart declares ().
+    frames_required: tuple[str, ...] = ()
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -688,11 +692,122 @@ _AVASTHA = dict([
        "Sidera's reading, stated because the states are routinely conflated"),
 ])
 
+# --- the frames each rule reads ---------------------------------------------
+#
+# WHY A TABLE, DECLARED ONCE
+# A frame is the vantage a rule reads the chart from — the houses from the
+# lagna, the same houses from the Moon, the D9, the D10, the running
+# periods, the sky now, the Jaimini points, the Aṣṭakavarga count
+# (frames.FRAMES). The resolver produces a FrameResult for every frame a
+# rule set declares, and the rule set's declaration must agree with what
+# its rules actually read; so each rule says here, in one place a reader
+# can audit against the text above, which frames it reads. A rule that
+# reads no chart at all — a stated convention, a school divergence about
+# a computation — declares () for the frame it does not read, or the frame
+# whose computation it governs. Homing the birth-chart states that need no
+# lagna to compute (combustion, the avasthās, a graha's nature) on the
+# lagna frame is a taxonomy convention, not a claim that they depend on
+# the lagna. Settled 2026-09-19 by a three-design panel and two judges;
+# `TestFramesRequired` fails if a rule is added without a row here.
+FRAMES_REQUIRED: dict[str, tuple[str, ...]] = {
+    "rule.dasha.lordship": ('lagna', 'dasha'),
+    "rule.dasha.placement": ('lagna', 'dasha'),
+    "rule.dasha.dignity": ('lagna', 'dasha'),
+    "rule.dasha.antara": ('lagna', 'dasha'),
+    "rule.dasha.node": ('lagna', 'dasha'),
+    "rule.dasha.relationship": ('dasha',),
+    "rule.transit.house": ('lagna', 'transit'),
+    "rule.transit.from_moon": ('moon', 'transit'),
+    "rule.transit.aspect": ('lagna', 'transit'),
+    "rule.transit.dignity": ('transit',),
+    "rule.transit.window": ('transit',),
+    "rule.transit.saturn": ('lagna', 'transit'),
+    "rule.transit.jupiter": ('lagna', 'transit'),
+    "rule.transit.rahu": ('lagna', 'transit'),
+    "rule.transit.ketu": ('lagna', 'transit'),
+    "rule.transit.fast": ('transit',),
+    "rule.transit.contact": ('lagna', 'transit'),
+    "rule.transit.node_on_natal": ('lagna', 'transit'),
+    "rule.transit.contact_over_gocara": ('lagna', 'moon', 'transit'),
+    "rule.precedence.name_both": (),
+    "rule.graha.karakatva": ('lagna',),
+    "rule.varga.purpose": ('d9', 'd10'),
+    "rule.varga.confirms": ('lagna', 'd9', 'd10'),
+    "rule.varga.vargottama": ('lagna', 'd9'),
+    "rule.varga.from_varga_lagna": ('d9', 'd10'),
+    "rule.varga.degree_convention": ('d9', 'd10'),
+    "rule.varga.drekkana_school": (),
+    "rule.varga.bhamsa_school": (),
+    "rule.varga.hora_school": (),
+    "rule.varga.trimsamsa_school": (),
+    "rule.varga.shastyamsa_school": (),
+    "rule.graha.combust": ('lagna',),
+    "rule.graha.nature": (),
+    "rule.graha.yoga_varga": ('lagna', 'd9', 'd10'),
+    "rule.graha.yoga_activation": ('lagna', 'dasha', 'transit'),
+    "rule.yoga.mahapurusha": ('lagna',),
+    "rule.yoga.chandra": ('moon',),
+    "rule.yoga.solar": ('lagna',),
+    "rule.yoga.dhana": ('lagna',),
+    "rule.yoga.viparita": ('lagna',),
+    "rule.yoga.neecha_bhanga": ('lagna', 'moon'),
+    "rule.yoga.kemadruma": ('moon',),
+    "rule.house.1": ('lagna',),
+    "rule.house.2": ('lagna',),
+    "rule.house.3": ('lagna',),
+    "rule.house.4": ('lagna',),
+    "rule.house.5": ('lagna',),
+    "rule.house.6": ('lagna',),
+    "rule.house.7": ('lagna',),
+    "rule.house.8": ('lagna',),
+    "rule.house.9": ('lagna',),
+    "rule.house.10": ('lagna',),
+    "rule.house.11": ('lagna',),
+    "rule.house.12": ('lagna',),
+    "rule.arudha.pada": ('lagna', 'jaimini'),
+    "rule.arudha.exception": ('jaimini',),
+    "rule.arudha.upapada": ('jaimini',),
+    "rule.arudha.upapada_occupants": ('lagna', 'jaimini'),
+    "rule.arudha.upapada_lord": ('lagna', 'jaimini'),
+    "rule.arudha.second_from_upapada": ('jaimini',),
+    "rule.arudha.colord_school": (),       # a recorded divergence, read as an option
+    "rule.arudha.colord_strength": ('jaimini',),
+    "rule.arudha.rasi_drishti": ('jaimini',),
+    "rule.karaka.chara": ('jaimini',),
+    "rule.karaka.rahu_reversed": ('jaimini',),
+    "rule.karaka.count_school": (),        # seven or eight offices: an option, not a reading
+    "rule.karaka.tie_convention": (),
+    "rule.karaka.darakaraka": ('lagna', 'jaimini'),
+    "rule.karaka.by_sex": (),
+    "rule.karaka.by_sex_unset": (),
+    "rule.karaka.maturation": (),
+    "rule.karaka.karakamsa": ('d9', 'jaimini'),
+    "rule.vimsopaka.bala": ('lagna', 'd9'),
+    "rule.vimsopaka.group_school": (),
+    "rule.vimsopaka.compound_relation": (),
+    "rule.vimsopaka.nodes_excluded": (),
+    "rule.avastha.baladi": ('lagna',),
+    "rule.avastha.jagradadi": ('lagna',),
+    "rule.avastha.independent": (),
+    "rule.dosha.mangal": ('lagna',),
+    "rule.dosha.mangal_cancelled": ('lagna',),
+    "rule.house.6_service": ('lagna',),
+    "rule.career.employment_period": ('lagna', 'dasha'),
+    "rule.drishti.on_house": ('lagna',),
+}
+
 RULES: dict[str, Rule] = {
     **_DASHA, **_TRANSIT_GENERAL, **_TRANSIT_GRAHA, **_CONTACT, **_VARGA,
     **_GRAHA_STATE, **_YOGA, **_HOUSE, **_ARUDHA, **_KARAKA, **_VIMSOPAKA,
     **_AVASTHA, **_DOSHA, **_EMPLOYMENT, **_DRISHTI,
 }
+# Stamp the declaration on. Every rule must have a row and every row a rule:
+# a rule added without its frames, or a row left behind by a renamed rule,
+# fails at import rather than in a reading.
+assert set(FRAMES_REQUIRED) == set(RULES), (
+    sorted(set(FRAMES_REQUIRED) ^ set(RULES)))
+RULES = {rid: Rule(rule.id, rule.text, rule.source, FRAMES_REQUIRED[rid])
+         for rid, rule in RULES.items()}
 
 # The general rule a contact displaces, and the rule that says so. Kept as
 # named constants because `chartfacts` writes both ids into the ledger and

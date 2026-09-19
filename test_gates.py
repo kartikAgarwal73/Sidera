@@ -13959,3 +13959,259 @@ class TestTheLandingShowsTwoPlates:
     def test_the_explorer_highlights_the_landing_d1(self, page):
         js = page[page.index("const d1svg ="):]
         assert 'document.querySelector("#plate-d1 svg")' in js[:120]
+
+
+class TestFramesRequired:
+    """Every rule declares the frames of reference it reads, from the eight
+    the owner named (C4-b), and every predicate declares the one frame its
+    findings are attributed to. Settled 2026-09-19 by a three-design panel
+    and two judges; the rows a reader can audit against each rule's text.
+    """
+
+    def test_every_rule_declares_frames_from_the_eight(self):
+        import frames
+        from rulelib import FRAMES_REQUIRED, RULES
+        assert set(FRAMES_REQUIRED) == set(RULES)
+        assert len(RULES) >= 84
+        for rid, rule in RULES.items():
+            assert rule.frames_required == tuple(FRAMES_REQUIRED[rid]), rid
+            assert set(rule.frames_required) <= set(frames.FRAMES), rid
+            # In frames.FRAMES order, no duplicates.
+            assert list(rule.frames_required) == [
+                f for f in frames.FRAMES if f in rule.frames_required], rid
+
+    def test_the_frames_follow_the_rule_text(self):
+        """A sample the text settles: the houses are lagna; gochara from the
+        Moon is moon and transit; the varga rules are the divisions; the
+        Jaimini rules are jaimini; the conventions read no chart."""
+        from rulelib import RULES
+        f = lambda rid: RULES[rid].frames_required
+        for h in range(1, 13):
+            assert f(f"rule.house.{h}") == ("lagna",), h
+        assert f("rule.transit.from_moon") == ("moon", "transit")
+        assert f("rule.transit.contact_over_gocara") == ("lagna", "moon", "transit")
+        assert f("rule.transit.saturn") == ("lagna", "transit")
+        assert f("rule.varga.vargottama") == ("lagna", "d9")
+        assert f("rule.varga.confirms") == ("lagna", "d9", "d10")
+        assert f("rule.vimsopaka.bala") == ("lagna", "d9")
+        assert f("rule.dasha.lordship") == ("lagna", "dasha")
+        assert f("rule.career.employment_period") == ("lagna", "dasha")
+        assert f("rule.yoga.chandra") == ("moon",)
+        assert f("rule.yoga.kemadruma") == ("moon",)
+        assert f("rule.arudha.upapada") == ("jaimini",)
+        assert f("rule.karaka.darakaraka") == ("lagna", "jaimini")
+        assert f("rule.karaka.chara") == ("jaimini",)
+        assert f("rule.dosha.mangal") == ("lagna",)
+        for rid in ("rule.karaka.tie_convention", "rule.karaka.by_sex",
+                    "rule.karaka.by_sex_unset", "rule.avastha.independent",
+                    "rule.precedence.name_both", "rule.vimsopaka.nodes_excluded",
+                    "rule.arudha.colord_school", "rule.karaka.count_school"):
+            assert f(rid) == (), rid
+        # No rule reads the Aṣṭakavarga yet: the rule that would needs the
+        # owner's text and signature. Said here so it is a decision, not
+        # an oversight.
+        assert not any("ashtakavarga" in r.frames_required for r in RULES.values())
+
+    def test_every_predicate_frame_is_one_its_rule_declares(self):
+        """A predicate's findings are attributed to one frame, and that
+        frame must be among the frames its rule reads — for every rule set
+        the predicate can run in, with 'varga' resolved to that set's
+        division."""
+        import conditions
+        import frames
+        from rulelib import RULES
+        from rulesets import RULESETS
+        for p in conditions.PREDICATES:
+            assert p.frame is None or p.frame == "varga" or p.frame in frames.FRAMES, p.rule_id
+            for rs in RULESETS.values():
+                if p.domains and rs.domain.id not in p.domains:
+                    continue
+                fr = p.frame_for(rs.varga)
+                if fr is None:
+                    continue
+                if p.rule_id == "rule.house.<h>":
+                    declared = set().union(*(RULES[f"rule.house.{h}"].frames_required
+                                             for h in rs.domain.houses))
+                elif p.rule_id == "rule.transit.<slow>":
+                    declared = set().union(*(RULES[f"rule.transit.{s.lower()}"].frames_required
+                                             for s in conditions.SLOW_MOVERS))
+                else:
+                    declared = set(RULES[p.rule_id].frames_required)
+                assert fr in declared, (p.fn.__name__, rs.id, fr, declared)
+
+    def test_a_cite_only_predicate_may_have_no_frame(self):
+        import conditions
+        for p in conditions.PREDICATES:
+            if p.frame is None:
+                assert p.fn.__name__ == "spouse_karaka_convention", p.fn.__name__
+
+    def test_the_finding_carries_its_frame_only_when_resolved(self, chart):
+        """conditions.evaluate() leaves the frame blank; the resolver stamps
+        it from the predicate. A finding cannot carry a frame nobody gave it."""
+        import conditions
+        from chartfacts import build_facts
+        facts = {f.id: f for f in build_facts(chart, AGENT_WHEN)}
+        for f in conditions.evaluate("marriage", facts, AGENT_WHEN):
+            assert f.frame == ""
+        for p, f in conditions.evaluate_by_predicate("marriage", facts, AGENT_WHEN):
+            assert p in conditions.PREDICATES
+
+
+class TestTheFrameVerdictRows:
+    """The C3-c rows the owner specified, pinned as a signed document: a
+    majority of frames favourable is favourable with the disagreeing frames
+    always named; a tie is a split the narrator never resolves. Signed
+    2026-09-19.
+    """
+
+    IDS = ("frame.polarity", "frame.count", "frame.favourable",
+           "frame.unfavourable", "frame.split", "frame.undecided",
+           "frame.timing")
+
+    def test_the_rows_are_the_signed_rows(self):
+        import conditions
+        assert tuple(r.id for r in conditions.FRAME_VERDICT) == self.IDS
+        rows = {r.id: r for r in conditions.FRAME_VERDICT}
+        assert "favourable ≥ ceil(n/2) and favourable > unfavourable" in rows["frame.favourable"].when
+        assert "always emitted" in rows["frame.favourable"].result
+        assert "ties → split" in rows["frame.split"].why
+        assert "never resolves" in rows["frame.split"].result
+        assert "never a polarity" in rows["frame.timing"].result
+        for r in conditions.FRAME_VERDICT:
+            assert r.when.strip() and r.result.strip() and r.why.strip(), r.id
+
+    def test_the_rows_as_a_function(self):
+        import conditions
+        fv = conditions.frame_verdict
+        # majority favourable, the odd one named
+        assert fv({"lagna": "favourable", "d9": "favourable", "jaimini": "unfavourable"}) == ("favourable", ["jaimini"])
+        assert fv({"lagna": "unfavourable", "d9": "unfavourable", "jaimini": "favourable"}) == ("unfavourable", ["jaimini"])
+        # an even tie is a split with both sides named
+        assert fv({"lagna": "favourable", "d9": "unfavourable"}) == ("split", ["d9", "lagna"])
+        # mixed frames spoke: one favourable among two mixed is not a verdict
+        assert fv({"lagna": "favourable", "d9": "mixed", "jaimini": "mixed"}) == ("split", ["d9", "jaimini", "lagna"])
+        # a lone witness decides, and disagreement is emitted as empty
+        assert fv({"lagna": "favourable", "d9": None, "jaimini": None}) == ("favourable", [])
+        # nothing weighed
+        assert fv({"lagna": None, "d9": None}) == ("undecided", [])
+        # disagreement is always a list, never absent
+        for polar in ({"lagna": "favourable"}, {}, {"lagna": "mixed"}):
+            v, d = fv(polar)
+            assert isinstance(d, list)
+        # only mixed frames spoke: no side was taken, and a lone mixed
+        # frame is not a split (a split needs two sides)
+        assert fv({"lagna": "mixed"}) == ("undecided", ["lagna"])
+        assert fv({"lagna": "mixed", "d9": "mixed"}) == ("undecided", ["d9", "lagna"])
+        # the worked cases the panel pinned: fav/unf/mixed
+        assert fv({"a": "favourable", "b": "favourable", "c": "unfavourable", "d": "mixed"})[0] == "favourable"   # 2/1/1, n=4
+        assert fv({"a": "favourable", "b": "mixed", "c": "mixed"})[0] == "split"                                 # 1/0/2, n=3
+        assert fv({"a": "favourable", "b": "unfavourable", "c": "mixed"})[0] == "split"                          # 1/1/1
+        for v in (fv(p)[0] for p in ({}, {"a": "mixed"}, {"a": "favourable"},
+                                     {"a": "favourable", "b": "unfavourable"})):
+            assert v in conditions.VERDICTS
+
+    def test_polarity_and_timing_status(self):
+        import conditions
+        assert conditions.frame_polarity(3, 1) == "favourable"
+        assert conditions.frame_polarity(1, 3) == "unfavourable"
+        assert conditions.frame_polarity(2, 2) == "mixed"
+        assert conditions.frame_polarity(0, 0) is None
+        mk = lambda kind, slot="x", running=False: conditions.Finding(
+            rule_id="rule.dasha.lordship", slot=slot, kind=kind, weight=1,
+            confidence="High", step="DASHA", fact_ids=("dasha.windows",),
+            text="x", values={"running": running},
+            start="2026-01-01" if kind in conditions.TIMING_KINDS else None)
+        assert conditions.timing_status([]) == "silent"
+        assert conditions.timing_status([mk("cited")]) == "silent"
+        assert conditions.timing_status([mk("window", "window_upcoming")]) == "quiet"
+        assert conditions.timing_status([mk("window", "window_running", True)]) == "in_play"
+        assert conditions.timing_status([mk("period", "md")]) == "in_play"
+
+    def test_the_signed_weight_table_is_untouched(self):
+        """The frame rows are a second document, never rows in WEIGHTS."""
+        import conditions
+        assert not any(r.rule.startswith("frame.") for r in conditions.WEIGHTS)
+        assert len(conditions.WEIGHTS) == len(TestTheSignedWeightTable.SIGNED) == 65
+
+
+class TestRuleSetsAndFrames:
+    """Rule sets declare their frames; the leaf module the narrator and the
+    second reader share holds one distinct opener and anchor per frame."""
+
+    def test_the_six_rule_sets_and_their_frames(self):
+        from rulesets import RULESETS
+        assert set(RULESETS) == {"marriage", "timing:marriage", "career",
+                                 "timing:career", "money", "timing:money"}
+        assert RULESETS["marriage"].frames == ("lagna", "d9", "jaimini")
+        assert RULESETS["career"].frames == ("lagna", "d9", "d10")
+        assert RULESETS["money"].frames == ("lagna", "d9")
+        for rs in RULESETS.values():
+            if rs.timing:
+                assert rs.frames == ("dasha", "transit")
+                assert rs.steps == ("DASHA", "TRANSIT")
+            else:
+                assert rs.steps == ("NATAL", "KARAKA", "VARGA")
+
+    def test_both_declaration_invariants_hold(self):
+        import resolver
+        from rulesets import RULESETS
+        for rs in RULESETS.values():
+            assert resolver.check_ruleset(rs) == [], rs.id
+
+    def test_money_is_not_a_dashboard_domain(self):
+        from domains import DOMAINS
+        from rulesets import MONEY, RULESETS
+        assert "money" not in DOMAINS and len(DOMAINS) == 5
+        assert MONEY.houses == (2, 11, 5, 9) and MONEY.karakas == ("Jupiter",)
+        assert MONEY.varga == "D9" and MONEY.main_house == 2
+        assert RULESETS["money"].domain is MONEY
+
+    def test_detection_routes_money_and_when(self):
+        from rulesets import detect
+        assert detect("will I marry").id == "marriage"
+        assert detect("when will I marry").id == "timing:marriage"
+        assert detect("when will I find a job, I am currently unemployed?").id == "timing:career"
+        assert detect("how is my career").id == "career"
+        assert detect("will I be rich").id == "money"
+        assert detect("when will my income grow").id == "timing:money"
+        assert detect("what about my health") is None
+        assert detect("") is None
+
+    def test_the_leaf_module_is_a_leaf_with_distinct_vocabulary(self):
+        import ast
+        import frames
+        import voice
+        src = (HERE / "frames.py").read_text(encoding="utf-8")
+        for node in ast.walk(ast.parse(src)):
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                names = [a.name for a in node.names] if isinstance(node, ast.Import) else [node.module]
+                for n in names:
+                    assert n in ("re", "__future__"), n   # nothing of the app
+        assert len(set(frames.OPENER.values())) == 8
+        assert len(set(frames.ANCHOR.values())) == 8
+        assert len(set(frames.PLAIN.values())) == 8
+        for f in frames.FRAMES:
+            assert not voice.find_jargon(frames.OPENER[f]), f
+            assert not voice.find_jargon(frames.PLAIN[f]), f
+            assert frames.OPENER[f].endswith(","), f
+
+    def test_every_anchor_is_a_fact_on_both_fixtures(self):
+        import fixtures
+        import frames
+        from chartfacts import build_facts
+        for key in ("reference", "partner"):
+            facts = {f.id for f in build_facts(compute_chart(fixtures.birth(key)), AGENT_WHEN)}
+            for f in frames.FRAMES:
+                assert frames.ANCHOR[f] in facts, (key, f)
+
+    def test_the_second_reader_reads_openers_at_sentence_starts_only(self):
+        import frames
+        text = ("In the birth chart, Venus rules it and sits exalted. "
+                "In the second chart, Saturn stands neither high nor low. "
+                "Nothing here says In the sky now, Jupiter — that is quoted mid-sentence.")
+        assert frames.second_reader(["lagna", "d9"], text) == []
+        assert frames.second_reader(["lagna", "d9", "transit"], text) == ["transit"]
+        assert frames.second_reader(["dasha"], "By the running periods, Venus holds it.") == []
+        assert frames.second_reader(["dasha"], "Venus's period holds it until 2027.") == ["dasha"]
+        assert frames.second_reader(["lagna"], "") == ["lagna"]
+        assert frames.second_reader([], "anything") == []

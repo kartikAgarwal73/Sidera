@@ -133,6 +133,18 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
                      "on a phone, degrees on by default, with the full "
                      "tabbed plate, the D10 and the Aṣṭakavarga overlay "
                      "behind 'See the chart' — measured in a browser"),
+    "TestFramesRequired": (
+        "invariant", "product rule: every rule declares the frames of "
+                     "reference it reads, from the owner's eight, and every "
+                     "predicate's frame is one its rule declares"),
+    "TestTheFrameVerdictRows": (
+        "external", "the frame-verdict rows the owner specified (C3-c) "
+                    "and signed 2026-09-19, row for row, as a function"),
+    "TestRuleSetsAndFrames": (
+        "invariant", "product rule: a rule set declares its frames and "
+                     "both declaration invariants hold; money is not a "
+                     "dashboard domain; the frames leaf module is a leaf "
+                     "with one distinct opener and anchor per frame"),
     "TestTheSignedWeightTable": (
         "external", "the weight and confidence table the owner signed on "
                     "2026-09-16, row for row, with the two amendments"),
