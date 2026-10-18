@@ -759,14 +759,14 @@ def client():
 
 @pytest.fixture(scope="module")
 def page(client):
-    resp = client.post("/", data=GATE_FORM)
+    resp = client.post("/chart", data=GATE_FORM)
     assert resp.status_code == 200
     return resp.get_data(as_text=True)
 
 
 class TestPhase6FlaskUI:
     def test_birth_form_renders_blank_and_universal(self, client):
-        resp = client.get("/")
+        resp = client.get("/chart")
         assert resp.status_code == 200
         html = resp.get_data(as_text=True)
         for field in ("name", "date", "time", "lat", "lon", "tz", "place"):
@@ -830,7 +830,7 @@ class TestPhase6FlaskUI:
         mask and the numeric keypad TOGETHER. Dropping either resurrects one
         of the two bugs.
         """
-        html = client.get("/").get_data(as_text=True)
+        html = client.get("/chart").get_data(as_text=True)
         form = html[html.index('<form method="post"'):html.index("</form>")]
         tags = {m.group(1): m.group(0) for m in
                 re.finditer(r'<input id="(\w+)"[^>]*>', form, re.S)}
@@ -861,7 +861,7 @@ class TestPhase6FlaskUI:
         and 4 March to half the world. The hint carries it, so nobody has to
         guess which chart they are casting.
         """
-        html = client.get("/").get_data(as_text=True)
+        html = client.get("/chart").get_data(as_text=True)
         assert "Time of birth · 24-hour · e.g. 13:12" in html
         assert "Date of birth · day first · e.g. 25/03/1994" in html
         assert 'placeholder="HH:MM"' in html
@@ -877,7 +877,7 @@ class TestPhase6FlaskUI:
         on a bare keypad. Anything else must not declare it.
         """
         from app import parse_time, _parse_date
-        html = client.get("/").get_data(as_text=True)
+        html = client.get("/chart").get_data(as_text=True)
         form = html[html.index('<form method="post"'):html.index("</form>")]
         tags = {m.group(1): m.group(0) for m in
                 re.finditer(r'<input id="(\w+)"[^>]*>', form, re.S)}
@@ -944,7 +944,7 @@ class TestPhase6FlaskUI:
 
         A visitor typing US order gets told the order, not just 'invalid'.
         """
-        resp = client.post("/", data={**GATE_FORM, "date": "12/25/1994"})
+        resp = client.post("/chart", data={**GATE_FORM, "date": "12/25/1994"})
         assert resp.status_code == 400
         html = resp.get_data(as_text=True)
         assert "day first" in html
@@ -961,7 +961,7 @@ class TestPhase6FlaskUI:
         signatures = set()
         for spelling in ("06:57", "6:57 AM", "0657"):
             html = client.post(
-                "/", data={**GATE_FORM, "time": spelling}
+                "/chart", data={**GATE_FORM, "time": spelling}
             ).get_data(as_text=True)
             signatures.add((
                 _re.search(r"Leo \d+°\d+′\d+″", html).group(0),
@@ -976,27 +976,27 @@ class TestPhase6FlaskUI:
 
     def test_twelve_hour_input_casts_identical_chart(self, client, page):
         # 06:57 posted as "6:57 AM" must cast the same lagna.
-        resp = client.post("/", data={**GATE_FORM, "time": "6:57 AM"})
+        resp = client.post("/chart", data={**GATE_FORM, "time": "6:57 AM"})
         assert resp.status_code == 200
         assert "Leo 11°05′" in resp.get_data(as_text=True)
 
     def test_friendly_inline_time_error(self, client):
-        resp = client.post("/", data={**GATE_FORM, "time": "25:00"})
+        resp = client.post("/chart", data={**GATE_FORM, "time": "25:00"})
         assert resp.status_code == 400
         html = resp.get_data(as_text=True)
         assert "the hour runs 0–23" in html
         assert f'value="{GATE_FORM["date"]}"' in html  # values preserved
 
     def test_missing_timezone_is_never_guessed(self, client):
-        resp = client.post("/", data={**GATE_FORM, "tz": ""})
+        resp = client.post("/chart", data={**GATE_FORM, "tz": ""})
         assert resp.status_code == 400
         assert "must never be guessed" in resp.get_data(as_text=True)
 
     def test_optional_name_on_dashboard(self, client):
-        resp = client.post("/", data={**GATE_FORM, "name": "Test Person"})
+        resp = client.post("/chart", data={**GATE_FORM, "name": "Test Person"})
         assert "Chart of Test Person" in resp.get_data(as_text=True)
         # Anonymous fallback:
-        resp = client.post("/", data=GATE_FORM)
+        resp = client.post("/chart", data=GATE_FORM)
         assert "Janma kundli" in resp.get_data(as_text=True)
 
     def test_cities_api_offline_lookup(self, client):
@@ -1013,7 +1013,7 @@ class TestPhase6FlaskUI:
         assert any("São Paulo, São Paulo, Brazil" == x for x in labels)
 
     def test_non_reference_chart_renders(self, client):
-        resp = client.post("/", data={
+        resp = client.post("/chart", data={
             "name": "", "date": "1990-03-15", "time": "08:45",
             "lat": "19.07283", "lon": "72.88261", "tz": "Asia/Kolkata",
             "place": "Mumbai, Maharashtra, India",
@@ -1069,12 +1069,12 @@ class TestPhase6FlaskUI:
         assert "Magha" in page                 # Lagna's nakshatra
 
     def test_bad_input_returns_form_error(self, client):
-        resp = client.post("/", data={**GATE_FORM, "date": "not-a-date"})
+        resp = client.post("/chart", data={**GATE_FORM, "date": "not-a-date"})
         assert resp.status_code == 400
         # Unparseable input is told the shape it should have had...
         assert "day first" in resp.get_data(as_text=True)
         # ...and a well-shaped date that does not exist is told that instead.
-        resp = client.post("/", data={**GATE_FORM, "date": "31/02/1998"})
+        resp = client.post("/chart", data={**GATE_FORM, "date": "31/02/1998"})
         assert resp.status_code == 400
         assert "not a real calendar date" in resp.get_data(as_text=True)
 
@@ -1258,7 +1258,7 @@ class TestPlateGeometry:
             "lon": "77.21", "tz": "+05:30", "place": "Test"}
 
     def _plate(self, client, layer, form=None):
-        html = client.post("/", data=form or self.FORM).get_data(as_text=True)
+        html = client.post("/chart", data=form or self.FORM).get_data(as_text=True)
         d1 = html[html.index('aria-label="North-Indian chart d1"'):]
         d1 = d1[:d1.index("</svg>")]
         block = d1[d1.index(f"grahas {layer}"):]
@@ -2265,7 +2265,7 @@ class TestDeployability:
             assert hit is None, f"{path.name}: {hit.group()!r}"
 
     def test_landing_states_what_and_why_with_one_cta(self, client):
-        html = client.get("/").get_data(as_text=True)
+        html = client.get("/chart").get_data(as_text=True)
         assert "sidereal Vedic chart" in html          # what it is
         assert "Every reading shows its computation" in html   # differentiator
         assert html.count('class="cta"') == 1          # a single CTA
@@ -2628,7 +2628,7 @@ MATCH_FORM = {
 
 @pytest.fixture(scope="module")
 def match_page(client):
-    resp = client.post("/", data=MATCH_FORM)
+    resp = client.post("/chart", data=MATCH_FORM)
     assert resp.status_code == 200
     return resp.get_data(as_text=True)
 
@@ -2663,7 +2663,7 @@ class TestMatchUI:
         assert 'id="match"' not in page
 
     def test_partner_place_without_coords_is_refused(self, client):
-        resp = client.post("/", data={**MATCH_FORM, "p_tz": "", "p_lat": ""})
+        resp = client.post("/chart", data={**MATCH_FORM, "p_tz": "", "p_lat": ""})
         assert resp.status_code == 400
         # the apostrophe renders escaped, so match either side of it
         html = resp.get_data(as_text=True)
@@ -2721,7 +2721,7 @@ class TestAskOutsideTheDashaRange:
         form = {"name": "", "date": "1905-06-15", "time": "12:00",
                 "lat": "19.07283", "lon": "72.88261",
                 "tz": "Asia/Kolkata", "place": "Mumbai"}
-        response = client.post("/", data=form)
+        response = client.post("/chart", data=form)
         assert response.status_code == 200, (
             "a chart older than the Vimśottarī cycle failed to render")
         page = response.get_data(as_text=True)
@@ -2740,7 +2740,7 @@ class TestAskOutsideTheDashaRange:
             form = {"name": "", "date": f"{year}-06-15", "time": "12:00",
                     "lat": "19.07283", "lon": "72.88261",
                     "tz": "Asia/Kolkata", "place": "Mumbai"}
-            assert client.post("/", data=form).status_code == 200, year
+            assert client.post("/chart", data=form).status_code == 200, year
 
     def test_the_dasha_lenses_go_silent_rather_than_guessing(self):
         """They must not invent a period. No placements, no indications,
@@ -3800,7 +3800,7 @@ class TestAgentLimitsAndLog:
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-not-a-real-key")
         cap = str(agent_mod.MAX_QUESTIONS_PER_SESSION)
         assert cap == "5"
-        page = client.post("/", data=GATE_FORM).get_data(as_text=True)
+        page = client.post("/chart", data=GATE_FORM).get_data(as_text=True)
         assert f'<span id="askremaining">{cap}</span>' in page
         assert f'<span id="agentremaining">{cap}</span>' in page
         assert f"Limit {cap} questions" in page
@@ -3808,7 +3808,7 @@ class TestAgentLimitsAndLog:
         # And it FOLLOWS the constant rather than happening to match it:
         # move the cap and all three sites move with it.
         monkeypatch.setattr(agent_mod, "MAX_QUESTIONS_PER_SESSION", 7)
-        page = client.post("/", data=GATE_FORM).get_data(as_text=True)
+        page = client.post("/chart", data=GATE_FORM).get_data(as_text=True)
         assert '<span id="askremaining">7</span>' in page
         assert '<span id="agentremaining">7</span>' in page
         assert "Limit 7 questions" in page
@@ -3917,7 +3917,7 @@ class TestAgentEndpoint:
             assert self._school_seen(client, monkeypatch) == "classical"
         # The same via the real page flow: one reader renders a chart under a
         # non-default school, the next asks a question in that same worker.
-        client.post("/", data={**GATE_FORM, "school_node_reach": "none"})
+        client.post("/chart", data={**GATE_FORM, "school_node_reach": "none"})
         assert self._school_seen(client, monkeypatch) == "classical"
 
     def test_the_page_echoes_the_school_back_beside_the_birth_details(
@@ -3927,7 +3927,7 @@ class TestAgentEndpoint:
         import html
         import schools
         page = client.post(
-            "/", data={**GATE_FORM, "school_node_reach": "none"}
+            "/chart", data={**GATE_FORM, "school_node_reach": "none"}
         ).get_data(as_text=True)
         payload = json.loads(html.unescape(
             re.search(r"data-birth='([^']*)'", page).group(1)))
@@ -4114,7 +4114,7 @@ class TestAgentEndpoint:
     def test_panel_renders_with_suggestions_and_disclosure(
             self, client, monkeypatch):
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-not-a-real-key")
-        page = client.post("/", data=GATE_FORM).get_data(as_text=True)
+        page = client.post("/chart", data=GATE_FORM).get_data(as_text=True)
         assert 'id="agent"' in page
         assert 'href="#cat-ask"' in page     # the agent lives under Ask
         # Three in the agent panel, and three more on the Ask SCREEN, which
@@ -6087,8 +6087,8 @@ class TestComputationOptions:
         try:
             offenders = []
             calls = {
-                "GET /": lambda: client.get("/"),
-                "POST /": lambda: client.post("/", data=GATE_FORM),
+                "GET /": lambda: client.get("/chart"),
+                "POST /": lambda: client.post("/chart", data=GATE_FORM),
                 "GET /api/cities": lambda: client.get("/api/cities?q=mumbai"),
                 "POST /ask": lambda: client.post("/ask", json={
                     "sid": "leak-survey", "question": "Where is my Moon?",
@@ -6189,7 +6189,7 @@ class TestComputationOptions:
                     f"{opt.id}/{ans.id}: {len(sentences)} sentences")
 
     def test_the_form_pre_selects_the_recommended_answer(self, client):
-        html = client.get("/").get_data(as_text=True)
+        html = client.get("/chart").get_data(as_text=True)
         import schools
         for opt in schools.OPTIONS.values():
             marker = (f'name="school_{opt.id}" value="{opt.default}"')
@@ -6228,7 +6228,7 @@ class TestComputationOptions:
             assert opt.unavailable[:40] in page, opt.id
 
         for opt in real_dead:
-            obeys_the_rule(opt, client.get("/").get_data(as_text=True))
+            obeys_the_rule(opt, client.get("/chart").get_data(as_text=True))
 
         # And the machinery itself, against an option that is not live by
         # construction — so this cannot go vacuous again.
@@ -6248,8 +6248,8 @@ class TestComputationOptions:
         )
         monkeypatch.setitem(schools.OPTIONS, probe.id, probe)
         monkeypatch.setitem(schools.DEFAULTS, probe.id, probe.default)
-        obeys_the_rule(probe, client.get("/").get_data(as_text=True))
-        assert "disabled" in client.get("/").get_data(as_text=True)
+        obeys_the_rule(probe, client.get("/chart").get_data(as_text=True))
+        assert "disabled" in client.get("/chart").get_data(as_text=True)
 
     def test_every_live_answer_actually_changes_a_computed_value(self):
         """THE INVARIANT THIS WHOLE FILE RESTS ON.
@@ -6404,7 +6404,7 @@ class TestComputationOptions:
         for choice in ("classical", "none"):
             body = dict(GATE_FORM)
             body["school_node_reach"] = choice
-            html = client.post("/", data=body).get_data(as_text=True)
+            html = client.post("/chart", data=body).get_data(as_text=True)
             assert html.count("schoolstamp") >= 2
             with schools.use({"node_reach": choice}):
                 assert schools.chosen("node_reach").school in html
@@ -6413,7 +6413,7 @@ class TestComputationOptions:
                                                                     client):
         body = dict(GATE_FORM)
         body["school_node_reach"] = "none"
-        html = client.post("/", data=body).get_data(as_text=True)
+        html = client.post("/chart", data=body).get_data(as_text=True)
         assert "not the default" in html
         assert "schoolsum moved" in html
         # …and the reader can change it again without retyping the birth
@@ -6438,7 +6438,7 @@ class TestComputationOptions:
                                     "hora_scheme": "twelve",
                                     "drekkana_scheme": "parashari",
                                     "bhamsa_scheme": "forward"}
-        html = client.post("/", data=GATE_FORM).get_data(as_text=True)
+        html = client.post("/chart", data=GATE_FORM).get_data(as_text=True)
         assert "Computed with the recommended settings throughout." in html
 
     def test_a_hand_edited_request_cannot_select_an_unknown_school(self,
@@ -6448,15 +6448,15 @@ class TestComputationOptions:
             schools.DEFAULTS
         assert schools.normalise({"nonsense": "x"}) == schools.DEFAULTS
         assert schools.normalise(None) == schools.DEFAULTS
-        resp = client.post("/", data={**GATE_FORM,
+        resp = client.post("/chart", data={**GATE_FORM,
                                       "school_node_reach": "made-up"})
         assert resp.status_code == 200
 
     def test_the_selection_does_not_leak_between_requests(self, client):
         """A worker thread is reused. One reader's answers must not become
         the next reader's chart."""
-        client.post("/", data={**GATE_FORM, "school_node_reach": "none"})
-        html = client.get("/").get_data(as_text=True)
+        client.post("/chart", data={**GATE_FORM, "school_node_reach": "none"})
+        html = client.get("/chart").get_data(as_text=True)
         marker = 'name="school_node_reach" value="classical"'
         assert "checked" in html[html.index(marker):html.index(marker) + 260]
 
@@ -6844,7 +6844,7 @@ class TestDomainRestructure:
     @pytest.fixture(scope="class")
     @classmethod
     def page(cls, client):
-        return client.post("/", data=GATE_FORM).get_data(as_text=True)
+        return client.post("/chart", data=GATE_FORM).get_data(as_text=True)
 
     @pytest.fixture(scope="class")
     @classmethod
@@ -6876,7 +6876,7 @@ class TestDomainRestructure:
     def test_the_match_section_is_re_homed_too(self, client):
         """It only renders when a partner is supplied, so it needs its own
         request rather than riding on the shared one."""
-        html = client.post("/", data=MATCH_FORM).get_data(as_text=True)
+        html = client.post("/chart", data=MATCH_FORM).get_data(as_text=True)
         explore = html[html.index('id="view-explore"'):
                        html.index("<!-- /view-explore -->")]
         assert 'id="match"' in explore
@@ -6904,7 +6904,7 @@ class TestDomainRestructure:
         assert 'class="identity"' in readings
 
     def test_the_identity_strip_is_exactly_three_lines(self, chart, client):
-        html = client.post("/", data=GATE_FORM).get_data(as_text=True)
+        html = client.post("/chart", data=GATE_FORM).get_data(as_text=True)
         block = html[html.index('class="identity"'):]
         block = block[:block.index("</ul>")]
         assert block.count("<li>") == 3
@@ -6930,7 +6930,7 @@ class TestDomainRestructure:
         """A card with no teaser is a menu item; the teaser is what makes it
         an answer. It must be composed, not canned."""
         import domainread
-        html = client.post("/", data=GATE_FORM).get_data(as_text=True)
+        html = client.post("/chart", data=GATE_FORM).get_data(as_text=True)
         readings = {r.domain.id: r for r in
                     domainread.read_all(chart, datetime.now(timezone.utc))}
         assert len(readings) == 5
@@ -9546,7 +9546,7 @@ class TestTodayScreen:
 
     def test_the_day_header_names_the_day_twice(self, chart, client):
         """Once by the civil calendar, once by the Moon."""
-        html = client.post("/", data=GATE_FORM).get_data(as_text=True)
+        html = client.post("/chart", data=GATE_FORM).get_data(as_text=True)
         head = re.search(r'<h1 class="dayhead">([^<]+)</h1>', html)
         assert head, "no day header"
         text = head.group(1)
@@ -10596,7 +10596,7 @@ class TestTimezoneResolution:
         """End to end: a stale name renders its own explanation, and the
         legacy alias renders a chart."""
         def cast(tz):
-            return client.post("/", data={
+            return client.post("/chart", data={
                 "name": "", "date": "1990-06-15", "time": "12:00",
                 "lat": "22.57", "lon": "88.36", "tz": tz, "place": "Kolkata"})
         bad = cast("Mars/Olympus")
@@ -11653,7 +11653,7 @@ class TestTheTabRow:
 
     def test_the_row_is_not_shown_before_a_chart_exists(self, client):
         """There is no Today until there is a chart."""
-        blank = client.get("/").get_data(as_text=True)
+        blank = client.get("/chart").get_data(as_text=True)
         assert 'class="tabs"' not in blank
 
     def test_a_fold_marks_the_tab_that_owns_it(self):
@@ -12005,7 +12005,7 @@ class TestTransitsPanelNowAndUpcoming:
         """Found while rebuilding the pane: the Sky ledger's "Contacts
         today" block was guarded on conjunctions alone, so on any day with
         none — most days — the nine drishti rows vanished with it."""
-        page = client.post("/", data=GATE_FORM).get_data(as_text=True)
+        page = client.post("/chart", data=GATE_FORM).get_data(as_text=True)
         block = page[page.index("<!-- Gocara / transits -->"):]
         block = block[:block.index("Rāhu and Ketu reach")]
         aspects = block.count("aspects natal")
@@ -13045,7 +13045,7 @@ class TestOneHouseWordTable:
                     "time": f"{b.hour:02d}:{b.minute:02d}",
                     "lat": str(b.latitude), "lon": str(b.longitude),
                     "tz": b.tz, "place": b.place}
-            html = client.post("/", data=form).get_data(as_text=True)
+            html = client.post("/chart", data=form).get_data(as_text=True)
             for phrase in self.RETIRED:
                 assert phrase not in html, (key, phrase)
             for name in PLANETS:

@@ -175,7 +175,7 @@
 
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 
-<form method="post" class="birthform" id="cast" autocomplete="off">
+<form method="post" action="/chart" class="birthform" id="cast" autocomplete="off">
   <div class="field">
     <label for="name">Name <span class="opt">· optional</span></label>
     <input id="name" name="name" type="text" value="{{ form.get('name', '') }}">
@@ -608,7 +608,7 @@
       {% if schools.changed %}<span class="chip changed">{{ schools.changed
       | length }} changed</span>{% endif %}
     </summary>
-    <form method="post" action="/" class="schoolform">
+    <form method="post" action="/chart" class="schoolform">
       {% for k in ["name","date","time","place","lat","lon","tz",
                    "p_name","p_date","p_time","p_place","p_lat","p_lon","p_tz"] %}
       <input type="hidden" name="{{ k }}" value="{{ form.get(k, '') }}">
@@ -1572,7 +1572,7 @@
   {{ data.birth.year }}-{{ "%02d" | format(data.birth.month) }}-{{ "%02d" | format(data.birth.day) }}
   {{ "%02d" | format(data.birth.hour) }}:{{ "%02d" | format(data.birth.minute) }} ({{ data.birth.tz }}) ·
   {{ data.birth.latitude }}°, {{ data.birth.longitude }}°</p>
-  <a class="again" href="/">← Cast another chart</a>
+  <a class="again" href="/chart">← Cast another chart</a>
 </section>
 
 <!-- Phase 11: 20-card literacy path -->
