@@ -30,6 +30,8 @@ from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
 
+import reference
+
 from dashas import nakshatra_of, nakshatra_table, vimshottari
 from ask import ChartContext, ask_all
 from pancanga import pancanga_for
@@ -1754,8 +1756,16 @@ def birth_from_fields(fields, prefix: str = "") -> BirthData:
     )
 
 
-@app.route("/", methods=["GET", "POST"])
+@app.route("/")
 def index():
+    """The reference — two tabs, Planets and Houses. The front door for now;
+    the chart dashboard lives at /chart until the reference is complete."""
+    return render_template("reference.html", grahas=reference.GRAHAS,
+                           bhavas=reference.BHAVAS)
+
+
+@app.route("/chart", methods=["GET", "POST"])
+def chart():
     if request.method == "GET":
         # Reset explicitly: a worker thread is reused between requests, and
         # a GET must not inherit the previous visitor's answers.
