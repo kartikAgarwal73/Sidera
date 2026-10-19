@@ -572,6 +572,8 @@ reading/          the daily reading: detect · select · compose · fragments
 today.py          the day's dated lines, both edges found by bisection
 explain.py        three-layer explanations with confidence tags
 lessons.py        the 20-card literacy path
+reference.py      the reference under Explore › Learn: nine grahas, twelve
+                  bhāvas, every claim graded verse / convention / lore
 fixtures.py       the two fictional charts every gate runs on
 test_gates.py     the gate suite       test_hygiene.py   guards on the gates
 fixtures_pyjhora.json   a second implementation's answers (external gate)

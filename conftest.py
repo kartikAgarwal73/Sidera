@@ -437,6 +437,11 @@ CLASS_DEFAULT: dict[str, tuple[str, str]] = {
                     "HOUSE_POLYGONS — an independently authored "
                     "North-Indian plate; evaluated and NOT adopted, see "
                     "ui-design/RENDERER-EVALUATION.md"),
+    "TestReferenceUnderLearn": (
+        "invariant", "product rule: the root is the dashboard, and the "
+                     "planets-and-houses reference lives under Explore › "
+                     "Learn with every card from reference.py and its own "
+                     "addresses"),
 }
 
 # Per-test overrides, keyed "Class::test_name" (parametrisation stripped).
