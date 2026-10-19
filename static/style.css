@@ -1539,7 +1539,11 @@ button.cast.recast { margin-top: 4px; }
 #view-explore[data-showing="ask"] div[data-cat="ask"],
 #view-explore[data-showing="learn"] section[data-cat="learn"],
 #view-explore[data-showing="learn"] .note[data-cat="learn"],
-#view-explore[data-showing="learn"] div[data-cat="learn"] { display: block; }
+#view-explore[data-showing="learn"] div[data-cat="learn"],
+/* The reference's two sub-views, filed under Learn: the same rule, so a
+   pane is on screen only when it is the one opened. */
+#view-explore[data-showing="planets"] section[data-cat="planets"],
+#view-explore[data-showing="houses"] section[data-cat="houses"] { display: block; }
 
 .exindex { padding-top: 4px; }
 /* The index rows: a contents page for the technical half. Nothing here is
@@ -2034,3 +2038,109 @@ button.cast.recast { margin-top: 4px; }
     padding-top: 10px;
   }
 }
+
+/* --- THE REFERENCE, UNDER LEARN -----------------------------------------
+   Two rows in the Learn category open a pane each: an index on the left,
+   one card on the right; on a phone the index is a strip above the card.
+   Every size is a role token and every colour an ink or the one accent —
+   nothing here that the rest of the page does not already use. */
+.refrows { border-top: 1px solid var(--divider); margin-top: 14px; }
+.refrow {
+  display: grid; grid-template-columns: 1fr auto;
+  grid-template-areas: "title more" "desc desc";
+  column-gap: 16px; row-gap: 6px;
+  padding: 16px 0 17px; border-bottom: 1px solid var(--divider);
+  text-decoration: none; color: inherit;
+}
+.refrow-title {
+  grid-area: title; font-family: var(--font-heading);
+  font-size: var(--t-head); line-height: 1.15; color: var(--ink);
+}
+.refrow-desc {
+  grid-area: desc; font-size: var(--t-body); line-height: 1.6;
+  color: var(--ink-60); max-width: 58ch;
+}
+.refrow-more {
+  grid-area: more; font-size: var(--t-mark); letter-spacing: .12em;
+  font-variant-caps: all-small-caps; color: var(--accent-ink);
+  font-variant-numeric: tabular-nums; white-space: nowrap; padding-top: 4px;
+}
+.refrow:hover .refrow-title, .refrow:hover .refrow-more { color: var(--accent-ink); }
+
+.refpane .backlink { display: inline-block; margin-bottom: 10px; }
+.ref-wrap { display: grid; grid-template-columns: 1fr; gap: 18px; margin-top: 14px; }
+@media (min-width: 900px) {
+  .ref-wrap { grid-template-columns: 168px minmax(0, 1fr); gap: 32px; }
+  /* Pinned BELOW the sticky section nav — the same 76px the ledgers keep
+     clear of it — or the first entry slides under it while reading. */
+  .ref-index { position: sticky; top: 76px; align-self: start; max-height: calc(100vh - 92px); overflow-y: auto; }
+}
+.ref-index { list-style: none; margin: 0; padding: 0; border-top: 1.5px solid var(--divider); }
+.ref-index li { border-bottom: 1px solid var(--hairline); }
+.ref-index a {
+  display: flex; align-items: baseline; gap: 10px; padding: 9px 0 10px;
+  text-decoration: none; color: var(--ink-70); font-size: var(--t-body);
+}
+.ref-index a:hover, .ref-index a.active { color: var(--ink); }
+.ref-index a.active .ref-ix-name { border-bottom: 1px solid var(--accent); }
+.ref-ix-glyph { font-family: var(--font-heading); width: 1.4em; color: var(--accent-ink); font-size: var(--t-head); }
+.ref-ix-num { font-variant-numeric: tabular-nums; width: 1.6em; color: var(--ink-50); font-size: var(--t-mark); letter-spacing: .06em; }
+.ref-ix-sub { display: block; font-size: var(--t-label); color: var(--ink-50); margin-top: 1px; }
+/* On a phone the index is a strip, not a column, so the card is in view —
+   the same device as the tab row: bleed to the gutters, scroll sideways. */
+@media (max-width: 899px) {
+  .ref-index { display: flex; gap: 18px; overflow-x: auto; border-top: 0; border-bottom: 1px solid var(--divider); scrollbar-width: none; margin: 0 -24px; padding: 0 24px; }
+  .ref-index::-webkit-scrollbar { display: none; }
+  .ref-index li { border-bottom: 0; flex: none; }
+  .ref-index a { padding: 8px 0 10px; white-space: nowrap; }
+  .ref-index .ref-ix-sub { display: none; }
+}
+
+.ref-card { display: none; }
+.ref-card.showing { display: block; }
+.ref-mark {
+  font-size: var(--t-mark); letter-spacing: .16em; font-variant-caps: all-small-caps;
+  text-transform: lowercase; color: var(--ink-50); font-variant-numeric: tabular-nums;
+}
+.ref-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.ref-name {
+  font-family: var(--font-heading); font-weight: 400; margin: 6px 0 0;
+  font-size: var(--t-title); line-height: 1.1; letter-spacing: -.004em;
+}
+.ref-glyph { font-family: var(--font-heading); font-size: var(--t-title); color: var(--accent); }
+.ref-sanskrit { font-family: var(--font-heading); color: var(--ink-50); font-size: var(--t-head); }
+.ref-tagline { font-size: var(--t-head); line-height: 1.4; color: var(--ink-70); margin: 10px 0 0; max-width: 56ch; }
+.ref-lead { font-size: var(--t-body); line-height: 1.62; margin: 16px 0 0; max-width: 62ch; }
+
+/* Anything anyone reads a sentence of inside a category is 16 — the facts
+   rows, the sources and the legend included, which the type-floor walk
+   measures on both panes. */
+.ref-facts { border-top: 1.5px solid var(--divider); margin: 22px 0 0; padding: 0; font-size: var(--t-body); }
+.ref-facts div { display: grid; grid-template-columns: minmax(6.5em, 30%) 1fr; gap: 10px; padding: 9px 0 10px; border-bottom: 1px solid var(--hairline); }
+.ref-facts dt { color: var(--ink-50); font-variant-caps: all-small-caps; letter-spacing: .08em; }
+.ref-facts dd { margin: 0; line-height: 1.45; }
+
+.ref-sec { border-top: 1px solid var(--hairline); padding-top: 16px; margin-top: 22px; max-width: 64ch; }
+/* A section head inside the card sits UNDER the pane's own heading (the
+   kicker, at --t-head inside a category): body size in the heading face,
+   the weight the lesson cards' titles use. */
+.ref-sec h3 { font-family: var(--font-heading); font-weight: 600; font-size: var(--t-body); margin: 0; display: flex; gap: 12px; align-items: baseline; }
+.ref-sec p { font-size: var(--t-body); line-height: 1.62; margin: 10px 0 0; }
+.ref-governs { margin: 10px 0 0; padding: 0 0 0 1.1em; line-height: 1.6; font-size: var(--t-body); }
+.ref-governs li { margin: 4px 0; }
+/* The grade is a small-caps marker, not a tag: no box, no radius — the
+   dossier's rule — and the one accent only for a numbered verse. */
+.ref-grade { font-size: var(--t-mark); letter-spacing: .14em; font-variant-caps: all-small-caps; color: var(--ink-50); white-space: nowrap; }
+.ref-grade.verse { color: var(--accent-ink); }
+.ref-note { color: var(--ink-70); }
+.ref-lordin { margin: 10px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--hairline); }
+.ref-lordin li { display: grid; grid-template-columns: 2.6em 1fr; gap: 10px; padding: 8px 0 9px; border-bottom: 1px solid var(--hairline); font-size: var(--t-body); line-height: 1.5; }
+.ref-lordin b { font-weight: 500; font-variant-numeric: tabular-nums; color: var(--ink-50); }
+.ref-sources { margin-top: 26px; padding-top: 12px; border-top: 1.5px solid var(--divider); font-size: var(--t-body); color: var(--ink-50); line-height: 1.55; max-width: 64ch; }
+.ref-sources ul { margin: 6px 0 0; padding-left: 1.1em; }
+.ref-legend { font-size: var(--t-body); color: var(--ink-50); margin: 22px 0 0; max-width: 64ch; line-height: 1.6; }
+/* A planet's name or a house number that links to its card: the ink it
+   already had, a hairline under it, the accent on hover — a link, not a
+   widget. */
+a.refx { color: inherit; text-decoration: none; border-bottom: 1px solid var(--hairline); }
+a.refx:hover { color: var(--accent-ink); border-bottom-color: var(--accent-ink); }

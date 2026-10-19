@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, redirect, render_template, request
 
 import reference
 
@@ -1756,22 +1756,21 @@ def birth_from_fields(fields, prefix: str = "") -> BirthData:
     )
 
 
-@app.route("/")
+# The reference — nine grahas, twelve bhāvas — renders under Explore › Learn
+# on the dashboard, so every render of index.html carries it. Text, not
+# computation: reference.py's own gate (`python reference.py`) is what
+# vouches for it.
+REFERENCE_CONTEXT = {"grahas": reference.GRAHAS, "bhavas": reference.BHAVAS}
+
+
+@app.route("/", methods=["GET", "POST"])
 def index():
-    """The reference — two tabs, Planets and Houses. The front door for now;
-    the chart dashboard lives at /chart until the reference is complete."""
-    return render_template("reference.html", grahas=reference.GRAHAS,
-                           bhavas=reference.BHAVAS)
-
-
-@app.route("/chart", methods=["GET", "POST"])
-def chart():
     if request.method == "GET":
         # Reset explicitly: a worker thread is reused between requests, and
         # a GET must not inherit the previous visitor's answers.
         schools.set_active({})
         return render_template("index.html", data=None, error=None, form={},
-                               schools=schools.payload())
+                               schools=schools.payload(), **REFERENCE_CONTEXT)
 
     form = request.form
     # The reader's answers to the computation questions, held for the whole
@@ -1822,13 +1821,23 @@ def chart():
     except ValueError as exc:
         return render_template("index.html", data=None, form=form,
                                schools=schools.payload(),
-                               error=str(exc)), 400
+                               error=str(exc), **REFERENCE_CONTEXT), 400
     except Exception as exc:  # bad date/tz/coords — show it on the form
         return render_template("index.html", data=None, form=form,
                                schools=schools.payload(),
-                               error=f"Could not cast the chart: {exc}"), 400
+                               error=f"Could not cast the chart: {exc}",
+                               **REFERENCE_CONTEXT), 400
     return render_template("index.html", data=data, error=None, form=form,
-                           schools=schools.payload())
+                           schools=schools.payload(), **REFERENCE_CONTEXT)
+
+
+@app.route("/chart", methods=["GET", "POST"])
+def chart():
+    """For one day the dashboard was parked here. The address is kept only
+    as a permanent redirect: a link saved that day lands on the dashboard,
+    and a form still open from that day posts through to it — 308 keeps
+    the method and the body, where a 301 would drop them."""
+    return redirect("/", code=308 if request.method == "POST" else 301)
 
 
 @app.route("/ask", methods=["POST"])
