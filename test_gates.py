@@ -759,14 +759,14 @@ def client():
 
 @pytest.fixture(scope="module")
 def page(client):
-    resp = client.post("/chart", data=GATE_FORM)
+    resp = client.post("/", data=GATE_FORM)
     assert resp.status_code == 200
     return resp.get_data(as_text=True)
 
 
 class TestPhase6FlaskUI:
     def test_birth_form_renders_blank_and_universal(self, client):
-        resp = client.get("/chart")
+        resp = client.get("/")
         assert resp.status_code == 200
         html = resp.get_data(as_text=True)
         for field in ("name", "date", "time", "lat", "lon", "tz", "place"):
@@ -830,7 +830,7 @@ class TestPhase6FlaskUI:
         mask and the numeric keypad TOGETHER. Dropping either resurrects one
         of the two bugs.
         """
-        html = client.get("/chart").get_data(as_text=True)
+        html = client.get("/").get_data(as_text=True)
         form = html[html.index('<form method="post"'):html.index("</form>")]
         tags = {m.group(1): m.group(0) for m in
                 re.finditer(r'<input id="(\w+)"[^>]*>', form, re.S)}
@@ -861,7 +861,7 @@ class TestPhase6FlaskUI:
         and 4 March to half the world. The hint carries it, so nobody has to
         guess which chart they are casting.
         """
-        html = client.get("/chart").get_data(as_text=True)
+        html = client.get("/").get_data(as_text=True)
         assert "Time of birth · 24-hour · e.g. 13:12" in html
         assert "Date of birth · day first · e.g. 25/03/1994" in html
         assert 'placeholder="HH:MM"' in html
@@ -877,7 +877,7 @@ class TestPhase6FlaskUI:
         on a bare keypad. Anything else must not declare it.
         """
         from app import parse_time, _parse_date
-        html = client.get("/chart").get_data(as_text=True)
+        html = client.get("/").get_data(as_text=True)
         form = html[html.index('<form method="post"'):html.index("</form>")]
         tags = {m.group(1): m.group(0) for m in
                 re.finditer(r'<input id="(\w+)"[^>]*>', form, re.S)}
@@ -944,7 +944,7 @@ class TestPhase6FlaskUI:
 
         A visitor typing US order gets told the order, not just 'invalid'.
         """
-        resp = client.post("/chart", data={**GATE_FORM, "date": "12/25/1994"})
+        resp = client.post("/", data={**GATE_FORM, "date": "12/25/1994"})
         assert resp.status_code == 400
         html = resp.get_data(as_text=True)
         assert "day first" in html
@@ -961,7 +961,7 @@ class TestPhase6FlaskUI:
         signatures = set()
         for spelling in ("06:57", "6:57 AM", "0657"):
             html = client.post(
-                "/chart", data={**GATE_FORM, "time": spelling}
+                "/", data={**GATE_FORM, "time": spelling}
             ).get_data(as_text=True)
             signatures.add((
                 _re.search(r"Leo \d+°\d+′\d+″", html).group(0),
@@ -976,27 +976,27 @@ class TestPhase6FlaskUI:
 
     def test_twelve_hour_input_casts_identical_chart(self, client, page):
         # 06:57 posted as "6:57 AM" must cast the same lagna.
-        resp = client.post("/chart", data={**GATE_FORM, "time": "6:57 AM"})
+        resp = client.post("/", data={**GATE_FORM, "time": "6:57 AM"})
         assert resp.status_code == 200
         assert "Leo 11°05′" in resp.get_data(as_text=True)
 
     def test_friendly_inline_time_error(self, client):
-        resp = client.post("/chart", data={**GATE_FORM, "time": "25:00"})
+        resp = client.post("/", data={**GATE_FORM, "time": "25:00"})
         assert resp.status_code == 400
         html = resp.get_data(as_text=True)
         assert "the hour runs 0–23" in html
         assert f'value="{GATE_FORM["date"]}"' in html  # values preserved
 
     def test_missing_timezone_is_never_guessed(self, client):
-        resp = client.post("/chart", data={**GATE_FORM, "tz": ""})
+        resp = client.post("/", data={**GATE_FORM, "tz": ""})
         assert resp.status_code == 400
         assert "must never be guessed" in resp.get_data(as_text=True)
 
     def test_optional_name_on_dashboard(self, client):
-        resp = client.post("/chart", data={**GATE_FORM, "name": "Test Person"})
+        resp = client.post("/", data={**GATE_FORM, "name": "Test Person"})
         assert "Chart of Test Person" in resp.get_data(as_text=True)
         # Anonymous fallback:
-        resp = client.post("/chart", data=GATE_FORM)
+        resp = client.post("/", data=GATE_FORM)
         assert "Janma kundli" in resp.get_data(as_text=True)
 
     def test_cities_api_offline_lookup(self, client):
@@ -1013,7 +1013,7 @@ class TestPhase6FlaskUI:
         assert any("São Paulo, São Paulo, Brazil" == x for x in labels)
 
     def test_non_reference_chart_renders(self, client):
-        resp = client.post("/chart", data={
+        resp = client.post("/", data={
             "name": "", "date": "1990-03-15", "time": "08:45",
             "lat": "19.07283", "lon": "72.88261", "tz": "Asia/Kolkata",
             "place": "Mumbai, Maharashtra, India",
@@ -1069,12 +1069,12 @@ class TestPhase6FlaskUI:
         assert "Magha" in page                 # Lagna's nakshatra
 
     def test_bad_input_returns_form_error(self, client):
-        resp = client.post("/chart", data={**GATE_FORM, "date": "not-a-date"})
+        resp = client.post("/", data={**GATE_FORM, "date": "not-a-date"})
         assert resp.status_code == 400
         # Unparseable input is told the shape it should have had...
         assert "day first" in resp.get_data(as_text=True)
         # ...and a well-shaped date that does not exist is told that instead.
-        resp = client.post("/chart", data={**GATE_FORM, "date": "31/02/1998"})
+        resp = client.post("/", data={**GATE_FORM, "date": "31/02/1998"})
         assert resp.status_code == 400
         assert "not a real calendar date" in resp.get_data(as_text=True)
 
@@ -1258,7 +1258,7 @@ class TestPlateGeometry:
             "lon": "77.21", "tz": "+05:30", "place": "Test"}
 
     def _plate(self, client, layer, form=None):
-        html = client.post("/chart", data=form or self.FORM).get_data(as_text=True)
+        html = client.post("/", data=form or self.FORM).get_data(as_text=True)
         d1 = html[html.index('aria-label="North-Indian chart d1"'):]
         d1 = d1[:d1.index("</svg>")]
         block = d1[d1.index(f"grahas {layer}"):]
@@ -1905,7 +1905,21 @@ class TestPhase10AntiAnxiety:
             r"\b(doom|curse|cursed|disaster|catastroph\w*|fatal|dread\w*|"
             r"terrible|ruin\w*|widow\w*|death|dangerous|suffer\w*|"
             r"misfortune)\b", re.IGNORECASE)
-        for name, src in (("dashboard", page),
+        # The reference panes under Explore › Learn quote the classical
+        # texts in the texts' own words — the 8th is the house of death in
+        # every list from Parāśara on. This rule governs Sidera's composed
+        # voice, so the two panes are a PINNED exception rather than a hole:
+        # the words they carry today are listed here exactly, and any new
+        # fear language in reference.py fails this gate like anywhere else.
+        # The owner widens or lifts the pin by editing the list, not the
+        # scan. Everything else on the page is scanned as before.
+        panes = re.search(r'<section class="ledger refpane" id="planets".*?'
+                          r'<!-- Phase 11: 20-card literacy path -->', page, re.S)
+        assert panes, "the reference panes were not found"
+        dashboard = page[:panes.start()] + page[panes.end():]
+        quoted = sorted(w.lower() for w in banned.findall(panes.group(0)))
+        assert quoted == ["dangerous"] + ["death"] * 8 + ["dread"] * 2, quoted
+        for name, src in (("dashboard", dashboard),
                           ("doshas.py", open(doshas_mod.__file__).read()),
                           ("explain.py", open(explain_mod.__file__).read())):
             hit = banned.search(src)
@@ -2265,7 +2279,7 @@ class TestDeployability:
             assert hit is None, f"{path.name}: {hit.group()!r}"
 
     def test_landing_states_what_and_why_with_one_cta(self, client):
-        html = client.get("/chart").get_data(as_text=True)
+        html = client.get("/").get_data(as_text=True)
         assert "sidereal Vedic chart" in html          # what it is
         assert "Every reading shows its computation" in html   # differentiator
         assert html.count('class="cta"') == 1          # a single CTA
@@ -2628,7 +2642,7 @@ MATCH_FORM = {
 
 @pytest.fixture(scope="module")
 def match_page(client):
-    resp = client.post("/chart", data=MATCH_FORM)
+    resp = client.post("/", data=MATCH_FORM)
     assert resp.status_code == 200
     return resp.get_data(as_text=True)
 
@@ -2663,7 +2677,7 @@ class TestMatchUI:
         assert 'id="match"' not in page
 
     def test_partner_place_without_coords_is_refused(self, client):
-        resp = client.post("/chart", data={**MATCH_FORM, "p_tz": "", "p_lat": ""})
+        resp = client.post("/", data={**MATCH_FORM, "p_tz": "", "p_lat": ""})
         assert resp.status_code == 400
         # the apostrophe renders escaped, so match either side of it
         html = resp.get_data(as_text=True)
@@ -2721,7 +2735,7 @@ class TestAskOutsideTheDashaRange:
         form = {"name": "", "date": "1905-06-15", "time": "12:00",
                 "lat": "19.07283", "lon": "72.88261",
                 "tz": "Asia/Kolkata", "place": "Mumbai"}
-        response = client.post("/chart", data=form)
+        response = client.post("/", data=form)
         assert response.status_code == 200, (
             "a chart older than the Vimśottarī cycle failed to render")
         page = response.get_data(as_text=True)
@@ -2740,7 +2754,7 @@ class TestAskOutsideTheDashaRange:
             form = {"name": "", "date": f"{year}-06-15", "time": "12:00",
                     "lat": "19.07283", "lon": "72.88261",
                     "tz": "Asia/Kolkata", "place": "Mumbai"}
-            assert client.post("/chart", data=form).status_code == 200, year
+            assert client.post("/", data=form).status_code == 200, year
 
     def test_the_dasha_lenses_go_silent_rather_than_guessing(self):
         """They must not invent a period. No placements, no indications,
@@ -3800,7 +3814,7 @@ class TestAgentLimitsAndLog:
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-not-a-real-key")
         cap = str(agent_mod.MAX_QUESTIONS_PER_SESSION)
         assert cap == "5"
-        page = client.post("/chart", data=GATE_FORM).get_data(as_text=True)
+        page = client.post("/", data=GATE_FORM).get_data(as_text=True)
         assert f'<span id="askremaining">{cap}</span>' in page
         assert f'<span id="agentremaining">{cap}</span>' in page
         assert f"Limit {cap} questions" in page
@@ -3808,7 +3822,7 @@ class TestAgentLimitsAndLog:
         # And it FOLLOWS the constant rather than happening to match it:
         # move the cap and all three sites move with it.
         monkeypatch.setattr(agent_mod, "MAX_QUESTIONS_PER_SESSION", 7)
-        page = client.post("/chart", data=GATE_FORM).get_data(as_text=True)
+        page = client.post("/", data=GATE_FORM).get_data(as_text=True)
         assert '<span id="askremaining">7</span>' in page
         assert '<span id="agentremaining">7</span>' in page
         assert "Limit 7 questions" in page
@@ -3917,7 +3931,7 @@ class TestAgentEndpoint:
             assert self._school_seen(client, monkeypatch) == "classical"
         # The same via the real page flow: one reader renders a chart under a
         # non-default school, the next asks a question in that same worker.
-        client.post("/chart", data={**GATE_FORM, "school_node_reach": "none"})
+        client.post("/", data={**GATE_FORM, "school_node_reach": "none"})
         assert self._school_seen(client, monkeypatch) == "classical"
 
     def test_the_page_echoes_the_school_back_beside_the_birth_details(
@@ -3927,7 +3941,7 @@ class TestAgentEndpoint:
         import html
         import schools
         page = client.post(
-            "/chart", data={**GATE_FORM, "school_node_reach": "none"}
+            "/", data={**GATE_FORM, "school_node_reach": "none"}
         ).get_data(as_text=True)
         payload = json.loads(html.unescape(
             re.search(r"data-birth='([^']*)'", page).group(1)))
@@ -4114,7 +4128,7 @@ class TestAgentEndpoint:
     def test_panel_renders_with_suggestions_and_disclosure(
             self, client, monkeypatch):
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-not-a-real-key")
-        page = client.post("/chart", data=GATE_FORM).get_data(as_text=True)
+        page = client.post("/", data=GATE_FORM).get_data(as_text=True)
         assert 'id="agent"' in page
         assert 'href="#cat-ask"' in page     # the agent lives under Ask
         # Three in the agent panel, and three more on the Ask SCREEN, which
@@ -6087,8 +6101,8 @@ class TestComputationOptions:
         try:
             offenders = []
             calls = {
-                "GET /": lambda: client.get("/chart"),
-                "POST /": lambda: client.post("/chart", data=GATE_FORM),
+                "GET /": lambda: client.get("/"),
+                "POST /": lambda: client.post("/", data=GATE_FORM),
                 "GET /api/cities": lambda: client.get("/api/cities?q=mumbai"),
                 "POST /ask": lambda: client.post("/ask", json={
                     "sid": "leak-survey", "question": "Where is my Moon?",
@@ -6189,7 +6203,7 @@ class TestComputationOptions:
                     f"{opt.id}/{ans.id}: {len(sentences)} sentences")
 
     def test_the_form_pre_selects_the_recommended_answer(self, client):
-        html = client.get("/chart").get_data(as_text=True)
+        html = client.get("/").get_data(as_text=True)
         import schools
         for opt in schools.OPTIONS.values():
             marker = (f'name="school_{opt.id}" value="{opt.default}"')
@@ -6228,7 +6242,7 @@ class TestComputationOptions:
             assert opt.unavailable[:40] in page, opt.id
 
         for opt in real_dead:
-            obeys_the_rule(opt, client.get("/chart").get_data(as_text=True))
+            obeys_the_rule(opt, client.get("/").get_data(as_text=True))
 
         # And the machinery itself, against an option that is not live by
         # construction — so this cannot go vacuous again.
@@ -6248,8 +6262,8 @@ class TestComputationOptions:
         )
         monkeypatch.setitem(schools.OPTIONS, probe.id, probe)
         monkeypatch.setitem(schools.DEFAULTS, probe.id, probe.default)
-        obeys_the_rule(probe, client.get("/chart").get_data(as_text=True))
-        assert "disabled" in client.get("/chart").get_data(as_text=True)
+        obeys_the_rule(probe, client.get("/").get_data(as_text=True))
+        assert "disabled" in client.get("/").get_data(as_text=True)
 
     def test_every_live_answer_actually_changes_a_computed_value(self):
         """THE INVARIANT THIS WHOLE FILE RESTS ON.
@@ -6404,7 +6418,7 @@ class TestComputationOptions:
         for choice in ("classical", "none"):
             body = dict(GATE_FORM)
             body["school_node_reach"] = choice
-            html = client.post("/chart", data=body).get_data(as_text=True)
+            html = client.post("/", data=body).get_data(as_text=True)
             assert html.count("schoolstamp") >= 2
             with schools.use({"node_reach": choice}):
                 assert schools.chosen("node_reach").school in html
@@ -6413,7 +6427,7 @@ class TestComputationOptions:
                                                                     client):
         body = dict(GATE_FORM)
         body["school_node_reach"] = "none"
-        html = client.post("/chart", data=body).get_data(as_text=True)
+        html = client.post("/", data=body).get_data(as_text=True)
         assert "not the default" in html
         assert "schoolsum moved" in html
         # …and the reader can change it again without retyping the birth
@@ -6438,7 +6452,7 @@ class TestComputationOptions:
                                     "hora_scheme": "twelve",
                                     "drekkana_scheme": "parashari",
                                     "bhamsa_scheme": "forward"}
-        html = client.post("/chart", data=GATE_FORM).get_data(as_text=True)
+        html = client.post("/", data=GATE_FORM).get_data(as_text=True)
         assert "Computed with the recommended settings throughout." in html
 
     def test_a_hand_edited_request_cannot_select_an_unknown_school(self,
@@ -6448,15 +6462,15 @@ class TestComputationOptions:
             schools.DEFAULTS
         assert schools.normalise({"nonsense": "x"}) == schools.DEFAULTS
         assert schools.normalise(None) == schools.DEFAULTS
-        resp = client.post("/chart", data={**GATE_FORM,
+        resp = client.post("/", data={**GATE_FORM,
                                       "school_node_reach": "made-up"})
         assert resp.status_code == 200
 
     def test_the_selection_does_not_leak_between_requests(self, client):
         """A worker thread is reused. One reader's answers must not become
         the next reader's chart."""
-        client.post("/chart", data={**GATE_FORM, "school_node_reach": "none"})
-        html = client.get("/chart").get_data(as_text=True)
+        client.post("/", data={**GATE_FORM, "school_node_reach": "none"})
+        html = client.get("/").get_data(as_text=True)
         marker = 'name="school_node_reach" value="classical"'
         assert "checked" in html[html.index(marker):html.index(marker) + 260]
 
@@ -6844,7 +6858,7 @@ class TestDomainRestructure:
     @pytest.fixture(scope="class")
     @classmethod
     def page(cls, client):
-        return client.post("/chart", data=GATE_FORM).get_data(as_text=True)
+        return client.post("/", data=GATE_FORM).get_data(as_text=True)
 
     @pytest.fixture(scope="class")
     @classmethod
@@ -6876,7 +6890,7 @@ class TestDomainRestructure:
     def test_the_match_section_is_re_homed_too(self, client):
         """It only renders when a partner is supplied, so it needs its own
         request rather than riding on the shared one."""
-        html = client.post("/chart", data=MATCH_FORM).get_data(as_text=True)
+        html = client.post("/", data=MATCH_FORM).get_data(as_text=True)
         explore = html[html.index('id="view-explore"'):
                        html.index("<!-- /view-explore -->")]
         assert 'id="match"' in explore
@@ -6904,7 +6918,7 @@ class TestDomainRestructure:
         assert 'class="identity"' in readings
 
     def test_the_identity_strip_is_exactly_three_lines(self, chart, client):
-        html = client.post("/chart", data=GATE_FORM).get_data(as_text=True)
+        html = client.post("/", data=GATE_FORM).get_data(as_text=True)
         block = html[html.index('class="identity"'):]
         block = block[:block.index("</ul>")]
         assert block.count("<li>") == 3
@@ -6930,7 +6944,7 @@ class TestDomainRestructure:
         """A card with no teaser is a menu item; the teaser is what makes it
         an answer. It must be composed, not canned."""
         import domainread
-        html = client.post("/chart", data=GATE_FORM).get_data(as_text=True)
+        html = client.post("/", data=GATE_FORM).get_data(as_text=True)
         readings = {r.domain.id: r for r in
                     domainread.read_all(chart, datetime.now(timezone.utc))}
         assert len(readings) == 5
@@ -9221,7 +9235,9 @@ class TestTypeFloors:
     VIEWS = ("", "#readings", "#charts", "#chart-d1", "#chart-d9",
              "#chart-d10", "#explore", "#cat-charts", "#cat-periods",
              "#cat-sky", "#cat-combinations", "#cat-tables", "#cat-match",
-             "#cat-ask", "#cat-learn")
+             "#cat-ask", "#cat-learn",
+             # The reference's two panes under Learn, on their first card.
+             "#cat-planets", "#cat-houses")
 
     @classmethod
     @pytest.fixture(scope="class")
@@ -9546,7 +9562,7 @@ class TestTodayScreen:
 
     def test_the_day_header_names_the_day_twice(self, chart, client):
         """Once by the civil calendar, once by the Moon."""
-        html = client.post("/chart", data=GATE_FORM).get_data(as_text=True)
+        html = client.post("/", data=GATE_FORM).get_data(as_text=True)
         head = re.search(r'<h1 class="dayhead">([^<]+)</h1>', html)
         assert head, "no day header"
         text = head.group(1)
@@ -10596,7 +10612,7 @@ class TestTimezoneResolution:
         """End to end: a stale name renders its own explanation, and the
         legacy alias renders a chart."""
         def cast(tz):
-            return client.post("/chart", data={
+            return client.post("/", data={
                 "name": "", "date": "1990-06-15", "time": "12:00",
                 "lat": "22.57", "lon": "88.36", "tz": tz, "place": "Kolkata"})
         bad = cast("Mars/Olympus")
@@ -11653,7 +11669,7 @@ class TestTheTabRow:
 
     def test_the_row_is_not_shown_before_a_chart_exists(self, client):
         """There is no Today until there is a chart."""
-        blank = client.get("/chart").get_data(as_text=True)
+        blank = client.get("/").get_data(as_text=True)
         assert 'class="tabs"' not in blank
 
     def test_a_fold_marks_the_tab_that_owns_it(self):
@@ -12005,7 +12021,7 @@ class TestTransitsPanelNowAndUpcoming:
         """Found while rebuilding the pane: the Sky ledger's "Contacts
         today" block was guarded on conjunctions alone, so on any day with
         none — most days — the nine drishti rows vanished with it."""
-        page = client.post("/chart", data=GATE_FORM).get_data(as_text=True)
+        page = client.post("/", data=GATE_FORM).get_data(as_text=True)
         block = page[page.index("<!-- Gocara / transits -->"):]
         block = block[:block.index("Rāhu and Ketu reach")]
         aspects = block.count("aspects natal")
@@ -13045,7 +13061,7 @@ class TestOneHouseWordTable:
                     "time": f"{b.hour:02d}:{b.minute:02d}",
                     "lat": str(b.latitude), "lon": str(b.longitude),
                     "tz": b.tz, "place": b.place}
-            html = client.post("/chart", data=form).get_data(as_text=True)
+            html = client.post("/", data=form).get_data(as_text=True)
             for phrase in self.RETIRED:
                 assert phrase not in html, (key, phrase)
             for name in PLANETS:
@@ -14215,3 +14231,253 @@ class TestRuleSetsAndFrames:
         assert frames.second_reader(["dasha"], "Venus's period holds it until 2027.") == ["dasha"]
         assert frames.second_reader(["lagna"], "") == ["lagna"]
         assert frames.second_reader([], "anything") == []
+
+
+class TestReferenceUnderLearn:
+    """PR #1 made the planets-and-houses reference the front door and parked
+    the dashboard at /chart. The root is the dashboard again, exactly as
+    before, and the reference lives where the other teaching does — under
+    Explore › Learn, two rows that open a sub-view each — with every card
+    from reference.py and nothing lost.
+    """
+
+    def test_the_root_is_the_birth_form_again(self, client):
+        html = client.get("/").get_data(as_text=True)
+        assert 'id="cast"' in html
+        for field in ("name", "date", "time", "lat", "lon", "tz", "place"):
+            assert f'name="{field}"' in html, field
+        # The forms post home and the back-link goes home: no trace of the
+        # parking address anywhere in the template.
+        src = (HERE / "templates" / "index.html").read_text(encoding="utf-8")
+        assert "/chart" not in src
+        assert '<form method="post" class="birthform" id="cast"' in src
+        assert '<form method="post" action="/" class="schoolform">' in src
+        assert '<a class="again" href="/">' in src
+
+    def test_the_parking_address_is_only_a_permanent_redirect_home(self, client):
+        resp = client.get("/chart")
+        assert resp.status_code == 301
+        assert resp.headers["Location"] in ("/", "http://localhost/")
+        # A form still open from that day posts through to the root with
+        # its body intact (308), rather than being dropped to a GET (301)
+        # or refused (405). Nothing is cast at /chart itself.
+        resp = client.post("/chart", data=GATE_FORM)
+        assert resp.status_code == 308
+        assert resp.headers["Location"] in ("/", "http://localhost/")
+        assert "Janma kundli" not in resp.get_data(as_text=True)
+        # And the standalone page went with its route.
+        assert not (HERE / "templates" / "reference.html").exists()
+        from app import app as flask_app
+        rules = {r.rule for r in flask_app.url_map.iter_rules()}
+        assert "/" in rules and "/chart" in rules and "/reference" not in rules
+
+    def test_learn_lists_planets_and_houses_with_every_card(self, page):
+        """Nine and twelve, each card carrying the module's text verbatim —
+        tagline, lead, section titles, what a house governs, its lord in
+        each house, the sources — graded as the ledger grades."""
+        import reference
+        from markupsafe import escape
+        explore = page[page.index('<div class="view" id="view-explore"'):
+                       page.index("<!-- /view-explore -->")]
+        learn = explore[explore.index('id="learnref"'):
+                        explore.index('id="learnpath"')]
+        assert 'data-cat="learn"' in learn[:80]
+        assert 'class="refrow" href="#planets" data-cat="planets"' in learn
+        assert 'class="refrow" href="#houses" data-cat="houses"' in learn
+        assert 'class="refrow-title">Planets<' in learn
+        assert 'class="refrow-title">Houses<' in learn
+        planets = explore[explore.index('id="planets"'):explore.index('id="houses"')]
+        houses = explore[explore.index('id="houses"'):explore.index('id="learnpath"')]
+        assert 'data-cat="planets"' in planets[:80]
+        assert 'data-cat="houses"' in houses[:80]
+        cards = lambda pane: re.findall(r'<article class="ref-card( showing)?"', pane)
+        assert len(cards(planets)) == len(reference.GRAHAS) == 9
+        assert len(cards(houses)) == len(reference.BHAVAS) == 12
+        assert cards(planets).count(" showing") == 1
+        assert cards(houses).count(" showing") == 1
+        def card_of(pane, anchor):
+            card = pane[pane.index(anchor):]
+            return card[:card.index("</article>")]
+
+        def sections_render(card, sections, fixed_verse, who):
+            """Every section in order: its title with its grade marker as
+            the data carries it, then every paragraph of its body. And the
+            grade markers in the card are exactly the data's, plus the
+            template's own fixed `verse` marks — nothing invented, nothing
+            dropped, and not a subset check the legend could satisfy."""
+            pos = 0
+            for s in sections:
+                head = (f'<h3>{escape(s.title)} <span class="ref-grade '
+                        f'{s.grade}">{s.grade}</span></h3>' if s.grade
+                        else f"<h3>{escape(s.title)}</h3>")
+                i = card.find(head, pos)
+                assert i >= 0, (who, s.title, s.grade)
+                pos = i
+                for para in s.body.split("\n\n"):
+                    j = card.find(f"<p>{escape(para)}</p>", pos)
+                    assert j >= 0, (who, s.title, para[:40])
+                    pos = j
+            rendered = sorted(re.findall(r'class="ref-grade (\w+)"', card))
+            expected = sorted([s.grade for s in sections if s.grade]
+                              + ["verse"] * fixed_verse)
+            assert rendered == expected, (who, rendered, expected)
+
+        for g in reference.GRAHAS:
+            assert f'href="#planets/{g.key}"' in planets, g.key
+            card = card_of(planets, f'id="g-{g.key}"')
+            assert f'<span class="ref-glyph">{escape(g.glyph)}</span>' in card, g.key
+            assert f'<h2 class="ref-name">{escape(g.name)}</h2>' in card, g.key
+            assert f'<span class="ref-sanskrit">{escape(g.sanskrit)}</span>' in card, g.key
+            for text in (g.tagline, g.lead, *g.sources):
+                assert str(escape(text)) in card, (g.key, text[:40])
+            for k, v in g.facts:
+                assert f"<dt>{escape(k)}</dt><dd>{escape(v)}</dd>" in card, (g.key, k)
+            sections_render(card, g.sections, 0, g.key)
+        for b in reference.BHAVAS:
+            assert f'href="#houses/{b.number}"' in houses, b.number
+            card = card_of(houses, f'id="b-{b.number}"')
+            assert f'<h2 class="ref-name">{escape(b.name)}</h2>' in card, b.number
+            assert f'<span class="ref-sanskrit">{escape(b.sanskrit)}</span>' in card, b.number
+            for text in (b.tagline, b.lead, *b.sources):
+                assert str(escape(text)) in card, (b.number, text[:40])
+            for k, v in b.facts:
+                assert f"<dt>{escape(k)}</dt><dd>{escape(v)}</dd>" in card, (b.number, k)
+            governs = card[card.index('<ul class="ref-governs">'):]
+            governs = governs[:governs.index("</ul>")]
+            assert [m for m in re.findall(r"<li>(.*?)</li>", governs, re.S)] == \
+                [str(escape(line)) for line in b.governs], b.number
+            lordin = card[card.index('<ol class="ref-lordin">'):]
+            lordin = lordin[:lordin.index("</ol>")]
+            rows = re.findall(r"<li><b>(\d+)(st|nd|rd|th)</b><span>(.*?)</span></li>",
+                              lordin, re.S)
+            assert [(int(n), t) for n, _, t in rows] == \
+                [(n, str(escape(t))) for n, t in b.lord_in], b.number
+            assert [n + sfx for n, sfx, _ in rows] == [
+                "1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th",
+                "10th", "11th", "12th"], b.number
+            # What it governs and its lord in each house carry the template's
+            # two fixed `verse` marks beside the data's own.
+            sections_render(card, b.sections, 2, b.number)
+        # The module's own editorial gate, untouched, still passes.
+        assert reference.check() == []
+
+    def test_the_sub_views_are_filed_and_addressed_like_every_category(self):
+        css = (HERE / "static" / "style.css").read_text(encoding="utf-8")
+        src = (HERE / "templates" / "index.html").read_text(encoding="utf-8")
+        for cat in ("planets", "houses"):
+            assert (f'#view-explore[data-showing="{cat}"] '
+                    f'section[data-cat="{cat}"]') in css, cat
+        # Not a top-level tab, and not a row on the Explore index: the eight
+        # categories stay eight (TestExploreIndex pins them). The rows live
+        # inside Learn.
+        start = src.index('<nav class="tabs"')
+        tabs = src[start:src.index("</nav>", start)]
+        assert "planets" not in tabs.lower() and "houses" not in tabs.lower()
+        start = src.index('<section class="exindex">')
+        index = src[start:src.index("</section>", start)]
+        assert 'data-cat="planets"' not in index
+        assert 'data-cat="houses"' not in index
+        # The addresses are routed — #planets/venus and #houses/7 open
+        # Explore at the pane with that card showing — and the nav keeps
+        # Learn lit while a sub-view is open.
+        assert "window.sideraShowCard" in src
+        assert 'h.replace(/^cat-/, "").match(/^(planets|houses)(?:\\/([\\w-]+))?$/)' in src
+        assert 'PARENT = {planets: "learn", houses: "learn"}' in src
+        # The Learn tab lands at the top of the category — the two rows —
+        # not below them.
+        assert 'href="#cat-learn" data-view="view-explore" data-scroll="learnref"' in src
+        assert src.index('id="learnref"') < src.index('id="learnpath"')
+        # The lifted stylesheet: every size a role token, every colour a
+        # token — no new palette.
+        block = css[css.index("/* --- THE REFERENCE, UNDER LEARN"):]
+        assert not re.findall(r"font-size:\s*[\d.]+px", block)
+        assert re.findall(r"font-size:\s*var\(--t-", block)
+        assert not re.search(r"#[0-9a-fA-F]{3,6}\b", block)
+
+    def test_a_planet_in_the_table_and_a_house_number_link_to_their_cards(self, page):
+        import reference
+        table = page[page.index('id="grahas"'):]
+        table = table[:table.index("</table>")]
+        names = re.findall(r'<a class="refx" href="#planets/(\w+)">(\w+)</a>', table)
+        assert len(names) == 9, names
+        assert all(key == name.lower() for key, name in names), names
+        assert {key for key, _ in names} == set(reference.GRAHA_BY_KEY)
+        houses = re.findall(r'<a class="refx" href="#houses/(\d+)">(\d+)</a>', table)
+        assert len(houses) == 9, houses
+        assert all(h == n and 1 <= int(h) <= 12 for h, n in houses), houses
+
+    def test_the_addresses_open_the_cards_in_a_browser(self):
+        """Driven: a deep link lands on its card; the index switches cards
+        and writes the address; a planet's name in a table opens its card
+        from another category; the back button returns; Learn stays lit."""
+        pw = pytest.importorskip("playwright.sync_api",
+                                 reason="playwright not installed")
+        import threading
+        from werkzeug.serving import make_server
+        from app import app
+        srv = make_server("127.0.0.1", 0, app, threaded=True)
+        port = srv.socket.getsockname()[1]
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        state = """() => {
+          const v = document.getElementById('view-explore');
+          const vis = id => { const el = document.getElementById(id);
+                              return !!el && el.checkVisibility(); };
+          return {hidden: v.hidden, cat: v.getAttribute('data-showing'),
+                  showing: Array.from(document.querySelectorAll('.ref-card.showing')).map(c => c.id),
+                  lit: Array.from(document.querySelectorAll('#secnav a.active')).map(a => a.dataset.cat),
+                  hash: location.hash, venus: vis('g-venus'), b7: vis('b-7'),
+                  b1: vis('b-1'), learnpath: vis('learnpath')};
+        }"""
+        try:
+            with pw.sync_playwright() as p:
+                browser = TestMaskedBirthFieldsInARealBrowser._launch(p, pytest)
+                pg = browser.new_context(
+                    viewport={"width": 1280, "height": 900}).new_page()
+                pg.goto(f"http://127.0.0.1:{port}/")
+                for k, v in GATE_FORM.items():
+                    pg.evaluate(
+                        "([k,v]) => { const e = document.querySelector("
+                        "`[name=\"${k}\"]`); if (e) e.value = v; }", [k, v])
+                with pg.expect_navigation():
+                    pg.evaluate("document.querySelector('#cast').submit()")
+                pg.wait_for_load_state("load")
+                # A deep link lands on its card, Learn lit in the nav.
+                pg.evaluate("location.hash = '#houses/7'")
+                pg.wait_for_timeout(300)
+                s = pg.evaluate(state)
+                assert not s["hidden"] and s["cat"] == "houses", s
+                assert "b-7" in s["showing"] and s["b7"] and not s["b1"], s
+                assert s["lit"] == ["learn"], s
+                # The index switches the card and writes the address.
+                pg.evaluate("document.querySelector('#ix-houses a[data-card=\"b-10\"]').click()")
+                pg.wait_for_timeout(200)
+                s = pg.evaluate(state)
+                assert "b-10" in s["showing"] and s["hash"] == "#houses/10", s
+                # From Tables, a planet's name opens its card.
+                pg.evaluate("location.hash = '#cat-tables'")
+                pg.wait_for_timeout(300)
+                pg.evaluate("document.querySelector('#grahas a[href=\"#planets/venus\"]').click()")
+                pg.wait_for_timeout(300)
+                s = pg.evaluate(state)
+                assert s["cat"] == "planets" and s["venus"], s
+                assert s["hash"] == "#planets/venus", s
+                # Back returns to Tables; the Learn row opens the pane and
+                # its back-link returns to Learn with the path on screen.
+                pg.go_back()
+                pg.wait_for_timeout(300)
+                assert pg.evaluate(state)["cat"] == "tables"
+                pg.evaluate("location.hash = '#cat-learn'")
+                pg.wait_for_timeout(300)
+                pg.evaluate("document.querySelector('a.refrow[data-cat=\"planets\"]').click()")
+                pg.wait_for_timeout(300)
+                s = pg.evaluate(state)
+                assert s["cat"] == "planets" and s["hash"] == "#planets", s
+                assert "g-sun" in s["showing"], s      # the row opens on the first card
+                assert s["lit"] == ["learn"], s
+                pg.evaluate("document.querySelector('#planets a.backlink').click()")
+                pg.wait_for_timeout(300)
+                s = pg.evaluate(state)
+                assert s["cat"] == "learn" and s["learnpath"], s
+                browser.close()
+        finally:
+            srv.shutdown()

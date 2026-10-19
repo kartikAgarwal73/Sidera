@@ -153,7 +153,7 @@
   {# Quiet, and persistent. Learn is not a screen anyone opens daily and it
      is the screen a newcomer needs on their first visit; a tab entry that
      is always there and never loud is the shape that serves both. #}
-  <a href="#cat-learn" data-view="view-explore" data-scroll="learnpath"
+  <a href="#cat-learn" data-view="view-explore" data-scroll="learnref"
      class="tab-quiet">Learn</a>
   <span class="tab-soon" aria-disabled="true">Numerology
     <span class="tab-soonmark">in preparation</span></span>
@@ -175,7 +175,7 @@
 
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 
-<form method="post" action="/chart" class="birthform" id="cast" autocomplete="off">
+<form method="post" class="birthform" id="cast" autocomplete="off">
   <div class="field">
     <label for="name">Name <span class="opt">· optional</span></label>
     <input id="name" name="name" type="text" value="{{ form.get('name', '') }}">
@@ -608,7 +608,7 @@
       {% if schools.changed %}<span class="chip changed">{{ schools.changed
       | length }} changed</span>{% endif %}
     </summary>
-    <form method="post" action="/chart" class="schoolform">
+    <form method="post" action="/" class="schoolform">
       {% for k in ["name","date","time","place","lat","lon","tz",
                    "p_name","p_date","p_time","p_place","p_lat","p_lon","p_tz"] %}
       <input type="hidden" name="{{ k }}" value="{{ form.get(k, '') }}">
@@ -1547,9 +1547,11 @@
       </tr>
       {% for p in data.planets %}
       <tr>
-        <td>{{ p.name }}{% if p.retro %} ℞{% endif %}{% if p.name in ("Rahu", "Ketu") %}<span class="schoolmark" title="{{ data.school_node_position }}">·</span>{% endif %}</td>
+        {# The name opens the graha's reference card, the house number its
+           bhāva's — links, not widgets. #}
+        <td><a class="refx" href="#planets/{{ p.name | lower }}">{{ p.name }}</a>{% if p.retro %} ℞{% endif %}{% if p.name in ("Rahu", "Ketu") %}<span class="schoolmark" title="{{ data.school_node_position }}">·</span>{% endif %}</td>
         <td class="num">{{ p.sign }} {{ p.dms }}</td>
-        <td class="num">{{ p.house }}</td>
+        <td class="num"><a class="refx" href="#houses/{{ p.house }}">{{ p.house }}</a></td>
         <td>{{ p.nakshatra }} p.{{ p.pada }}</td>
         <td>{{ p.lord }}</td>
         <td class="{% if p.dignity in ('exalted', 'own sign', 'moolatrikona') %}accent{% elif p.dignity == 'debilitated' %}mut{% endif %}">{{ p.dignity }}{% if p.vargottama %} · vargottama{% endif %}</td>
@@ -1572,7 +1574,131 @@
   {{ data.birth.year }}-{{ "%02d" | format(data.birth.month) }}-{{ "%02d" | format(data.birth.day) }}
   {{ "%02d" | format(data.birth.hour) }}:{{ "%02d" | format(data.birth.minute) }} ({{ data.birth.tz }}) ·
   {{ data.birth.latitude }}°, {{ data.birth.longitude }}°</p>
-  <a class="again" href="/chart">← Cast another chart</a>
+  <a class="again" href="/">← Cast another chart</a>
+</section>
+
+{# THE REFERENCE LIVES UNDER LEARN. Two rows in the Learn category, each
+   opening a sub-view of its own through the same data-cat mechanism as every
+   category — so no fold ever shows two things at once, and #planets/venus or
+   #houses/7 is an address a reader can keep. The cards are reference.py's,
+   graded the way the ledger grades everything: verse, convention, lore. #}
+<section class="ledger" id="learnref" data-cat="learn">
+  <div class="kicker">The reference · what each planet and house governs</div>
+  <div class="refrows">
+    <a class="refrow" href="#planets" data-cat="planets">
+      <span class="refrow-title">Planets</span>
+      <span class="refrow-desc">The nine grahas — what each governs, its facts at a glance, and its sources, graded.</span>
+      <span class="refrow-more">Open →</span>
+    </a>
+    <a class="refrow" href="#houses" data-cat="houses">
+      <span class="refrow-title">Houses</span>
+      <span class="refrow-desc">The twelve bhāvas — what each governs, its lord in every house, and its sources, graded.</span>
+      <span class="refrow-more">Open →</span>
+    </a>
+  </div>
+</section>
+
+{# PLANETS — one card showing, an index beside it (a strip above it on a
+   phone). The index links carry data-card; the Explore script switches the
+   card and writes #planets/<key> into the address. #}
+<section class="ledger refpane" id="planets" data-cat="planets">
+  <a class="backlink" href="#cat-learn" data-cat="learn">← Learn</a>
+  <div class="kicker">The reference · nine grahas</div>
+  <div class="ref-wrap">
+    <ul class="ref-index" id="ix-planets">
+      {% for g in grahas %}
+      <li><a href="#planets/{{ g.key }}" data-card="g-{{ g.key }}"{% if loop.first %} class="active"{% endif %}>
+        <span class="ref-ix-glyph">{{ g.glyph }}</span>
+        <span><span class="ref-ix-name">{{ g.name }}</span><span class="ref-ix-sub">{{ g.sanskrit }}</span></span>
+      </a></li>
+      {% endfor %}
+    </ul>
+    <div class="ref-cards">
+      {% for g in grahas %}
+      <article class="ref-card{% if loop.first %} showing{% endif %}" id="g-{{ g.key }}">
+        <div class="ref-mark">graha · {{ loop.index }} of {{ grahas | length }}</div>
+        <div class="ref-head">
+          <span class="ref-glyph">{{ g.glyph }}</span>
+          <h2 class="ref-name">{{ g.name }}</h2>
+          <span class="ref-sanskrit">{{ g.sanskrit }}</span>
+        </div>
+        <p class="ref-tagline">{{ g.tagline }}</p>
+        <p class="ref-lead">{{ g.lead }}</p>
+        <dl class="ref-facts">
+          {% for k, v in g.facts %}<div><dt>{{ k }}</dt><dd>{{ v }}</dd></div>{% endfor %}
+        </dl>
+        {% for s in g.sections %}
+        <section class="ref-sec">
+          <h3>{{ s.title }}{% if s.grade %} <span class="ref-grade {{ s.grade }}">{{ s.grade }}</span>{% endif %}</h3>
+          {% for para in s.body.split("\n\n") %}<p>{{ para }}</p>{% endfor %}
+        </section>
+        {% endfor %}
+        <div class="ref-sources">Sources
+          <ul>{% for src in g.sources %}<li>{{ src }}</li>{% endfor %}</ul>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+  </div>
+  <p class="ref-legend">Grades: <span class="ref-grade verse">verse</span> a numbered verse in a primary text ·
+    <span class="ref-grade">convention</span> what the tradition agrees on without one governing verse ·
+    <span class="ref-grade">lore</span> widely repeated, weakly sourced.</p>
+</section>
+
+{# HOUSES — the same pane, with what the house governs and its lord in each
+   of the twelve houses (Parāśara's chapter on bhāva lords, one line each). #}
+<section class="ledger refpane" id="houses" data-cat="houses">
+  <a class="backlink" href="#cat-learn" data-cat="learn">← Learn</a>
+  <div class="kicker">The reference · twelve bhāvas</div>
+  <div class="ref-wrap">
+    <ul class="ref-index" id="ix-houses">
+      {% for b in bhavas %}
+      <li><a href="#houses/{{ b.number }}" data-card="b-{{ b.number }}"{% if loop.first %} class="active"{% endif %}>
+        <span class="ref-ix-num">{{ b.number }}</span>
+        <span><span class="ref-ix-name">{{ b.name }}</span><span class="ref-ix-sub">{{ b.sanskrit }}</span></span>
+      </a></li>
+      {% endfor %}
+    </ul>
+    <div class="ref-cards">
+      {% for b in bhavas %}
+      <article class="ref-card{% if loop.first %} showing{% endif %}" id="b-{{ b.number }}">
+        <div class="ref-mark">bhāva · {{ b.number }} of {{ bhavas | length }}</div>
+        <div class="ref-head">
+          <h2 class="ref-name">{{ b.name }}</h2>
+          <span class="ref-sanskrit">{{ b.sanskrit }}</span>
+        </div>
+        <p class="ref-tagline">{{ b.tagline }}</p>
+        <p class="ref-lead">{{ b.lead }}</p>
+        <dl class="ref-facts">
+          {% for k, v in b.facts %}<div><dt>{{ k }}</dt><dd>{{ v }}</dd></div>{% endfor %}
+        </dl>
+        <section class="ref-sec">
+          <h3>What it governs <span class="ref-grade verse">verse</span></h3>
+          <ul class="ref-governs">{% for line in b.governs %}<li>{{ line }}</li>{% endfor %}</ul>
+        </section>
+        {% for s in b.sections %}
+        <section class="ref-sec">
+          <h3>{{ s.title }}{% if s.grade %} <span class="ref-grade {{ s.grade }}">{{ s.grade }}</span>{% endif %}</h3>
+          {% for para in s.body.split("\n\n") %}<p>{{ para }}</p>{% endfor %}
+        </section>
+        {% endfor %}
+        <section class="ref-sec">
+          <h3>Its lord in each house <span class="ref-grade verse">verse</span></h3>
+          <p class="ref-note">Parāśara's chapter on bhāva lords, compressed to one line each. A lord in a kendra or trine delivers these with dignity; in the 6th, 8th or 12th it delivers the hard reading unless it is in its own or exaltation sign, or the placement forms a vipārīta rāja yoga.</p>
+          <ol class="ref-lordin">
+            {% for n, text in b.lord_in %}<li><b>{{ n }}{% if n == 1 %}st{% elif n == 2 %}nd{% elif n == 3 %}rd{% else %}th{% endif %}</b><span>{{ text }}</span></li>{% endfor %}
+          </ol>
+        </section>
+        <div class="ref-sources">Sources
+          <ul>{% for src in b.sources %}<li>{{ src }}</li>{% endfor %}</ul>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+  </div>
+  <p class="ref-legend">Grades: <span class="ref-grade verse">verse</span> a numbered verse in a primary text ·
+    <span class="ref-grade">convention</span> what the tradition agrees on without one governing verse ·
+    <span class="ref-grade">lore</span> widely repeated, weakly sourced.</p>
 </section>
 
 <!-- Phase 11: 20-card literacy path -->
@@ -1635,22 +1761,56 @@ Sidereal · Lahiri ayanāṃśa · Whole Sign · North-Indian<br>
   view.querySelectorAll("[data-cat][id]").forEach(
     el => { SECTION_CAT[el.id] = el.getAttribute("data-cat"); });
 
+  // A sub-view is a category whose row lives inside another — Planets and
+  // Houses under Learn — so the nav keeps the parent lit while it is open.
+  const PARENT = {planets: "learn", houses: "learn"};
   function showCat(cat) {
     if (!cat || cat === "index") view.removeAttribute("data-showing");
     else view.setAttribute("data-showing", cat);
+    const lit = PARENT[cat] || cat;
     view.querySelectorAll("#secnav a[data-cat]").forEach(a =>
-      a.classList.toggle("active", a.getAttribute("data-cat") === cat));
+      a.classList.toggle("active", a.getAttribute("data-cat") === lit));
     window.dispatchEvent(new CustomEvent("sidera:viewshown", {detail: view}));
   }
   window.sideraShowCategory = showCat;
 
+  // The reference panes show one card at a time, each with an address:
+  // #planets/venus, #houses/7. An unknown or absent key shows the first.
+  function showCard(cat, key) {
+    const pane = document.getElementById(cat);
+    if (!pane) return;
+    const id = (cat === "houses" ? "b-" : "g-") + key;
+    const cards = Array.from(pane.querySelectorAll(".ref-card"));
+    const hit = cards.some(c => c.id === id);
+    cards.forEach((c, i) => c.classList.toggle("showing", hit ? c.id === id : i === 0));
+    pane.querySelectorAll(".ref-index a").forEach((a, i) =>
+      a.classList.toggle("active", hit ? a.dataset.card === id : i === 0));
+  }
+  window.sideraShowCard = showCard;
+
   view.addEventListener("click", ev => {
+    const card = ev.target.closest("a[data-card]");
+    if (card) {
+      ev.preventDefault();
+      const hash = card.getAttribute("href");
+      const [cat, key] = hash.slice(1).split("/");
+      showCard(cat, key);
+      if (location.hash !== hash) history.pushState({}, "", hash);
+      const pane = document.getElementById(cat);
+      if (pane) pane.scrollIntoView({ block: "start" });
+      return;
+    }
     const a = ev.target.closest("a[data-cat]");
     if (!a) return;
     ev.preventDefault();
     const cat = a.getAttribute("data-cat");
     showCat(cat);
-    history.pushState({}, "", cat === "index" ? "#explore" : "#cat-" + cat);
+    // A reference pane opened from its row starts on its first card and
+    // takes the pane's own address, so #planets means one thing whether
+    // typed, bookmarked or clicked.
+    if (cat in PARENT) showCard(cat);
+    history.pushState({}, "", cat === "index" ? "#explore"
+                              : cat in PARENT ? "#" + cat : "#cat-" + cat);
     window.scrollTo(0, 0);
   });
 
@@ -1852,6 +2012,16 @@ Sidereal · Lahiri ayanāṃśa · Whole Sign · North-Indian<br>
     const h = (location.hash || "").replace(/^#/, "");
     if (!h || h === "top") return show("view-arrival");
     if (byId.has("view-domain-" + h)) return show("view-domain-" + h);
+    // #planets, #planets/venus, #houses/7 — the reference's own addresses:
+    // Explore, at that pane, with that card showing (the first, when none
+    // is named). #cat-planets, the category form, means the same.
+    const ref = h.replace(/^cat-/, "").match(/^(planets|houses)(?:\/([\w-]+))?$/);
+    if (ref) {
+      show("view-explore");
+      if (window.sideraShowCategory) window.sideraShowCategory(ref[1]);
+      if (window.sideraShowCard) window.sideraShowCard(ref[1], ref[2]);
+      return;
+    }
     // #cat-periods opens Explore AT that category — a bookmark, a reload or
     // a shared link has to land where a click lands.
     if (h.startsWith("cat-")) {
@@ -1885,6 +2055,18 @@ Sidereal · Lahiri ayanāṃśa · Whole Sign · North-Indian<br>
     show(link.getAttribute("data-view"), scroll);
     const hash = link.getAttribute("href") || "#top";
     if (location.hash !== hash) history.pushState(null, "", hash);
+  });
+  // A planet's name in a table, or a house number, links to its reference
+  // card with a plain href. Routed here, so the click opens the pane rather
+  // than scrolling to an id the CSS is hiding. The reference's own rows and
+  // index links carry data-cat / data-card and are handled by Explore.
+  document.addEventListener("click", ev => {
+    const a = ev.target.closest('a[href^="#planets"], a[href^="#houses"]');
+    if (!a || a.hasAttribute("data-cat") || a.hasAttribute("data-card")) return;
+    ev.preventDefault();
+    const hash = a.getAttribute("href");
+    if (location.hash !== hash) history.pushState(null, "", hash);
+    fromHash();
   });
   window.addEventListener("popstate", fromHash);
   fromHash();
